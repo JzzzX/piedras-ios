@@ -57,6 +57,10 @@ extension Meeting {
         "\(orderedSegments.count) 段转写"
     }
 
+    var transcriptCountLabel: String {
+        "\(orderedSegments.count)"
+    }
+
     var syncStateLabel: String {
         switch syncState {
         case .pending:
@@ -110,6 +114,21 @@ extension Meeting {
             return .red
         case .deleted:
             return .secondary
+        }
+    }
+
+    var syncStateIconName: String {
+        switch syncState {
+        case .pending:
+            return "clock.badge"
+        case .syncing:
+            return "arrow.triangle.2.circlepath"
+        case .synced:
+            return "checkmark.circle.fill"
+        case .failed:
+            return "exclamationmark.circle.fill"
+        case .deleted:
+            return "trash.circle.fill"
         }
     }
 }

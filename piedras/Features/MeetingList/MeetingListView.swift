@@ -13,15 +13,14 @@ struct MeetingListView: View {
 
     var body: some View {
         ZStack {
-            AppTheme.pageGradient
-                .ignoresSafeArea()
+            AppGlassBackdrop()
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 28) {
+                VStack(alignment: .leading, spacing: 24) {
                     header
 
                     if let activeMeeting = meetingStore.activeRecordingMeeting {
-                        activeRecordingCard(meeting: activeMeeting)
+                        activeRecordingStrip(meeting: activeMeeting)
                     }
 
                     if groupedMeetings.isEmpty {
@@ -31,8 +30,8 @@ struct MeetingListView: View {
                     }
                 }
                 .padding(.horizontal, 20)
-                .padding(.top, 22)
-                .padding(.bottom, 132)
+                .padding(.top, 20)
+                .padding(.bottom, 140)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -50,75 +49,79 @@ struct MeetingListView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(Date.now.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
                     .font(.footnote.weight(.semibold))
-                    .foregroundStyle(AppTheme.mutedInk)
+                    .foregroundStyle(AppTheme.subtleInk)
                     .textCase(.uppercase)
 
                 Text("Notes")
-                    .font(.system(size: 46, weight: .regular, design: .serif))
+                    .font(.system(size: 44, weight: .regular, design: .serif))
                     .foregroundStyle(AppTheme.ink)
-
-                Text("Keep the conversation, lose the clutter.")
-                    .font(.subheadline)
-                    .foregroundStyle(AppTheme.subtleInk)
             }
 
             Spacer()
 
             HStack(spacing: 10) {
-                headerButton(systemName: "magnifyingglass") {
+                AppGlassCircleButton(systemName: "magnifyingglass", accessibilityLabel: "搜索") {
                     router.showSearch()
                 }
 
-                headerButton(systemName: "slider.horizontal.3") {
+                AppGlassCircleButton(systemName: "slider.horizontal.3", accessibilityLabel: "设置") {
                     router.showSettings()
                 }
             }
         }
     }
 
-    private func activeRecordingCard(meeting: Meeting) -> some View {
+    private func activeRecordingStrip(meeting: Meeting) -> some View {
         Button {
             router.showMeeting(id: meeting.id)
         } label: {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(spacing: 10) {
-                    Circle()
-                        .fill(AppTheme.highlight)
-                        .frame(width: 10, height: 10)
+            AppGlassCard(cornerRadius: 32, style: .regular, padding: 18, shadowOpacity: 0.10) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(spacing: 12) {
+                        ZStack {
+                            AppGlassSurface(cornerRadius: 20, style: .clear, shadowOpacity: 0.04)
+                                .frame(width: 48, height: 48)
 
-                    Text("Recording now")
-                        .font(.footnote.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.86))
-                        .textCase(.uppercase)
+                            Image(systemName: "doc.text")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(AppTheme.ink)
+                        }
 
-                    Spacer()
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(AppTheme.highlight)
+                                    .frame(width: 8, height: 8)
 
-                    Text(recordingSessionStore.durationSeconds.mmss)
-                        .font(.footnote.monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.9))
-                }
+                                Text(meeting.displayTitle)
+                                    .font(.headline)
+                                    .foregroundStyle(AppTheme.ink)
+                                    .lineLimit(1)
+                            }
 
-                Text(meeting.displayTitle)
-                    .font(.system(size: 24, weight: .regular, design: .serif))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                            if !activeRecordingPreview.isEmpty {
+                                Text(activeRecordingPreview)
+                                    .font(.footnote)
+                                    .foregroundStyle(AppTheme.mutedInk)
+                                    .lineLimit(1)
+                            }
+                        }
 
-                Text(activeRecordingPreview)
-                    .font(.subheadline)
-                    .foregroundStyle(.white.opacity(0.72))
-                    .lineLimit(2)
+                        Spacer(minLength: 0)
 
-                HStack(spacing: 10) {
-                    statusChip(title: recordingSessionStore.phase.displayLabel, tint: AppTheme.highlightSoft, foreground: AppTheme.ink)
-                    statusChip(title: recordingSessionStore.asrState.displayLabel, tint: .white.opacity(0.16), foreground: .white.opacity(0.9))
+                        Text(recordingSessionStore.durationSeconds.mmss)
+                            .font(.subheadline.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(AppTheme.ink)
+                    }
+
+                    WaveformView(samples: recordingSessionStore.waveformSamples)
+                        .frame(height: 28)
+                        .foregroundStyle(AppTheme.accent)
                 }
             }
-            .padding(20)
-            .background(AppTheme.heroGradient, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .shadow(color: AppTheme.cardShadow, radius: 18, x: 0, y: 14)
         }
         .buttonStyle(.plain)
     }
@@ -128,8 +131,8 @@ struct MeetingListView: View {
             ForEach(groupedMeetings) { section in
                 VStack(alignment: .leading, spacing: 14) {
                     Text(section.title)
-                        .font(.system(size: 24, weight: .regular, design: .serif))
-                        .foregroundStyle(AppTheme.ink)
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(AppTheme.mutedInk)
 
                     VStack(spacing: 14) {
                         ForEach(section.meetings) { meeting in
@@ -151,53 +154,33 @@ struct MeetingListView: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Your first note starts here.")
-                .font(.system(size: 28, weight: .regular, design: .serif))
-                .foregroundStyle(AppTheme.ink)
+        AppGlassCard(cornerRadius: 34, style: .regular, padding: 22, shadowOpacity: 0.08) {
+            VStack(alignment: .leading, spacing: 16) {
+                ZStack {
+                    AppGlassSurface(cornerRadius: 24, style: .clear, shadowOpacity: 0.03)
+                        .frame(width: 62, height: 62)
 
-            Text("Tap record to capture a conversation. Transcript, notes and AI summary will build around that recording automatically.")
-                .font(.body)
-                .foregroundStyle(AppTheme.mutedInk)
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                }
 
-            HStack(spacing: 10) {
-                Label("16kHz mic capture", systemImage: "mic.fill")
-                Label("Live transcript", systemImage: "waveform")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("No notes")
+                        .font(.system(size: 28, weight: .regular, design: .serif))
+                        .foregroundStyle(AppTheme.ink)
+
+                    Text("Tap the mic.")
+                        .font(.subheadline)
+                        .foregroundStyle(AppTheme.subtleInk)
+                }
             }
-            .font(.footnote.weight(.medium))
-            .foregroundStyle(AppTheme.subtleInk)
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(AppTheme.border.opacity(0.55), lineWidth: 1)
         }
     }
 
     private var bottomDock: some View {
-        HStack(spacing: 12) {
-            Button {
-                router.showGlobalChat()
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "sparkles")
-                        .font(.headline)
-                    Text("Ask anything")
-                        .font(.headline)
-                    Spacer()
-                }
-                .foregroundStyle(AppTheme.ink)
-                .padding(.horizontal, 18)
-                .frame(height: 58)
-                .background(AppTheme.surface, in: Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(AppTheme.border.opacity(0.7), lineWidth: 1)
-                }
-            }
-            .buttonStyle(.plain)
+        HStack {
+            Spacer()
 
             Button {
                 if recordingSessionStore.phase == .idle {
@@ -213,48 +196,29 @@ struct MeetingListView: View {
                 }
             } label: {
                 ZStack {
-                    Circle()
-                        .fill(recordingSessionStore.phase == .idle ? AppTheme.ink : AppTheme.highlight)
+                    if recordingSessionStore.phase == .idle {
+                        AppGlassSurface(cornerRadius: 34, style: .regular, borderOpacity: 0.30, shadowOpacity: 0.14)
+                    } else {
+                        Circle()
+                            .fill(AppTheme.highlight)
+                            .shadow(color: AppTheme.highlight.opacity(0.30), radius: 20, x: 0, y: 10)
+                    }
 
                     Image(systemName: recordingSessionStore.phase == .idle ? "mic.fill" : "stop.fill")
-                        .font(.title3.weight(.semibold))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(recordingSessionStore.phase == .idle ? AppTheme.ink : .white)
                 }
-                .frame(width: 58, height: 58)
-                .shadow(color: AppTheme.cardShadow, radius: 14, x: 0, y: 10)
+                .frame(width: 68, height: 68)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(recordingSessionStore.phase == .idle ? "新录音" : "停止")
             .accessibilityIdentifier("NewRecordingButton")
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 14)
-        .background(.ultraThinMaterial)
-    }
 
-    private func headerButton(systemName: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.headline)
-                .foregroundStyle(AppTheme.ink)
-                .frame(width: 44, height: 44)
-                .background(AppTheme.surface.opacity(0.92), in: Circle())
-                .overlay {
-                    Circle()
-                        .stroke(AppTheme.border.opacity(0.7), lineWidth: 1)
-                }
+            Spacer()
         }
-        .buttonStyle(.plain)
-    }
-
-    private func statusChip(title: String, tint: Color, foreground: Color) -> some View {
-        Text(title)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(tint, in: Capsule())
+        .padding(.top, 8)
+        .padding(.bottom, 18)
+        .background(Color.clear)
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -265,13 +229,14 @@ struct MeetingListView: View {
             Text(message)
                 .font(.footnote)
                 .foregroundStyle(.white)
+                .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             Button {
                 meetingStore.clearLastError()
             } label: {
                 Image(systemName: "xmark")
-                    .foregroundStyle(.white.opacity(0.82))
+                    .foregroundStyle(.white.opacity(0.84))
             }
             .buttonStyle(.plain)
         }
@@ -308,6 +273,6 @@ struct MeetingListView: View {
             return info
         }
 
-        return "Live transcription is attached to this note while recording continues."
+        return ""
     }
 }

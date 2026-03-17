@@ -7,48 +7,40 @@ struct RecordingControlBar: View {
     let meeting: Meeting
 
     var body: some View {
-        VStack(spacing: 14) {
-            if isActiveMeeting {
-                activeControls
-            } else if isOtherMeetingRecording {
-                passiveConflictState
-            } else {
-                idleControls
+        AppGlassCard(cornerRadius: 30, style: .regular, padding: 16, shadowOpacity: 0.14) {
+            VStack(spacing: 14) {
+                if isActiveMeeting {
+                    activeControls
+                } else if isOtherMeetingRecording {
+                    passiveConflictState
+                } else {
+                    idleControls
+                }
             }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(AppTheme.border.opacity(0.65), lineWidth: 1)
         }
     }
 
     private var activeControls: some View {
         VStack(spacing: 14) {
-            HStack(spacing: 12) {
-                statusPill(
-                    title: recordingSessionStore.phase.displayLabel,
-                    systemImage: "record.circle.fill",
-                    tint: AppTheme.highlightSoft,
-                    foreground: AppTheme.highlight
-                )
-                statusPill(
-                    title: recordingSessionStore.asrState.displayLabel,
-                    systemImage: "waveform",
-                    tint: AppTheme.accentSoft,
-                    foreground: AppTheme.accent
-                )
-                Spacer()
+            HStack(spacing: 10) {
+                Circle()
+                    .fill(AppTheme.highlight)
+                    .frame(width: 10, height: 10)
+
                 Text(recordingSessionStore.durationSeconds.mmss)
                     .font(.headline.monospacedDigit())
                     .foregroundStyle(AppTheme.ink)
                     .accessibilityIdentifier("RecordDurationLabel")
+
+                Spacer()
+
+                Image(systemName: recordingSessionStore.asrState == .connected ? "waveform" : "waveform.badge.exclamationmark")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.accent : AppTheme.highlight)
             }
 
             WaveformView(samples: recordingSessionStore.waveformSamples)
-                .frame(height: 42)
+                .frame(height: 34)
                 .foregroundStyle(AppTheme.accent)
 
             HStack(spacing: 12) {
@@ -62,16 +54,16 @@ struct RecordingControlBar: View {
                         }
                     }
                 } label: {
-                    Label(
-                        recordingSessionStore.phase == .paused ? "Resume" : "Pause",
-                        systemImage: recordingSessionStore.phase == .paused ? "play.fill" : "pause.fill"
-                    )
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 50)
+                    Image(systemName: recordingSessionStore.phase == .paused ? "play.fill" : "pause.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background {
+                            AppGlassSurface(cornerRadius: 22, style: .clear, shadowOpacity: 0.05)
+                        }
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(AppTheme.ink)
-                .background(AppTheme.backgroundSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .accessibilityIdentifier("PauseRecordingButton")
 
                 Button {
@@ -79,13 +71,14 @@ struct RecordingControlBar: View {
                         await meetingStore.stopRecording()
                     }
                 } label: {
-                    Label("Stop", systemImage: "stop.fill")
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 50)
+                        .frame(height: 52)
+                        .background(AppTheme.ink, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.white)
-                .background(AppTheme.ink, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .accessibilityIdentifier("StopRecordingButton")
             }
 
@@ -99,22 +92,37 @@ struct RecordingControlBar: View {
     }
 
     private var passiveConflictState: some View {
-        Label("另一条会议正在录音，先结束当前会话再切换。", systemImage: "mic.badge.xmark")
-            .font(.footnote)
-            .foregroundStyle(AppTheme.subtleInk)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 6)
+        HStack(spacing: 10) {
+            Image(systemName: "mic.badge.xmark")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppTheme.highlight)
+
+            Text("另一条会议正在录音")
+                .font(.footnote)
+                .foregroundStyle(AppTheme.subtleInk)
+
+            Spacer()
+        }
     }
 
     private var idleControls: some View {
         HStack(spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(meeting.audioLocalPath == nil ? "Ready to record" : "Resume capture")
+            ZStack {
+                AppGlassSurface(cornerRadius: 22, style: .clear, shadowOpacity: 0.04)
+                    .frame(width: 52, height: 52)
+
+                Image(systemName: "doc.text")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(meeting.audioLocalPath == nil ? "Ready" : "Resume")
                     .font(.headline)
                     .foregroundStyle(AppTheme.ink)
 
-                Text("Open the mic, stream live transcript, and let the note build itself.")
-                    .font(.footnote)
+                Text(meeting.durationLabel)
+                    .font(.footnote.monospacedDigit())
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
@@ -126,7 +134,7 @@ struct RecordingControlBar: View {
                 }
             } label: {
                 Image(systemName: "mic.fill")
-                    .font(.headline)
+                    .font(.system(size: 18, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
                     .background(AppTheme.ink, in: Circle())
@@ -135,15 +143,6 @@ struct RecordingControlBar: View {
             .accessibilityLabel(meeting.audioLocalPath == nil ? "开始录音" : "继续录音")
             .accessibilityIdentifier("StartRecordingButton")
         }
-    }
-
-    private func statusPill(title: String, systemImage: String, tint: Color, foreground: Color) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(tint, in: Capsule())
     }
 
     private var currentBannerMessage: String? {

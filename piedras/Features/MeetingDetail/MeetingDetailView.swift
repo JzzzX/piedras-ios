@@ -1,92 +1,61 @@
 import SwiftUI
 
 private enum MeetingDetailMode: String, CaseIterable, Identifiable {
-    case summary = "Smart Notes"
     case transcript = "Transcript"
+    case summary = "AI"
 
     var id: String { rawValue }
+
+    var systemName: String {
+        switch self {
+        case .transcript:
+            return "text.alignleft"
+        case .summary:
+            return "sparkles"
+        }
+    }
 }
 
 struct MeetingDetailView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(AppRouter.self) private var router
     @Environment(MeetingStore.self) private var meetingStore
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
 
     let meetingID: String
 
-    @State private var selectedMode: MeetingDetailMode = .summary
+    @State private var selectedMode: MeetingDetailMode = .transcript
     @State private var noteSaveTask: Task<Void, Never>?
 
     var body: some View {
         Group {
             if let meeting = meetingStore.meeting(withID: meetingID) {
                 ZStack {
-                    AppTheme.pageGradient
-                        .ignoresSafeArea()
+                    AppGlassBackdrop()
 
                     ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 22) {
-                            header(meeting: meeting)
+                        VStack(alignment: .leading, spacing: 20) {
+                            header
                             titleBlock(meeting: meeting)
-                            metadataRow(meeting: meeting)
-
-                            if selectedMode == .summary {
-                                NoteEditorView(meeting: meeting) { newValue in
-                                    noteSaveTask?.cancel()
-                                    noteSaveTask = Task { @MainActor in
-                                        try? await Task.sleep(for: .seconds(1.5))
-                                        guard !Task.isCancelled else { return }
-                                        meetingStore.updateNotes(newValue, for: meeting)
-                                    }
-                                }
-
-                                EnhancedNotesView(meeting: meeting)
-                            } else {
-                                TranscriptView(meeting: meeting)
-                            }
+                            workspace(meeting: meeting)
                         }
                         .padding(.horizontal, 20)
                         .padding(.top, 16)
-                        .padding(.bottom, 212)
+                        .padding(.bottom, 156)
                     }
                 }
                 .toolbar(.hidden, for: .navigationBar)
                 .safeAreaInset(edge: .bottom) {
-                    VStack(spacing: 12) {
-                        Button {
-                            router.showGlobalChat()
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "sparkles")
-                                    .font(.headline)
-                                Text("Ask anything")
-                                    .font(.headline)
-                                Spacer()
-                            }
-                            .foregroundStyle(AppTheme.ink)
-                            .padding(.horizontal, 18)
-                            .frame(height: 54)
-                            .background(AppTheme.surface, in: Capsule())
-                            .overlay {
-                                Capsule()
-                                    .stroke(AppTheme.border.opacity(0.7), lineWidth: 1)
-                            }
-                        }
-                        .buttonStyle(.plain)
-
-                        RecordingControlBar(meeting: meeting)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 10)
-                    .padding(.bottom, 14)
-                    .background(.ultraThinMaterial)
+                    RecordingControlBar(meeting: meeting)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                        .padding(.bottom, 12)
+                        .background(Color.clear)
                 }
             } else {
                 ContentUnavailableView(
                     "会议不存在",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text("这条会议可能已被删除，或者尚未完成本地加载。")
+                    systemImage: "doc.badge.questionmark",
+                    description: Text("这条会议可能已经被删除。")
                 )
             }
         }
@@ -95,22 +64,11 @@ struct MeetingDetailView: View {
         }
     }
 
-    private func header(meeting: Meeting) -> some View {
+    private var header: some View {
         HStack(alignment: .center, spacing: 14) {
-            Button {
+            AppGlassCircleButton(systemName: "chevron.left", accessibilityLabel: "返回") {
                 dismiss()
-            } label: {
-                Image(systemName: "chevron.left")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(AppTheme.ink)
-                    .frame(width: 44, height: 44)
-                    .background(AppTheme.surface, in: Circle())
-                    .overlay {
-                        Circle()
-                            .stroke(AppTheme.border.opacity(0.7), lineWidth: 1)
-                    }
             }
-            .buttonStyle(.plain)
             .accessibilityIdentifier("BackButton")
 
             Spacer()
@@ -120,59 +78,63 @@ struct MeetingDetailView: View {
     }
 
     private func titleBlock(meeting: Meeting) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField(
-                "Untitled note",
-                text: Binding(
-                    get: { meeting.title },
-                    set: { meetingStore.updateTitle($0, for: meeting) }
-                )
-            )
-            .font(.system(size: 40, weight: .regular, design: .serif))
-            .foregroundStyle(AppTheme.ink)
-            .textFieldStyle(.plain)
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                AppGlassSurface(cornerRadius: 24, style: .regular, shadowOpacity: 0.05)
+                    .frame(width: 60, height: 60)
 
-            Text(meeting.detailTimestampLabel)
-                .font(.subheadline)
-                .foregroundStyle(AppTheme.subtleInk)
+                Image(systemName: "doc.text")
+                    .font(.system(size: 24, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                TextField(
+                    "Untitled note",
+                    text: Binding(
+                        get: { meeting.title },
+                        set: { meetingStore.updateTitle($0, for: meeting) }
+                    )
+                )
+                .font(.system(size: 38, weight: .regular, design: .serif))
+                .foregroundStyle(AppTheme.ink)
+                .textFieldStyle(.plain)
+
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        metadataPill(systemName: "calendar", label: meeting.detailTimestampLabel)
+                        metadataPill(systemName: "clock", label: meeting.durationLabel)
+                        metadataPill(systemName: meeting.statusIconName, label: meeting.statusLabel)
+
+                        if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
+                            metadataPill(systemName: "waveform", label: recordingSessionStore.asrState.displayLabel)
+                        }
+                    }
+                }
+            }
         }
     }
 
-    private func metadataRow(meeting: Meeting) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
-                metadataChip(
-                    title: meeting.statusLabel,
-                    systemImage: meeting.statusIconName,
-                    tint: meeting.status == .recording ? AppTheme.highlightSoft : AppTheme.backgroundSecondary,
-                    foreground: meeting.status == .recording ? AppTheme.highlight : AppTheme.mutedInk
-                )
-                metadataChip(
-                    title: meeting.durationLabel,
-                    systemImage: "clock",
-                    tint: AppTheme.backgroundSecondary,
-                    foreground: AppTheme.mutedInk
-                )
-                metadataChip(
-                    title: meeting.syncStateLabel,
-                    systemImage: "arrow.triangle.2.circlepath",
-                    tint: syncTintBackground(for: meeting),
-                    foreground: syncForeground(for: meeting)
-                )
-                metadataChip(
-                    title: meeting.transcriptSummaryLabel,
-                    systemImage: "text.quote",
-                    tint: AppTheme.accentSoft,
-                    foreground: AppTheme.accent
-                )
+    private func workspace(meeting: Meeting) -> some View {
+        AppGlassCard(cornerRadius: 38, style: .regular, padding: 22, shadowOpacity: 0.10) {
+            Group {
+                if selectedMode == .transcript {
+                    TranscriptView(meeting: meeting)
+                } else {
+                    VStack(alignment: .leading, spacing: 24) {
+                        NoteEditorView(meeting: meeting) { newValue in
+                            noteSaveTask?.cancel()
+                            noteSaveTask = Task { @MainActor in
+                                try? await Task.sleep(for: .seconds(1.5))
+                                guard !Task.isCancelled else { return }
+                                meetingStore.updateNotes(newValue, for: meeting)
+                            }
+                        }
 
-                if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
-                    metadataChip(
-                        title: recordingSessionStore.asrState.displayLabel,
-                        systemImage: "waveform",
-                        tint: AppTheme.highlightSoft,
-                        foreground: AppTheme.highlight
-                    )
+                        AppGlassDivider()
+
+                        EnhancedNotesView(meeting: meeting)
+                    }
                 }
             }
         }
@@ -182,70 +144,49 @@ struct MeetingDetailView: View {
         HStack(spacing: 4) {
             ForEach(MeetingDetailMode.allCases) { mode in
                 Button {
-                    selectedMode = mode
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                        selectedMode = mode
+                    }
                 } label: {
-                    Text(mode.rawValue)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(selectedMode == mode ? .white : AppTheme.ink)
-                        .padding(.horizontal, 14)
-                        .frame(height: 40)
-                        .background(
-                            Group {
-                                if selectedMode == mode {
-                                    Capsule().fill(AppTheme.ink)
-                                } else {
-                                    Capsule().fill(Color.clear)
-                                }
-                            }
-                        )
+                    HStack(spacing: 6) {
+                        Image(systemName: mode.systemName)
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(mode.rawValue)
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(selectedMode == mode ? Color.white : AppTheme.ink)
+                    .padding(.horizontal, 14)
+                    .frame(height: 40)
+                    .background {
+                        if selectedMode == mode {
+                            Capsule().fill(AppTheme.ink)
+                        } else {
+                            Capsule().fill(Color.clear)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(4)
-        .background(AppTheme.surface, in: Capsule())
-        .overlay {
-            Capsule()
-                .stroke(AppTheme.border.opacity(0.7), lineWidth: 1)
+        .background {
+            AppGlassSurface(cornerRadius: 24, style: .regular, shadowOpacity: 0.06)
+                .clipShape(Capsule())
         }
     }
 
-    private func metadataChip(title: String, systemImage: String, tint: Color, foreground: Color) -> some View {
-        Label(title, systemImage: systemImage)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(tint, in: Capsule())
-    }
-
-    private func syncForeground(for meeting: Meeting) -> Color {
-        switch meeting.syncState {
-        case .pending:
-            return AppTheme.highlight
-        case .syncing:
-            return AppTheme.accent
-        case .synced:
-            return AppTheme.success
-        case .failed:
-            return AppTheme.danger
-        case .deleted:
-            return AppTheme.subtleInk
+    private func metadataPill(systemName: String, label: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemName)
+                .font(.system(size: 11, weight: .semibold))
+            Text(label)
+                .font(.caption.weight(.semibold))
         }
-    }
-
-    private func syncTintBackground(for meeting: Meeting) -> Color {
-        switch meeting.syncState {
-        case .pending:
-            return AppTheme.highlightSoft
-        case .syncing:
-            return AppTheme.accentSoft
-        case .synced:
-            return AppTheme.success.opacity(0.14)
-        case .failed:
-            return AppTheme.danger.opacity(0.12)
-        case .deleted:
-            return AppTheme.backgroundSecondary
+        .foregroundStyle(AppTheme.mutedInk)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background {
+            AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.03)
         }
     }
 }

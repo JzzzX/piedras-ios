@@ -9,11 +9,10 @@ struct MeetingSearchView: View {
 
     var body: some View {
         ZStack {
-            AppTheme.pageGradient
-                .ignoresSafeArea()
+            AppGlassBackdrop()
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 18) {
                     header
                     searchField
 
@@ -46,32 +45,21 @@ struct MeetingSearchView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("Search")
                     .font(.system(size: 34, weight: .regular, design: .serif))
                     .foregroundStyle(AppTheme.ink)
 
-                Text("Find meetings by title, notes, summary or transcript.")
+                Text("Notes")
                     .font(.subheadline)
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
             Spacer()
 
-            Button {
+            AppGlassCircleButton(systemName: "xmark", accessibilityLabel: "关闭") {
                 dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.headline.weight(.semibold))
-                    .foregroundStyle(AppTheme.ink)
-                    .frame(width: 40, height: 40)
-                    .background(AppTheme.surface, in: Circle())
-                    .overlay {
-                        Circle()
-                            .stroke(AppTheme.border.opacity(0.7), lineWidth: 1)
-                    }
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -96,24 +84,23 @@ struct MeetingSearchView: View {
         }
         .padding(.horizontal, 16)
         .frame(height: 54)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(AppTheme.border.opacity(0.65), lineWidth: 1)
+        .background {
+            AppGlassSurface(cornerRadius: 22, style: .regular, shadowOpacity: 0.05)
         }
     }
 
     private var emptyState: some View {
-        Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Start typing to filter your meetings." : "No meeting matched that search.")
-            .font(.body)
-            .foregroundStyle(AppTheme.mutedInk)
-            .padding(22)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .stroke(AppTheme.border.opacity(0.55), lineWidth: 1)
+        AppGlassCard(cornerRadius: 30, style: .regular, padding: 20, shadowOpacity: 0.06) {
+            HStack(spacing: 10) {
+                Image(systemName: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "magnifyingglass" : "doc.text.magnifyingglass")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(AppTheme.subtleInk)
+
+                Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Start typing." : "No match.")
+                    .font(.body)
+                    .foregroundStyle(AppTheme.mutedInk)
             }
+        }
     }
 
     private var searchResults: [Meeting] {

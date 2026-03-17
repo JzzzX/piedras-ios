@@ -7,85 +7,89 @@ struct TranscriptView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Transcript")
-                        .font(.system(size: 28, weight: .regular, design: .serif))
-                        .foregroundStyle(AppTheme.ink)
-
-                    Text("Live capture from the meeting.")
-                        .font(.subheadline)
-                        .foregroundStyle(AppTheme.subtleInk)
-                }
-
-                Spacer()
-
-                Text(meeting.transcriptSummaryLabel)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(AppTheme.accentSoft, in: Capsule())
-            }
-
-            if recordingSessionStore.meetingID == meeting.id && !recordingSessionStore.currentPartial.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Live")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(AppTheme.highlight)
-                        .textCase(.uppercase)
-
-                    Text(recordingSessionStore.currentPartial)
-                        .font(.body)
-                        .foregroundStyle(AppTheme.ink)
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(AppTheme.highlightSoft, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            if showsLiveStrip {
+                liveStrip
             }
 
             if meeting.orderedSegments.isEmpty {
-                Text("No transcript yet. Start recording or wait for the current session to finish pushing final segments.")
-                    .font(.body)
-                    .foregroundStyle(AppTheme.mutedInk)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 24)
+                emptyState
             } else {
-                VStack(spacing: 14) {
-                    ForEach(meeting.orderedSegments) { segment in
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 10) {
-                                Text(segment.speaker)
-                                    .font(.caption.weight(.semibold))
-                                    .foregroundStyle(AppTheme.subtleInk)
-                                    .textCase(.uppercase)
+                VStack(spacing: 16) {
+                    ForEach(Array(meeting.orderedSegments.enumerated()), id: \.element.id) { index, segment in
+                        transcriptRow(for: segment)
 
-                                Spacer()
-
-                                Text(segment.timeRangeLabel(relativeTo: baseTime))
-                                    .font(.caption.monospacedDigit())
-                                    .foregroundStyle(AppTheme.subtleInk)
-                            }
-
-                            Text(segment.text)
-                                .font(.body)
-                                .foregroundStyle(AppTheme.ink)
-                                .frame(maxWidth: .infinity, alignment: .leading)
+                        if index < meeting.orderedSegments.count - 1 {
+                            AppGlassDivider(inset: 60)
                         }
-                        .padding(16)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(AppTheme.backgroundSecondary, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                     }
                 }
             }
         }
-        .padding(22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(AppTheme.border.opacity(0.55), lineWidth: 1)
+    }
+
+    private var liveStrip: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: "waveform")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AppTheme.highlight)
+                .padding(.top, 2)
+
+            Text(recordingSessionStore.currentPartial)
+                .font(.subheadline)
+                .foregroundStyle(AppTheme.ink)
+                .lineLimit(3)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            AppGlassSurface(cornerRadius: 20, style: .clear, shadowOpacity: 0.03)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: "waveform")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(AppTheme.subtleInk)
+
+            Text("No transcript")
+                .font(.headline)
+                .foregroundStyle(AppTheme.ink)
+
+            if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
+                Text("Listening...")
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.subtleInk)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
+    }
+
+    private func transcriptRow(for segment: TranscriptSegment) -> some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(segment.timeRangeLabel(relativeTo: baseTime))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(AppTheme.subtleInk)
+
+                Text(segment.speaker)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.subtleInk)
+                    .textCase(.uppercase)
+            }
+            .frame(width: 46, alignment: .leading)
+
+            Text(segment.text)
+                .font(.body)
+                .foregroundStyle(AppTheme.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var showsLiveStrip: Bool {
+        recordingSessionStore.meetingID == meeting.id && !recordingSessionStore.currentPartial.isEmpty
     }
 
     private var baseTime: Double {

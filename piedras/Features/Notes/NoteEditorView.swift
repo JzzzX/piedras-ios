@@ -6,24 +6,24 @@ struct NoteEditorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("Personal notes")
+            HStack(spacing: 8) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.mutedInk)
+
+                Text("Notes")
                     .font(.headline)
                     .foregroundStyle(AppTheme.ink)
 
                 Spacer()
-
-                Text("Auto-saves")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.subtleInk)
             }
 
             ZStack(alignment: .topLeading) {
                 if meeting.userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("Write the moments that matter. AI notes will layer on top of this context.")
+                    Text("Add a few lines.")
                         .font(.body)
                         .foregroundStyle(AppTheme.subtleInk)
-                        .padding(.horizontal, 6)
+                        .padding(.horizontal, 4)
                         .padding(.vertical, 10)
                         .allowsHitTesting(false)
                 }
@@ -37,15 +37,8 @@ struct NoteEditorView: View {
                 .font(.body)
                 .foregroundStyle(AppTheme.ink)
                 .scrollContentBackground(.hidden)
-                .frame(minHeight: 180)
+                .frame(minHeight: 140)
             }
-        }
-        .padding(20)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(AppTheme.border.opacity(0.55), lineWidth: 1)
         }
     }
 }

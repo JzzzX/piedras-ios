@@ -7,98 +7,127 @@ struct MeetingRowView: View {
     let onDelete: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        if isRecording {
-                            Circle()
-                                .fill(AppTheme.highlight)
-                                .frame(width: 8, height: 8)
-                        }
+        HStack(alignment: .top, spacing: 16) {
+            leadingIcon
 
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(meeting.displayTitle)
-                            .font(.system(size: 24, weight: .regular, design: .serif))
+                            .font(.system(size: 22, weight: .regular, design: .serif))
                             .foregroundStyle(AppTheme.ink)
-                            .multilineTextAlignment(.leading)
+                            .lineLimit(2)
+
+                        if !previewText.isEmpty {
+                            Text(previewText)
+                                .font(.subheadline)
+                                .foregroundStyle(AppTheme.mutedInk)
+                                .lineLimit(2)
+                        }
                     }
 
-                    Text(meeting.previewText.isEmpty ? "Transcript and smart notes will appear here as soon as the meeting has enough signal." : meeting.previewText)
-                        .font(.subheadline)
-                        .foregroundStyle(AppTheme.mutedInk)
-                        .lineLimit(3)
-                }
+                    Spacer(minLength: 0)
 
-                Spacer(minLength: 8)
+                    HStack(spacing: 8) {
+                        syncBadge
 
-                Menu {
-                    Button(role: .destructive, action: onDelete) {
-                        Label("删除会议", systemImage: "trash")
+                        Menu {
+                            Button(role: .destructive, action: onDelete) {
+                                Label("删除会议", systemImage: "trash")
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(AppTheme.mutedInk)
+                                .frame(width: 32, height: 32)
+                                .background {
+                                    AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.05)
+                                }
+                        }
+                        .buttonStyle(.plain)
                     }
-                } label: {
-                    Image(systemName: "ellipsis")
-                        .font(.headline)
-                        .foregroundStyle(AppTheme.subtleInk)
-                        .frame(width: 36, height: 36)
-                        .background(AppTheme.backgroundSecondary, in: Circle())
                 }
-                .buttonStyle(.plain)
-            }
 
-            HStack(spacing: 10) {
-                metadataChip(
-                    label: meeting.compactTimestampLabel,
-                    systemImage: "calendar",
-                    tint: AppTheme.backgroundSecondary,
-                    foreground: AppTheme.mutedInk
-                )
-                metadataChip(
-                    label: meeting.durationLabel,
-                    systemImage: "clock",
-                    tint: AppTheme.backgroundSecondary,
-                    foreground: AppTheme.mutedInk
-                )
-                metadataChip(
-                    label: meeting.transcriptSummaryLabel,
-                    systemImage: "text.quote",
-                    tint: AppTheme.accentSoft,
-                    foreground: AppTheme.accent
-                )
-                Spacer()
-                syncBadge
+                HStack(spacing: 8) {
+                    metadataPill(systemName: "clock", label: meeting.durationLabel)
+                    metadataPill(systemName: "waveform", label: meeting.transcriptCountLabel)
+                    metadataPill(systemName: "calendar", label: meeting.compactTimestampLabel)
+
+                    if isRecording {
+                        metadataPill(systemName: "record.circle.fill", label: "")
+                            .foregroundStyle(AppTheme.highlight)
+                    }
+                }
             }
         }
-        .padding(20)
+        .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(isRecording ? AppTheme.surfaceElevated : AppTheme.surface)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(isRecording ? AppTheme.highlight.opacity(0.45) : AppTheme.border.opacity(0.55), lineWidth: 1)
+        .background {
+            AppGlassSurface(
+                cornerRadius: 30,
+                style: isRecording ? .regular : .clear,
+                borderOpacity: isRecording ? 0.34 : 0.24,
+                shadowOpacity: 0.10
+            )
         }
-        .shadow(color: AppTheme.cardShadow, radius: 14, x: 0, y: 8)
-        .contentShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
         .onTapGesture(perform: onOpen)
     }
 
-    private func metadataChip(label: String, systemImage: String, tint: Color, foreground: Color) -> some View {
-        Label(label, systemImage: systemImage)
-            .font(.caption.weight(.medium))
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(tint, in: Capsule())
+    private var leadingIcon: some View {
+        ZStack(alignment: .topTrailing) {
+            AppGlassSurface(cornerRadius: 22, style: .regular, shadowOpacity: 0.05)
+                .frame(width: 56, height: 56)
+                .overlay {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                }
+
+            if isRecording {
+                Circle()
+                    .fill(AppTheme.highlight)
+                    .frame(width: 12, height: 12)
+                    .overlay {
+                        Circle()
+                            .stroke(Color.white.opacity(0.85), lineWidth: 2)
+                    }
+                    .offset(x: 4, y: -4)
+            }
+        }
+    }
+
+    private func metadataPill(systemName: String, label: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemName)
+                .font(.system(size: 11, weight: .semibold))
+
+            if !label.isEmpty {
+                Text(label)
+                    .font(.caption.weight(.semibold))
+            }
+        }
+        .foregroundStyle(AppTheme.mutedInk)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background {
+            AppGlassSurface(cornerRadius: 15, style: .clear, shadowOpacity: 0.03)
+        }
     }
 
     private var syncBadge: some View {
-        Text(meeting.syncStateLabel)
-            .font(.caption2.weight(.semibold))
+        Image(systemName: meeting.syncStateIconName)
+            .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(syncForeground)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(syncBackground, in: Capsule())
+            .frame(width: 32, height: 32)
+            .background {
+                AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.03)
+            }
+            .accessibilityLabel(meeting.syncStateLabel)
+    }
+
+    private var previewText: String {
+        meeting.previewText.replacingOccurrences(of: "\n", with: " ")
     }
 
     private var syncForeground: Color {
@@ -113,21 +142,6 @@ struct MeetingRowView: View {
             return AppTheme.danger
         case .deleted:
             return AppTheme.subtleInk
-        }
-    }
-
-    private var syncBackground: Color {
-        switch meeting.syncState {
-        case .pending:
-            return AppTheme.highlightSoft
-        case .syncing:
-            return AppTheme.accentSoft
-        case .synced:
-            return AppTheme.success.opacity(0.14)
-        case .failed:
-            return AppTheme.danger.opacity(0.12)
-        case .deleted:
-            return AppTheme.backgroundSecondary
         }
     }
 }
