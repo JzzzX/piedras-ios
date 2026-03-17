@@ -29,7 +29,7 @@ struct TranscriptView: View {
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.secondary)
                             Spacer()
-                            Text(segment.timeRangeLabel)
+                            Text(segment.timeRangeLabel(relativeTo: baseTime))
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -42,5 +42,17 @@ struct TranscriptView: View {
             }
         }
         .listStyle(.plain)
+    }
+
+    private var baseTime: Double {
+        guard let firstSegment = meeting.orderedSegments.first else {
+            return 0
+        }
+
+        if firstSegment.startTime > 86_400_000 {
+            return min(firstSegment.startTime, meeting.date.timeIntervalSince1970 * 1000)
+        }
+
+        return 0
     }
 }

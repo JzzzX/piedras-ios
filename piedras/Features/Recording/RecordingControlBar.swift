@@ -14,7 +14,9 @@ struct RecordingControlBar: View {
 
                 HStack(spacing: 12) {
                     Button(role: .destructive) {
-                        meetingStore.stopRecording()
+                        Task {
+                            await meetingStore.stopRecording()
+                        }
                     } label: {
                         Label("停止", systemImage: "stop.fill")
                             .frame(maxWidth: .infinity)
@@ -22,11 +24,13 @@ struct RecordingControlBar: View {
                     .buttonStyle(.bordered)
 
                     Button {
-                        switch recordingSessionStore.phase {
-                        case .paused:
-                            meetingStore.resumeRecording()
-                        default:
-                            meetingStore.pauseRecording()
+                        Task {
+                            switch recordingSessionStore.phase {
+                            case .paused:
+                                await meetingStore.resumeRecording()
+                            default:
+                                await meetingStore.pauseRecording()
+                            }
                         }
                     } label: {
                         Label(

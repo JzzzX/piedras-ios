@@ -86,9 +86,9 @@ extension Meeting {
 }
 
 extension TranscriptSegment {
-    var timeRangeLabel: String {
-        let startSeconds = Int(startTime / 1000)
-        let endSeconds = Int(endTime / 1000)
+    func timeRangeLabel(relativeTo baseTime: Double = 0) -> String {
+        let startSeconds = Int(max(0, (startTime - baseTime) / 1000))
+        let endSeconds = Int(max(Double(startSeconds), (endTime - baseTime) / 1000))
         return "\(startSeconds)s - \(endSeconds)s"
     }
 }

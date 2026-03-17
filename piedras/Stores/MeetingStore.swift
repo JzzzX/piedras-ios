@@ -9,6 +9,7 @@ final class MeetingStore {
     private let recordingSessionStore: RecordingSessionStore
     private let audioRecorderService: AudioRecorderService
     private let apiClient: APIClient
+    private let asrService: ASRService
     private let workspaceBootstrapService: WorkspaceBootstrapService
     private let meetingSyncService: MeetingSyncService
 
@@ -33,6 +34,7 @@ final class MeetingStore {
         recordingSessionStore: RecordingSessionStore,
         audioRecorderService: AudioRecorderService,
         apiClient: APIClient,
+        asrService: ASRService,
         workspaceBootstrapService: WorkspaceBootstrapService,
         meetingSyncService: MeetingSyncService
     ) {
@@ -41,11 +43,30 @@ final class MeetingStore {
         self.recordingSessionStore = recordingSessionStore
         self.audioRecorderService = audioRecorderService
         self.apiClient = apiClient
+        self.asrService = asrService
         self.workspaceBootstrapService = workspaceBootstrapService
         self.meetingSyncService = meetingSyncService
 
         self.audioRecorderService.onProgress = { [weak self] level, duration in
             self?.handleRecordingProgress(level: level, duration: duration)
+        }
+        self.audioRecorderService.onPCMData = { [weak self] data in
+            self?.handlePCMChunk(data)
+        }
+        self.asrService.onStateChange = { [weak self] state in
+            self?.recordingSessionStore.asrState = state
+            if state == .connected {
+                self?.recordingSessionStore.errorBanner = nil
+            }
+        }
+        self.asrService.onPartialText = { [weak self] partial in
+            self?.recordingSessionStore.currentPartial = partial
+        }
+        self.asrService.onFinalResult = { [weak self] result in
+            self?.handleFinalTranscript(result)
+        }
+        self.asrService.onError = { [weak self] message in
+            self?.recordingSessionStore.errorBanner = message
         }
     }
 
@@ -139,6 +160,8 @@ final class MeetingStore {
 
         do {
             recordingSessionStore.errorBanner = nil
+            recordingSessionStore.currentPartial = ""
+            recordingSessionStore.asrState = .connecting
             recordingSessionStore.meetingID = meetingID
             recordingSessionStore.phase = .starting
             let fileURL = try await audioRecorderService.startRecording(meetingID: meetingID)
@@ -152,20 +175,26 @@ final class MeetingStore {
             try repository.save()
             selectedMeetingID = meetingID
             loadMeetings()
+            Task { @MainActor [weak self] in
+                await self?.startASRIfPossible(for: meetingID)
+            }
         } catch {
             recordingSessionStore.errorBanner = error.localizedDescription
             recordingSessionStore.phase = .idle
             recordingSessionStore.meetingID = nil
+            recordingSessionStore.asrState = .idle
             lastErrorMessage = error.localizedDescription
         }
     }
 
-    func pauseRecording() {
+    func pauseRecording() async {
         guard let meeting = currentRecordingMeeting() else { return }
 
         do {
             try audioRecorderService.pauseRecording()
+            await asrService.stopStreaming()
             recordingSessionStore.phase = .paused
+            recordingSessionStore.currentPartial = ""
             meeting.status = .paused
             meeting.markPending()
             try repository.save()
@@ -175,25 +204,29 @@ final class MeetingStore {
         }
     }
 
-    func resumeRecording() {
+    func resumeRecording() async {
         guard let meeting = currentRecordingMeeting() else { return }
 
         do {
             try audioRecorderService.resumeRecording()
             recordingSessionStore.phase = .recording
+            recordingSessionStore.asrState = .connecting
             meeting.status = .recording
             meeting.markPending()
             try repository.save()
             loadMeetings()
+            await startASRIfPossible(for: meeting.id)
         } catch {
             recordingSessionStore.errorBanner = error.localizedDescription
         }
     }
 
-    func stopRecording() {
+    func stopRecording() async {
         guard let meeting = currentRecordingMeeting() else { return }
 
         do {
+            recordingSessionStore.phase = .stopping
+            await asrService.stopStreaming()
             let artifact = try audioRecorderService.stopRecording()
             meeting.status = .ended
             meeting.audioLocalPath = artifact.fileURL.path
@@ -205,9 +238,7 @@ final class MeetingStore {
             try repository.save()
             recordingSessionStore.reset()
             loadMeetings()
-            Task { @MainActor [weak self] in
-                await self?.finalizeStoppedMeeting(meetingID: meeting.id)
-            }
+            await finalizeStoppedMeeting(meetingID: meeting.id)
         } catch {
             recordingSessionStore.errorBanner = error.localizedDescription
         }
@@ -386,6 +417,36 @@ final class MeetingStore {
         try? repository.save()
     }
 
+    private func handlePCMChunk(_ data: Data) {
+        guard recordingSessionStore.phase == .recording else { return }
+        asrService.enqueuePCM(data)
+    }
+
+    private func handleFinalTranscript(_ result: ASRFinalResult) {
+        guard let meeting = currentRecordingMeeting() else { return }
+
+        let nextIndex = (meeting.orderedSegments.last?.orderIndex ?? -1) + 1
+        let segment = TranscriptSegment(
+            speaker: "麦克风",
+            text: result.text,
+            startTime: result.startTime,
+            endTime: max(result.endTime, result.startTime),
+            isFinal: true,
+            orderIndex: nextIndex
+        )
+        segment.meeting = meeting
+
+        meeting.segments.append(segment)
+        meeting.markPending()
+        recordingSessionStore.currentPartial = ""
+
+        do {
+            try repository.save()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
     private func startBackendPreparationIfNeeded() {
         guard !didStartBackendPreparation else { return }
         didStartBackendPreparation = true
@@ -460,6 +521,30 @@ final class MeetingStore {
         }
 
         await syncMeetingIfPossible(meetingID: meetingID)
+    }
+
+    private func startASRIfPossible(for meetingID: String) async {
+        guard recordingSessionStore.meetingID == meetingID,
+              recordingSessionStore.phase == .recording else { return }
+
+        let existingWorkspaceID = meeting(withID: meetingID)?.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+        let workspaceID: String?
+        if let existingWorkspaceID {
+            workspaceID = existingWorkspaceID
+        } else {
+            workspaceID = await bootstrapHiddenWorkspace(force: false)
+        }
+
+        guard recordingSessionStore.meetingID == meetingID,
+              recordingSessionStore.phase == .recording else { return }
+
+        do {
+            try await asrService.startStreaming(workspaceID: workspaceID)
+        } catch {
+            guard recordingSessionStore.meetingID == meetingID else { return }
+            recordingSessionStore.asrState = .degraded
+            recordingSessionStore.errorBanner = "实时转写未启动：\(error.localizedDescription)"
+        }
     }
 
     private func deleteMeetingRemotelyIfNeeded(id: String) async {

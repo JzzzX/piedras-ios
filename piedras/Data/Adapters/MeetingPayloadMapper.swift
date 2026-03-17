@@ -13,6 +13,25 @@ struct RemoteASRStatus: Decodable {
     let message: String
 }
 
+struct RemoteASRSession: Decodable {
+    let wsUrl: String
+    let token: String
+    let tokenExpireTime: Int?
+    let appKey: String
+    let vocabularyId: String?
+}
+
+struct RemoteASRSessionResponse: Decodable {
+    let session: RemoteASRSession?
+    let error: String?
+}
+
+struct ASRSessionRequestPayload: Encodable {
+    let sampleRate: Int
+    let channels: Int
+    let workspaceId: String?
+}
+
 struct RemoteMeetingListItem: Decodable {
     let id: String
 }

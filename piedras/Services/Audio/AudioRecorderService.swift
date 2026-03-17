@@ -10,13 +10,16 @@ struct LocalAudioArtifact {
 @MainActor
 final class AudioRecorderService: NSObject {
     var onProgress: ((Double, Int) -> Void)?
+    var onPCMData: ((Data) -> Void)?
 
     private let sessionCoordinator: AudioSessionCoordinator
     private var recorder: AVAudioRecorder?
+    private let audioEngine = AVAudioEngine()
     private var meterTimer: Timer?
     private var recordingStartedAt: Date?
     private var accumulatedDuration: TimeInterval = 0
     private var recordingURL: URL?
+    private var isInputTapInstalled = false
 
     init(sessionCoordinator: AudioSessionCoordinator) {
         self.sessionCoordinator = sessionCoordinator
@@ -54,6 +57,7 @@ final class AudioRecorderService: NSObject {
         recordingURL = outputURL
         accumulatedDuration = 0
         recordingStartedAt = .now
+        try startPCMStreaming()
         startMetering()
         onProgress?(0, 0)
         return outputURL
@@ -68,6 +72,7 @@ final class AudioRecorderService: NSObject {
         recorder.pause()
         accumulatedDuration = currentDuration()
         recordingStartedAt = nil
+        audioEngine.pause()
         stopMetering()
         recorder.updateMeters()
         onProgress?(normalizedPower(from: recorder), Int(accumulatedDuration.rounded()))
@@ -84,6 +89,9 @@ final class AudioRecorderService: NSObject {
         }
 
         recordingStartedAt = .now
+        if !audioEngine.isRunning {
+            try startPCMStreaming()
+        }
         startMetering()
     }
 
@@ -95,6 +103,7 @@ final class AudioRecorderService: NSObject {
         let finalDuration = max(Int(currentDuration().rounded()), Int(recorder.currentTime.rounded()))
         recorder.stop()
         stopMetering()
+        stopPCMStreaming()
         self.recorder = nil
         self.recordingURL = nil
         recordingStartedAt = nil
@@ -118,7 +127,7 @@ final class AudioRecorderService: NSObject {
             Task { @MainActor [weak self] in
                 guard let self, let recorder else { return }
                 recorder.updateMeters()
-                onProgress?(normalizedPower(from: recorder), Int(currentDuration().rounded()))
+                self.onProgress?(self.normalizedPower(from: recorder), Int(self.currentDuration().rounded()))
             }
         }
     }
@@ -126,6 +135,44 @@ final class AudioRecorderService: NSObject {
     private func stopMetering() {
         meterTimer?.invalidate()
         meterTimer = nil
+    }
+
+    private func startPCMStreaming() throws {
+        let inputNode = audioEngine.inputNode
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+
+        if isInputTapInstalled {
+            inputNode.removeTap(onBus: 0)
+            isInputTapInstalled = false
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: 2_048, format: inputFormat) { [weak self] buffer, _ in
+            guard let pcmData = PCMConverter.downsampledPCMData(from: buffer) else {
+                return
+            }
+
+            let level = PCMConverter.normalizedRMSLevel(from: buffer)
+
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.onPCMData?(pcmData)
+                self.onProgress?(level, Int(self.currentDuration().rounded()))
+            }
+        }
+
+        isInputTapInstalled = true
+        audioEngine.prepare()
+        try audioEngine.start()
+    }
+
+    private func stopPCMStreaming() {
+        if isInputTapInstalled {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            isInputTapInstalled = false
+        }
+
+        audioEngine.stop()
+        audioEngine.reset()
     }
 
     private func normalizedPower(from recorder: AVAudioRecorder) -> Double {

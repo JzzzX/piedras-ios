@@ -58,6 +58,22 @@ final class APIClient {
         try await sendJSONRequest(path: "/api/asr/status", method: "GET", responseType: RemoteASRStatus.self)
     }
 
+    func createASRSession(
+        sampleRate: Int,
+        channels: Int,
+        workspaceID: String?
+    ) async throws -> RemoteASRSessionResponse {
+        try await sendJSONRequest(
+            path: "/api/asr/session",
+            method: "POST",
+            body: ASRSessionRequestPayload(
+                sampleRate: sampleRate,
+                channels: channels,
+                workspaceId: workspaceID
+            )
+        )
+    }
+
     func listWorkspaces() async throws -> [RemoteWorkspace] {
         try await sendJSONRequest(path: "/api/workspaces", method: "GET", responseType: [RemoteWorkspace].self)
     }

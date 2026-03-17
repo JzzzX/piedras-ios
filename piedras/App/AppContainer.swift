@@ -11,6 +11,7 @@ final class AppContainer {
     let audioRecorderService: AudioRecorderService
     let meetingRepository: MeetingRepository
     let apiClient: APIClient
+    let asrService: ASRService
     let workspaceBootstrapService: WorkspaceBootstrapService
     let meetingSyncService: MeetingSyncService
     let meetingStore: MeetingStore
@@ -29,6 +30,7 @@ final class AppContainer {
         audioRecorderService = AudioRecorderService(sessionCoordinator: audioSessionCoordinator)
         meetingRepository = MeetingRepository(modelContext: modelContainer.mainContext)
         apiClient = APIClient(settingsStore: settingsStore)
+        asrService = ASRService(apiClient: apiClient)
         workspaceBootstrapService = WorkspaceBootstrapService(
             apiClient: apiClient,
             settingsStore: settingsStore
@@ -44,6 +46,7 @@ final class AppContainer {
             recordingSessionStore: recordingSessionStore,
             audioRecorderService: audioRecorderService,
             apiClient: apiClient,
+            asrService: asrService,
             workspaceBootstrapService: workspaceBootstrapService,
             meetingSyncService: meetingSyncService
         )
