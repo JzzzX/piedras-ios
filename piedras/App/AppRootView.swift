@@ -23,8 +23,8 @@ struct AppRootView: View {
         }
         .sheet(item: $router.sheet) { sheet in
             switch sheet {
-            case .globalChat:
-                GlobalChatView()
+            case let .globalChat(initialQuestion):
+                GlobalChatView(initialQuestion: initialQuestion)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
             case .search:

@@ -61,7 +61,10 @@ final class AppContainer {
         )
 
         if inMemory {
-            meetingRepository.seedPreviewDataIfNeeded(workspaceID: settingsStore.hiddenWorkspaceID)
+            meetingRepository.seedPreviewDataIfNeeded(
+                workspaceID: settingsStore.hiddenWorkspaceID,
+                preferLocalOnly: true
+            )
             meetingStore.loadMeetings()
         }
     }

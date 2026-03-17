@@ -4,7 +4,6 @@ struct MeetingRowView: View {
     let meeting: Meeting
     let isRecording: Bool
     let onOpen: () -> Void
-    let onDelete: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 16) {
@@ -28,24 +27,7 @@ struct MeetingRowView: View {
 
                     Spacer(minLength: 0)
 
-                    HStack(spacing: 8) {
-                        syncBadge
-
-                        Menu {
-                            Button(role: .destructive, action: onDelete) {
-                                Label("删除会议", systemImage: "trash")
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundStyle(AppTheme.mutedInk)
-                                .frame(width: 32, height: 32)
-                                .background {
-                                    AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.05)
-                                }
-                        }
-                        .buttonStyle(.plain)
-                    }
+                    syncBadge
                 }
 
                 HStack(spacing: 8) {
@@ -71,6 +53,7 @@ struct MeetingRowView: View {
             )
         }
         .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .accessibilityIdentifier("MeetingRow")
         .onTapGesture(perform: onOpen)
     }
 

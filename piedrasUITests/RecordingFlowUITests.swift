@@ -7,30 +7,89 @@ final class RecordingFlowUITests: XCTestCase {
 
     @MainActor
     func testRecordingContinuesAfterBackgrounding() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchApp()
 
         dismissPermissionAlertsIfNeeded(in: app)
 
-        let newRecordingButton = app.buttons["NewRecordingButton"]
-        XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 10))
+        let newRecordingButton = element(in: app, identifier: "NewRecordingButton", fallbackLabel: "新录音")
+        XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 10), "首页录音入口未出现。")
         newRecordingButton.tap()
+        app.tap()
 
-        let stopButton = app.buttons["StopRecordingButton"]
-        XCTAssertTrue(stopButton.waitForExistence(timeout: 12))
+        let stopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
+        XCTAssertTrue(stopButton.waitForExistence(timeout: 12), "开始录音后未进入录音态。")
 
         sleep(2)
         XCUIDevice.shared.press(.home)
         sleep(2)
 
         app.activate()
-        let reactivatedStopButton = app.buttons["StopRecordingButton"]
-        XCTAssertTrue(reactivatedStopButton.waitForExistence(timeout: 12))
+        app.tap()
 
-        let durationLabel = app.staticTexts["RecordDurationLabel"]
-        XCTAssertTrue(durationLabel.waitForExistence(timeout: 5))
+        let reactivatedStopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
+        XCTAssertTrue(reactivatedStopButton.waitForExistence(timeout: 12), "回到前台后录音态未恢复。")
+
+        let durationLabel = element(in: app, identifier: "RecordDurationLabel")
+        XCTAssertTrue(durationLabel.waitForExistence(timeout: 5), "录音时长未显示。")
 
         reactivatedStopButton.tap()
+    }
+
+    @MainActor
+    func testHomeAIComposerOpensGlobalChat() throws {
+        let app = launchApp()
+
+        let field = app.textFields["HomeGlobalChatField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("Summarize roadmap")
+
+        let sendButton = app.buttons["HomeGlobalChatSendButton"]
+        XCTAssertTrue(sendButton.waitForExistence(timeout: 2))
+        sendButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Summarize roadmap"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["GlobalChatInputField"].waitForExistence(timeout: 5))
+    }
+
+    @MainActor
+    func testMeetingRowSupportsSwipeToDelete() throws {
+        let app = launchApp()
+        let seededTitle = "Piedras iOS MVP Kickoff"
+
+        let rows = app.descendants(matching: .any).matching(identifier: "MeetingRow")
+        let firstRow = rows.element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.swipeLeft()
+
+        let deleteButton = app.buttons["删除"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 3), "左滑后删除按钮未出现。")
+        deleteButton.tap()
+
+        let deletedTitle = app.staticTexts[seededTitle]
+        let predicate = NSPredicate(format: "exists == false")
+        expectation(for: predicate, evaluatedWith: deletedTitle)
+        waitForExpectations(timeout: 5)
+    }
+
+    private func launchApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append("UITEST_IN_MEMORY")
+        app.launch()
+        return app
+    }
+
+    private func element(in app: XCUIApplication, identifier: String, fallbackLabel: String? = nil) -> XCUIElement {
+        if let fallbackLabel {
+            let predicate = NSPredicate(format: "identifier == %@ OR label == %@", identifier, fallbackLabel)
+            return app.descendants(matching: .any)
+                .matching(predicate)
+                .firstMatch
+        }
+
+        return app.descendants(matching: .any)
+            .matching(identifier: identifier)
+            .firstMatch
     }
 
     private func dismissPermissionAlertsIfNeeded(in app: XCUIApplication) {

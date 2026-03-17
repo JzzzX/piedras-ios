@@ -62,8 +62,12 @@ struct RecordingControlBar: View {
                         .background {
                             AppGlassSurface(cornerRadius: 22, style: .clear, shadowOpacity: 0.05)
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(recordingSessionStore.phase == .paused ? "继续录音" : "暂停录音")
+                        .accessibilityIdentifier("PauseRecordingButton")
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
                 .accessibilityIdentifier("PauseRecordingButton")
 
                 Button {
@@ -77,8 +81,12 @@ struct RecordingControlBar: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
                         .background(AppTheme.ink, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("停止录音")
+                        .accessibilityIdentifier("StopRecordingButton")
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .ignore)
                 .accessibilityIdentifier("StopRecordingButton")
             }
 
@@ -138,8 +146,12 @@ struct RecordingControlBar: View {
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
                     .background(AppTheme.ink, in: Circle())
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(meeting.audioLocalPath == nil ? "开始录音" : "继续录音")
+                    .accessibilityIdentifier("StartRecordingButton")
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(meeting.audioLocalPath == nil ? "开始录音" : "继续录音")
             .accessibilityIdentifier("StartRecordingButton")
         }

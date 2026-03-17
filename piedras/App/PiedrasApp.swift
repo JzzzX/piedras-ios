@@ -3,7 +3,9 @@ import SwiftUI
 
 @main
 struct PiedrasApp: App {
-    @State private var appContainer = AppContainer()
+    @State private var appContainer = AppContainer(
+        inMemory: ProcessInfo.processInfo.arguments.contains("UITEST_IN_MEMORY")
+    )
 
     var body: some Scene {
         WindowGroup {

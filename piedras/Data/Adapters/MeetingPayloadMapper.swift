@@ -13,6 +13,14 @@ struct RemoteASRStatus: Decodable {
     let message: String
 }
 
+struct RemoteLLMStatus: Decodable {
+    let ready: Bool
+    let provider: String
+    let model: String?
+    let preset: String?
+    let message: String
+}
+
 struct RemoteASRSession: Decodable {
     let wsUrl: String
     let token: String

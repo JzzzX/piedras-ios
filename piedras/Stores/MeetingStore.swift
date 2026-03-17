@@ -161,6 +161,23 @@ final class MeetingStore {
     }
 
     func deleteMeeting(id: String) {
+        guard let meeting = meeting(withID: id) else {
+            return
+        }
+
+        let requiresRemoteDeletion = meeting.lastSyncedAt != nil
+            || meeting.syncState == .synced
+            || meeting.audioRemotePath != nil
+
+        if !requiresRemoteDeletion {
+            do {
+                try deleteMeetingLocally(meeting)
+            } catch {
+                lastErrorMessage = error.localizedDescription
+            }
+            return
+        }
+
         Task { @MainActor [weak self] in
             await self?.deleteMeetingRemotelyIfNeeded(id: id)
         }
@@ -322,19 +339,39 @@ final class MeetingStore {
         defer { settingsStore.isCheckingHealth = false }
 
         do {
-            let status = try await apiClient.fetchASRStatus()
+            let asrStatus = try await apiClient.fetchASRStatus()
             settingsStore.apiReachable = true
-            settingsStore.asrReady = status.ready
+            settingsStore.asrReady = asrStatus.ready
             settingsStore.backendStatusMessage = "后端在线"
-            settingsStore.asrStatusMessage = status.message
+            settingsStore.asrStatusMessage = asrStatus.message
+
+            do {
+                let llmStatus = try await apiClient.fetchLLMStatus()
+                settingsStore.llmReady = llmStatus.ready
+                settingsStore.llmStatusMessage = llmStatus.message
+                settingsStore.llmProvider = llmStatus.provider
+                settingsStore.llmModel = llmStatus.model
+                settingsStore.llmPreset = llmStatus.preset
+            } catch {
+                settingsStore.llmReady = false
+                settingsStore.llmStatusMessage = error.localizedDescription
+                settingsStore.llmProvider = "none"
+                settingsStore.llmModel = nil
+                settingsStore.llmPreset = nil
+            }
+
             settingsStore.lastHealthCheckAt = .now
         } catch {
             settingsStore.apiReachable = false
             settingsStore.asrReady = false
+            settingsStore.llmReady = false
             settingsStore.backendStatusMessage = error.localizedDescription
             settingsStore.asrStatusMessage = "检查失败"
+            settingsStore.llmStatusMessage = "检查失败"
+            settingsStore.llmProvider = "none"
+            settingsStore.llmModel = nil
+            settingsStore.llmPreset = nil
             settingsStore.lastHealthCheckAt = .now
-            lastErrorMessage = error.localizedDescription
         }
     }
 
@@ -652,16 +689,7 @@ final class MeetingStore {
             }
 
             do {
-                removeLocalAudioIfNeeded(for: meeting)
-                try repository.delete(meeting)
-                if selectedMeetingID == id {
-                    selectedMeetingID = nil
-                }
-                if recordingSessionStore.meetingID == id {
-                    recordingSessionStore.reset()
-                    updateKeepScreenAwake()
-                }
-                loadMeetings()
+                try deleteMeetingLocally(meeting)
             } catch {
                 lastErrorMessage = error.localizedDescription
             }
@@ -692,5 +720,21 @@ final class MeetingStore {
         }
 
         try? fileManager.removeItem(atPath: audioLocalPath)
+    }
+
+    private func deleteMeetingLocally(_ meeting: Meeting) throws {
+        removeLocalAudioIfNeeded(for: meeting)
+        try repository.delete(meeting)
+
+        if selectedMeetingID == meeting.id {
+            selectedMeetingID = nil
+        }
+
+        if recordingSessionStore.meetingID == meeting.id {
+            recordingSessionStore.reset()
+            updateKeepScreenAwake()
+        }
+
+        loadMeetings()
     }
 }

@@ -58,6 +58,10 @@ final class APIClient {
         try await sendJSONRequest(path: "/api/asr/status", method: "GET", responseType: RemoteASRStatus.self)
     }
 
+    func fetchLLMStatus() async throws -> RemoteLLMStatus {
+        try await sendJSONRequest(path: "/api/llm/status", method: "GET", responseType: RemoteLLMStatus.self)
+    }
+
     func createASRSession(
         sampleRate: Int,
         channels: Int,

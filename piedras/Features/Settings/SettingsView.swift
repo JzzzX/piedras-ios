@@ -24,7 +24,7 @@ struct SettingsView: View {
                             settingsRow(
                                 systemName: "waveform",
                                 title: "Transcript",
-                                value: settingsStore.asrReady ? "Ready" : "Unavailable"
+                                value: transcriptValue
                             )
                         }
                     }
@@ -34,7 +34,7 @@ struct SettingsView: View {
                             settingsRow(
                                 systemName: "sparkles",
                                 title: "AI Notes",
-                                value: settingsStore.apiReachable ? "Ready" : "Offline"
+                                value: aiValue
                             )
                             AppGlassDivider(inset: 42)
                             settingsRow(
@@ -127,6 +127,22 @@ struct SettingsView: View {
         let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
         return "\(version) (\(build))"
     }
+
+    private var transcriptValue: String {
+        if !settingsStore.apiReachable, settingsStore.lastHealthCheckAt != nil {
+            return "Offline"
+        }
+
+        return settingsStore.asrReady ? "Ready" : "Unavailable"
+    }
+
+    private var aiValue: String {
+        if !settingsStore.apiReachable, settingsStore.lastHealthCheckAt != nil {
+            return "Offline"
+        }
+
+        return settingsStore.llmReady ? "Ready" : "Unavailable"
+    }
 }
 
 private struct DeveloperSettingsView: View {
@@ -190,6 +206,10 @@ private struct DeveloperSettingsView: View {
                                     .foregroundStyle(settingsStore.isCheckingHealth ? AppTheme.subtleInk : .white)
                             }
                             .disabled(settingsStore.isCheckingHealth)
+
+                            Text("Simulator can use 127.0.0.1. On a real device, use your Mac LAN address or a deployed URL.")
+                                .font(.footnote)
+                                .foregroundStyle(AppTheme.subtleInk)
                         }
                     }
 
@@ -198,6 +218,8 @@ private struct DeveloperSettingsView: View {
                             developerStatusRow(title: "Backend", value: backendStateLabel)
                             AppGlassDivider(inset: 0)
                             developerStatusRow(title: "ASR", value: settingsStore.asrStatusMessage)
+                            AppGlassDivider(inset: 0)
+                            developerStatusRow(title: "LLM", value: llmStateLabel)
                             AppGlassDivider(inset: 0)
                             developerStatusRow(title: "Workspace", value: settingsStore.workspaceStatusMessage)
                         }
@@ -262,5 +284,20 @@ private struct DeveloperSettingsView: View {
         }
 
         return settingsStore.apiReachable ? settingsStore.backendStatusMessage : "Offline"
+    }
+
+    private var llmStateLabel: String {
+        if !settingsStore.apiReachable, settingsStore.lastHealthCheckAt != nil {
+            return "Offline"
+        }
+
+        guard settingsStore.llmReady else {
+            return settingsStore.llmStatusMessage
+        }
+
+        let provider = settingsStore.llmProvider.capitalized
+        let preset = settingsStore.llmPreset.flatMap { $0.isEmpty ? nil : $0 }
+        let model = settingsStore.llmModel.flatMap { $0.isEmpty ? nil : $0 }
+        return [provider, preset, model].compactMap { $0 }.joined(separator: " · ")
     }
 }

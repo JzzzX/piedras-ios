@@ -84,7 +84,7 @@ final class MeetingRepository {
         meeting.chatMessages = chatMessages
     }
 
-    func seedPreviewDataIfNeeded(workspaceID: String?) {
+    func seedPreviewDataIfNeeded(workspaceID: String?, preferLocalOnly: Bool = false) {
         let existing: [Meeting]
         do {
             existing = try fetchMeetings()
@@ -104,8 +104,8 @@ final class MeetingRepository {
             userNotesPlainText: "核心范围：录音、转写、笔记、AI 总结。",
             enhancedNotes: "总结：先做一个极简可上线版本，复杂工作流全部后置。",
             hiddenWorkspaceId: workspaceID,
-            syncState: .synced,
-            lastSyncedAt: .now.addingTimeInterval(-3_600),
+            syncState: preferLocalOnly ? .pending : .synced,
+            lastSyncedAt: preferLocalOnly ? nil : .now.addingTimeInterval(-3_600),
             createdAt: .now.addingTimeInterval(-7_200),
             updatedAt: .now.addingTimeInterval(-2_400)
         )

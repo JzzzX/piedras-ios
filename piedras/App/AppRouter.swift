@@ -5,12 +5,21 @@ enum AppRoute: Hashable {
     case meeting(String)
 }
 
-enum AppSheet: String, Identifiable {
-    case globalChat
+enum AppSheet: Identifiable, Equatable {
+    case globalChat(initialQuestion: String?)
     case search
     case settings
 
-    var id: String { rawValue }
+    var id: String {
+        switch self {
+        case let .globalChat(initialQuestion):
+            return "globalChat:\(initialQuestion ?? "")"
+        case .search:
+            return "search"
+        case .settings:
+            return "settings"
+        }
+    }
 }
 
 @MainActor
@@ -27,8 +36,8 @@ final class AppRouter {
         sheet = .settings
     }
 
-    func showGlobalChat() {
-        sheet = .globalChat
+    func showGlobalChat(initialQuestion: String? = nil) {
+        sheet = .globalChat(initialQuestion: initialQuestion)
     }
 
     func showSearch() {

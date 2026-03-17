@@ -26,9 +26,6 @@ struct MeetingSearchView: View {
                                     isRecording: false,
                                     onOpen: {
                                         openMeeting(meeting.id)
-                                    },
-                                    onDelete: {
-                                        meetingStore.deleteMeeting(id: meeting.id)
                                     }
                                 )
                             }

@@ -11,27 +11,18 @@ struct MeetingListView: View {
     @Environment(AppRouter.self) private var router
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
 
+    @State private var homeChatInput = ""
+
     var body: some View {
         ZStack {
             AppGlassBackdrop()
 
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 24) {
-                    header
+            VStack(spacing: 16) {
+                header
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
 
-                    if let activeMeeting = meetingStore.activeRecordingMeeting {
-                        activeRecordingStrip(meeting: activeMeeting)
-                    }
-
-                    if groupedMeetings.isEmpty {
-                        emptyState
-                    } else {
-                        meetingSections
-                    }
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 140)
+                feedList
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -72,6 +63,59 @@ struct MeetingListView: View {
                 }
             }
         }
+    }
+
+    private var feedList: some View {
+        List {
+            if let activeMeeting = meetingStore.activeRecordingMeeting {
+                Section {
+                    activeRecordingStrip(meeting: activeMeeting)
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 10, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+            }
+
+            if groupedMeetings.isEmpty {
+                Section {
+                    emptyState
+                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                }
+            } else {
+                ForEach(groupedMeetings) { section in
+                    Section {
+                        ForEach(section.meetings) { meeting in
+                            MeetingRowView(
+                                meeting: meeting,
+                                isRecording: meeting.id == recordingSessionStore.meetingID && recordingSessionStore.phase != .idle,
+                                onOpen: {
+                                    router.showMeeting(id: meeting.id)
+                                }
+                            )
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button("删除", role: .destructive) {
+                                    meetingStore.deleteMeeting(id: meeting.id)
+                                }
+                            }
+                            .listRowInsets(EdgeInsets(top: 7, leading: 0, bottom: 7, trailing: 0))
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                        }
+                    } header: {
+                        Text(section.title)
+                            .font(.headline.weight(.semibold))
+                            .foregroundStyle(AppTheme.mutedInk)
+                            .textCase(nil)
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(Color.clear)
+        .contentMargins(.horizontal, 20, for: .scrollContent)
     }
 
     private func activeRecordingStrip(meeting: Meeting) -> some View {
@@ -126,33 +170,6 @@ struct MeetingListView: View {
         .buttonStyle(.plain)
     }
 
-    private var meetingSections: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            ForEach(groupedMeetings) { section in
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(section.title)
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AppTheme.mutedInk)
-
-                    VStack(spacing: 14) {
-                        ForEach(section.meetings) { meeting in
-                            MeetingRowView(
-                                meeting: meeting,
-                                isRecording: meeting.id == recordingSessionStore.meetingID && recordingSessionStore.phase != .idle,
-                                onOpen: {
-                                    router.showMeeting(id: meeting.id)
-                                },
-                                onDelete: {
-                                    meetingStore.deleteMeeting(id: meeting.id)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     private var emptyState: some View {
         AppGlassCard(cornerRadius: 34, style: .regular, padding: 22, shadowOpacity: 0.08) {
             VStack(alignment: .leading, spacing: 16) {
@@ -179,8 +196,36 @@ struct MeetingListView: View {
     }
 
     private var bottomDock: some View {
-        HStack {
-            Spacer()
+        HStack(spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppTheme.subtleInk)
+
+                TextField("Ask anything", text: $homeChatInput)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(AppTheme.ink)
+                    .submitLabel(.send)
+                    .onSubmit(sendHomeQuestion)
+                    .accessibilityIdentifier("HomeGlobalChatField")
+
+                if !trimmedHomeChatInput.isEmpty {
+                    Button(action: sendHomeQuestion) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 34, height: 34)
+                            .background(AppTheme.ink, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("HomeGlobalChatSendButton")
+                }
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 58)
+            .background {
+                AppGlassSurface(cornerRadius: 28, style: .regular, borderOpacity: 0.30, shadowOpacity: 0.10)
+            }
 
             Button {
                 if recordingSessionStore.phase == .idle {
@@ -209,13 +254,17 @@ struct MeetingListView: View {
                         .foregroundStyle(recordingSessionStore.phase == .idle ? AppTheme.ink : .white)
                 }
                 .frame(width: 68, height: 68)
+                .contentShape(Circle())
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(recordingSessionStore.phase == .idle ? "新录音" : "停止")
+                .accessibilityIdentifier("NewRecordingButton")
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(recordingSessionStore.phase == .idle ? "新录音" : "停止")
             .accessibilityIdentifier("NewRecordingButton")
-
-            Spacer()
         }
+        .padding(.horizontal, 20)
         .padding(.top, 8)
         .padding(.bottom, 18)
         .background(Color.clear)
@@ -274,5 +323,17 @@ struct MeetingListView: View {
         }
 
         return ""
+    }
+
+    private var trimmedHomeChatInput: String {
+        homeChatInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func sendHomeQuestion() {
+        let question = trimmedHomeChatInput
+        guard !question.isEmpty else { return }
+
+        homeChatInput = ""
+        router.showGlobalChat(initialQuestion: question)
     }
 }

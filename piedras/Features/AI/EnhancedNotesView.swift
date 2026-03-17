@@ -2,6 +2,7 @@ import SwiftUI
 
 struct EnhancedNotesView: View {
     @Environment(MeetingStore.self) private var meetingStore
+    @Environment(SettingsStore.self) private var settingsStore
 
     let meeting: Meeting
 
@@ -36,10 +37,10 @@ struct EnhancedNotesView: View {
                         Text(actionTitle)
                             .font(.caption.weight(.semibold))
                     }
-                    .foregroundStyle(canGenerate ? .white : AppTheme.subtleInk)
+                    .foregroundStyle(canGenerate && !isLLMUnavailable ? .white : AppTheme.subtleInk)
                     .padding(.horizontal, 12)
                 }
-                .disabled(meetingStore.isEnhancing(meetingID: meeting.id) || !canGenerate)
+                .disabled(meetingStore.isEnhancing(meetingID: meeting.id) || !canGenerate || isLLMUnavailable)
             }
 
             Group {
@@ -52,6 +53,11 @@ struct EnhancedNotesView: View {
                             .foregroundStyle(AppTheme.subtleInk)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
+                } else if isLLMUnavailable && meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("AI unavailable.")
+                        .font(.body)
+                        .foregroundStyle(AppTheme.subtleInk)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 } else if meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Generate a note.")
                         .font(.body)
@@ -77,6 +83,10 @@ struct EnhancedNotesView: View {
     private var canGenerate: Bool {
         !meeting.userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
             !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var isLLMUnavailable: Bool {
+        settingsStore.lastHealthCheckAt != nil && (!settingsStore.apiReachable || !settingsStore.llmReady)
     }
 
     private var actionTitle: String {

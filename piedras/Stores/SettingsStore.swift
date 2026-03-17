@@ -25,10 +25,15 @@ final class SettingsStore {
 
     var apiReachable = false
     var asrReady = false
+    var llmReady = false
     var lastHealthCheckAt: Date?
     var workspaceBootstrapState: WorkspaceBootstrapState = .idle
     var backendStatusMessage = "未检查"
     var asrStatusMessage = "未检查"
+    var llmStatusMessage = "未检查"
+    var llmProvider = "none"
+    var llmModel: String?
+    var llmPreset: String?
     var workspaceStatusMessage = "尚未初始化"
     var syncStatusMessage = ""
     var isCheckingHealth = false

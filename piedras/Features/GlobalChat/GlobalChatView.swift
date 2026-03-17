@@ -3,18 +3,29 @@ import SwiftUI
 struct GlobalChatView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(GlobalChatStore.self) private var globalChatStore
+    @Environment(SettingsStore.self) private var settingsStore
+
+    let initialQuestion: String?
 
     @State private var input = ""
+    @State private var didSendInitialQuestion = false
+
+    init(initialQuestion: String? = nil) {
+        self.initialQuestion = initialQuestion
+    }
 
     var body: some View {
         ZStack {
-            AppTheme.pageGradient
-                .ignoresSafeArea()
+            AppGlassBackdrop()
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 18) {
                         header
+
+                        if let availabilityMessage {
+                            statusBanner(availabilityMessage)
+                        }
 
                         if globalChatStore.messages.isEmpty {
                             emptyState
@@ -23,12 +34,7 @@ struct GlobalChatView: View {
                         }
 
                         if let error = globalChatStore.lastErrorMessage {
-                            Text(error)
-                                .font(.footnote)
-                                .foregroundStyle(AppTheme.danger)
-                                .padding(14)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(AppTheme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            errorBanner(error)
                         }
                     }
                     .padding(.horizontal, 20)
@@ -48,6 +54,14 @@ struct GlobalChatView: View {
             composer
         }
         .toolbar(.hidden, for: .navigationBar)
+        .task(id: initialQuestion) {
+            guard !didSendInitialQuestion else { return }
+            let question = initialQuestion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !question.isEmpty else { return }
+            didSendInitialQuestion = true
+            input = ""
+            _ = await globalChatStore.sendMessage(question)
+        }
         .onDisappear {
             globalChatStore.resetConversation()
         }
@@ -55,12 +69,12 @@ struct GlobalChatView: View {
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Ask anything")
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Ask")
                     .font(.system(size: 34, weight: .regular, design: .serif))
                     .foregroundStyle(AppTheme.ink)
 
-                Text("Search across your synced meeting memory without exposing workspace complexity in the UI.")
+                Text("All notes")
                     .font(.subheadline)
                     .foregroundStyle(AppTheme.subtleInk)
             }
@@ -69,57 +83,30 @@ struct GlobalChatView: View {
 
             HStack(spacing: 10) {
                 if !globalChatStore.messages.isEmpty {
-                    Button {
+                    AppGlassCircleButton(systemName: "arrow.counterclockwise", accessibilityLabel: "重置对话") {
                         globalChatStore.resetConversation()
-                    } label: {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.headline)
-                            .foregroundStyle(AppTheme.ink)
-                            .frame(width: 40, height: 40)
-                            .background(AppTheme.surface, in: Circle())
-                            .overlay {
-                                Circle()
-                                    .stroke(AppTheme.border.opacity(0.7), lineWidth: 1)
-                            }
                     }
-                    .buttonStyle(.plain)
                 }
 
-                Button {
+                AppGlassCircleButton(systemName: "xmark", accessibilityLabel: "关闭") {
                     dismiss()
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(AppTheme.ink)
-                        .frame(width: 40, height: 40)
-                        .background(AppTheme.surface, in: Circle())
-                        .overlay {
-                            Circle()
-                                .stroke(AppTheme.border.opacity(0.7), lineWidth: 1)
-                        }
                 }
-                .buttonStyle(.plain)
             }
         }
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Ask about themes, decisions, action items, or how a topic evolved over time.")
-                .font(.body)
-                .foregroundStyle(AppTheme.mutedInk)
+        AppGlassCard(cornerRadius: 30, style: .regular, padding: 20, shadowOpacity: 0.06) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Ask from transcript, notes and summaries.")
+                    .font(.body)
+                    .foregroundStyle(AppTheme.mutedInk)
 
-            HStack(spacing: 10) {
-                suggestion("What did users dislike most?")
-                suggestion("Summarize open decisions")
+                HStack(spacing: 10) {
+                    suggestion("Summarize open decisions")
+                    suggestion("What changed most?")
+                }
             }
-        }
-        .padding(22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(AppTheme.border.opacity(0.55), lineWidth: 1)
         }
     }
 
@@ -158,7 +145,10 @@ struct GlobalChatView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isUser ? AppTheme.ink : AppTheme.surface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(
+            isUser ? AppTheme.ink : AppTheme.surface,
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
         .overlay {
             if !isUser {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -176,33 +166,34 @@ struct GlobalChatView: View {
                 .foregroundStyle(AppTheme.ink)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(AppTheme.backgroundSecondary, in: Capsule())
+                .background {
+                    AppGlassSurface(cornerRadius: 18, style: .clear, shadowOpacity: 0.03)
+                }
         }
         .buttonStyle(.plain)
     }
 
     private var composer: some View {
         HStack(spacing: 12) {
-            TextField("Ask across your meeting history", text: $input, axis: .vertical)
-                .textFieldStyle(.plain)
-                .lineLimit(1 ... 4)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 14)
-                .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(AppTheme.border.opacity(0.65), lineWidth: 1)
-                }
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppTheme.subtleInk)
 
-            Button {
-                let question = input
-                Task {
-                    let sent = await globalChatStore.sendMessage(question)
-                    if sent {
-                        input = ""
-                    }
-                }
-            } label: {
+                TextField("Ask across your meetings", text: $input)
+                    .textFieldStyle(.plain)
+                    .foregroundStyle(AppTheme.ink)
+                    .submitLabel(.send)
+                    .onSubmit(sendCurrentInput)
+                    .accessibilityIdentifier("GlobalChatInputField")
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 54)
+            .background {
+                AppGlassSurface(cornerRadius: 22, style: .regular, shadowOpacity: 0.05)
+            }
+
+            Button(action: sendCurrentInput) {
                 Image(systemName: "arrow.up")
                     .font(.headline.weight(.semibold))
                     .foregroundStyle(.white)
@@ -210,11 +201,71 @@ struct GlobalChatView: View {
                     .background(AppTheme.ink, in: Circle())
             }
             .buttonStyle(.plain)
-            .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || globalChatStore.isStreaming)
+            .disabled(trimmedInput.isEmpty || globalChatStore.isStreaming)
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
         .padding(.bottom, 14)
         .background(.ultraThinMaterial)
+    }
+
+    private func statusBanner(_ message: String) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "info.circle")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppTheme.subtleInk)
+
+            Text(message)
+                .font(.footnote)
+                .foregroundStyle(AppTheme.mutedInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            AppGlassSurface(cornerRadius: 18, style: .clear, shadowOpacity: 0.03)
+        }
+    }
+
+    private func errorBanner(_ message: String) -> some View {
+        Text(message)
+            .font(.footnote)
+            .foregroundStyle(AppTheme.danger)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppTheme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var availabilityMessage: String? {
+        guard settingsStore.lastHealthCheckAt != nil else {
+            return nil
+        }
+
+        if !settingsStore.apiReachable {
+            return "Backend offline. Start ai_notepad or check Developer settings."
+        }
+
+        if !settingsStore.llmReady {
+            return "AI unavailable. Check the LLM status in Developer settings."
+        }
+
+        return nil
+    }
+
+    private var trimmedInput: String {
+        input.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func sendCurrentInput() {
+        let question = trimmedInput
+        guard !question.isEmpty else { return }
+
+        Task {
+            let sent = await globalChatStore.sendMessage(question)
+            if sent {
+                input = ""
+            }
+        }
     }
 }
