@@ -27,6 +27,12 @@ final class SettingsStore {
     var asrReady = false
     var lastHealthCheckAt: Date?
     var workspaceBootstrapState: WorkspaceBootstrapState = .idle
+    var backendStatusMessage = "未检查"
+    var asrStatusMessage = "未检查"
+    var workspaceStatusMessage = "尚未初始化"
+    var syncStatusMessage = ""
+    var isCheckingHealth = false
+    var isSyncing = false
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults

@@ -8,6 +8,9 @@ final class MeetingStore {
     private let settingsStore: SettingsStore
     private let recordingSessionStore: RecordingSessionStore
     private let audioRecorderService: AudioRecorderService
+    private let apiClient: APIClient
+    private let workspaceBootstrapService: WorkspaceBootstrapService
+    private let meetingSyncService: MeetingSyncService
 
     var meetings: [Meeting] = []
     var selectedMeetingID: String?
@@ -18,18 +21,28 @@ final class MeetingStore {
     }
     var isLoading = false
     var lastErrorMessage: String?
+    var enhancingMeetingIDs: Set<String> = []
+    var streamingChatMeetingIDs: Set<String> = []
     private var didLoad = false
+    private var didStartBackendPreparation = false
+    private var scheduledSyncTasks: [String: Task<Void, Never>] = [:]
 
     init(
         repository: MeetingRepository,
         settingsStore: SettingsStore,
         recordingSessionStore: RecordingSessionStore,
-        audioRecorderService: AudioRecorderService
+        audioRecorderService: AudioRecorderService,
+        apiClient: APIClient,
+        workspaceBootstrapService: WorkspaceBootstrapService,
+        meetingSyncService: MeetingSyncService
     ) {
         self.repository = repository
         self.settingsStore = settingsStore
         self.recordingSessionStore = recordingSessionStore
         self.audioRecorderService = audioRecorderService
+        self.apiClient = apiClient
+        self.workspaceBootstrapService = workspaceBootstrapService
+        self.meetingSyncService = meetingSyncService
 
         self.audioRecorderService.onProgress = { [weak self] level, duration in
             self?.handleRecordingProgress(level: level, duration: duration)
@@ -45,6 +58,7 @@ final class MeetingStore {
         guard !didLoad else { return }
         didLoad = true
         loadMeetings()
+        startBackendPreparationIfNeeded()
     }
 
     func loadMeetings() {
@@ -88,12 +102,14 @@ final class MeetingStore {
         meeting.title = title
         meeting.markPending()
         persistChanges()
+        scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1))
     }
 
     func updateNotes(_ notes: String, for meeting: Meeting) {
         meeting.userNotesPlainText = notes
         meeting.markPending()
         persistChanges()
+        scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1.5))
     }
 
     func persistChanges() {
@@ -106,19 +122,8 @@ final class MeetingStore {
     }
 
     func deleteMeeting(id: String) {
-        guard let meeting = meeting(withID: id) else { return }
-
-        do {
-            try repository.delete(meeting)
-            if selectedMeetingID == id {
-                selectedMeetingID = nil
-            }
-            if recordingSessionStore.meetingID == id {
-                recordingSessionStore.reset()
-            }
-            loadMeetings()
-        } catch {
-            lastErrorMessage = error.localizedDescription
+        Task { @MainActor [weak self] in
+            await self?.deleteMeetingRemotelyIfNeeded(id: id)
         }
     }
 
@@ -200,9 +205,167 @@ final class MeetingStore {
             try repository.save()
             recordingSessionStore.reset()
             loadMeetings()
+            Task { @MainActor [weak self] in
+                await self?.finalizeStoppedMeeting(meetingID: meeting.id)
+            }
         } catch {
             recordingSessionStore.errorBanner = error.localizedDescription
         }
+    }
+
+    func checkBackendHealth(force: Bool = true) async {
+        if !force,
+           let lastHealthCheckAt = settingsStore.lastHealthCheckAt,
+           Date().timeIntervalSince(lastHealthCheckAt) < 60 {
+            return
+        }
+
+        if settingsStore.isCheckingHealth {
+            return
+        }
+
+        settingsStore.isCheckingHealth = true
+        defer { settingsStore.isCheckingHealth = false }
+
+        do {
+            let status = try await apiClient.fetchASRStatus()
+            settingsStore.apiReachable = true
+            settingsStore.asrReady = status.ready
+            settingsStore.backendStatusMessage = "后端在线"
+            settingsStore.asrStatusMessage = status.message
+            settingsStore.lastHealthCheckAt = .now
+        } catch {
+            settingsStore.apiReachable = false
+            settingsStore.asrReady = false
+            settingsStore.backendStatusMessage = error.localizedDescription
+            settingsStore.asrStatusMessage = "检查失败"
+            settingsStore.lastHealthCheckAt = .now
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    @discardableResult
+    func bootstrapHiddenWorkspace(force: Bool = false) async -> String? {
+        if !force,
+           let hiddenWorkspaceID = settingsStore.hiddenWorkspaceID,
+           settingsStore.workspaceBootstrapState == .success {
+            return hiddenWorkspaceID
+        }
+
+        do {
+            return try await workspaceBootstrapService.bootstrapHiddenWorkspace()
+        } catch {
+            settingsStore.workspaceBootstrapState = .failed
+            settingsStore.workspaceStatusMessage = error.localizedDescription
+            lastErrorMessage = error.localizedDescription
+            return nil
+        }
+    }
+
+    func syncAllMeetings() async {
+        guard !settingsStore.isSyncing else {
+            return
+        }
+
+        settingsStore.isSyncing = true
+        defer { settingsStore.isSyncing = false }
+
+        guard await ensureBackendReachable(force: true) else {
+            settingsStore.syncStatusMessage = "后端不可达，未执行同步。"
+            return
+        }
+
+        guard await bootstrapHiddenWorkspace(force: false) != nil else {
+            settingsStore.syncStatusMessage = "隐藏工作区初始化失败。"
+            return
+        }
+
+        let batchResult = await meetingSyncService.syncPendingMeetings()
+
+        do {
+            let refreshedCount = try await meetingSyncService.refreshRemoteMeetings()
+            loadMeetings()
+            settingsStore.syncStatusMessage = "已推送 \(batchResult.syncedCount) 条，失败 \(batchResult.failedCount) 条，刷新 \(refreshedCount) 条。"
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            settingsStore.syncStatusMessage = "推送完成，但刷新远端失败。"
+        }
+    }
+
+    func generateEnhancedNotes(for meetingID: String) async {
+        guard let meeting = meeting(withID: meetingID) else { return }
+        guard !enhancingMeetingIDs.contains(meetingID) else { return }
+        guard await ensureBackendReachable(force: false) else { return }
+
+        enhancingMeetingIDs.insert(meetingID)
+        defer { enhancingMeetingIDs.remove(meetingID) }
+
+        do {
+            let response = try await apiClient.enhanceNotes(MeetingPayloadMapper.makeEnhancePayload(from: meeting))
+            meeting.enhancedNotes = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            meeting.markPending()
+            try repository.save()
+            loadMeetings()
+            await syncMeetingIfPossible(meetingID: meetingID)
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func sendChatMessage(question: String, for meetingID: String) async -> Bool {
+        let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedQuestion.isEmpty else { return false }
+        guard let meeting = meeting(withID: meetingID) else { return false }
+        guard !streamingChatMeetingIDs.contains(meetingID) else { return false }
+        guard await ensureBackendReachable(force: false) else { return false }
+
+        let payload = MeetingPayloadMapper.makeChatPayload(from: meeting, question: trimmedQuestion)
+        let userOrder = meeting.orderedChatMessages.count
+        let userMessage = ChatMessage(role: "user", content: trimmedQuestion, orderIndex: userOrder)
+        let assistantMessage = ChatMessage(role: "assistant", content: "", orderIndex: userOrder + 1)
+
+        meeting.chatMessages.append(userMessage)
+        meeting.chatMessages.append(assistantMessage)
+        meeting.markPending()
+
+        do {
+            try repository.save()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            return false
+        }
+
+        streamingChatMeetingIDs.insert(meetingID)
+        defer {
+            streamingChatMeetingIDs.remove(meetingID)
+            loadMeetings()
+        }
+
+        do {
+            let stream = try await apiClient.streamChat(payload)
+            for try await partialContent in stream {
+                assistantMessage.content = partialContent
+            }
+            assistantMessage.timestamp = .now
+            meeting.markPending()
+            try repository.save()
+            await syncMeetingIfPossible(meetingID: meetingID)
+            return true
+        } catch {
+            meeting.chatMessages.removeAll(where: { $0.id == assistantMessage.id })
+            repository.delete(assistantMessage)
+            try? repository.save()
+            lastErrorMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    func isEnhancing(meetingID: String) -> Bool {
+        enhancingMeetingIDs.contains(meetingID)
+    }
+
+    func isStreamingChat(meetingID: String) -> Bool {
+        streamingChatMeetingIDs.contains(meetingID)
     }
 
     private func currentRecordingMeeting() -> Meeting? {
@@ -221,5 +384,112 @@ final class MeetingStore {
         meeting.audioDuration = duration
         meeting.updatedAt = .now
         try? repository.save()
+    }
+
+    private func startBackendPreparationIfNeeded() {
+        guard !didStartBackendPreparation else { return }
+        didStartBackendPreparation = true
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await checkBackendHealth(force: true)
+            guard settingsStore.apiReachable else { return }
+            guard await bootstrapHiddenWorkspace(force: false) != nil else { return }
+
+            let batchResult = await meetingSyncService.syncPendingMeetings()
+            do {
+                let refreshedCount = try await meetingSyncService.refreshRemoteMeetings()
+                loadMeetings()
+                settingsStore.syncStatusMessage = "启动同步完成：推送 \(batchResult.syncedCount) 条，刷新 \(refreshedCount) 条。"
+            } catch {
+                lastErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func ensureBackendReachable(force: Bool) async -> Bool {
+        let shouldCheck = force || settingsStore.lastHealthCheckAt == nil || Date().timeIntervalSince(settingsStore.lastHealthCheckAt ?? .distantPast) > 60
+        if shouldCheck {
+            await checkBackendHealth(force: true)
+        }
+        return settingsStore.apiReachable
+    }
+
+    private func scheduleMeetingSync(meetingID: String, delay: Duration) {
+        scheduledSyncTasks[meetingID]?.cancel()
+        scheduledSyncTasks[meetingID] = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled else { return }
+            await syncMeetingIfPossible(meetingID: meetingID)
+            scheduledSyncTasks[meetingID] = nil
+        }
+    }
+
+    private func syncMeetingIfPossible(meetingID: String) async {
+        guard await ensureBackendReachable(force: false) else { return }
+        guard await bootstrapHiddenWorkspace(force: false) != nil else { return }
+
+        do {
+            try await meetingSyncService.syncMeeting(id: meetingID)
+            loadMeetings()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            loadMeetings()
+        }
+    }
+
+    private func finalizeStoppedMeeting(meetingID: String) async {
+        guard let meeting = meeting(withID: meetingID) else { return }
+
+        if meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !MeetingPayloadMapper.transcriptText(from: meeting).isEmpty,
+           await ensureBackendReachable(force: false) {
+            do {
+                let titleResponse = try await apiClient.generateMeetingTitle(
+                    transcript: MeetingPayloadMapper.transcriptText(from: meeting)
+                )
+                let generatedTitle = titleResponse.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !generatedTitle.isEmpty {
+                    meeting.title = generatedTitle
+                    meeting.markPending()
+                    try repository.save()
+                }
+            } catch {
+                lastErrorMessage = error.localizedDescription
+            }
+        }
+
+        await syncMeetingIfPossible(meetingID: meetingID)
+    }
+
+    private func deleteMeetingRemotelyIfNeeded(id: String) async {
+        guard let meeting = meeting(withID: id) else { return }
+
+        if meeting.lastSyncedAt != nil || meeting.syncState == .synced || meeting.audioRemotePath != nil {
+            guard await ensureBackendReachable(force: true) else {
+                lastErrorMessage = "后端不可达，已同步会议暂未删除。"
+                return
+            }
+
+            do {
+                try await meetingSyncService.deleteRemoteMeeting(id: id)
+            } catch {
+                lastErrorMessage = error.localizedDescription
+                return
+            }
+        }
+
+        do {
+            try repository.delete(meeting)
+            if selectedMeetingID == id {
+                selectedMeetingID = nil
+            }
+            if recordingSessionStore.meetingID == id {
+                recordingSessionStore.reset()
+            }
+            loadMeetings()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
     }
 }

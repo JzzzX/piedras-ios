@@ -19,3 +19,5 @@ Package.resolved
 # macOS
 .DS_Store
 
+# Local verification artifacts
+tmp-*.png

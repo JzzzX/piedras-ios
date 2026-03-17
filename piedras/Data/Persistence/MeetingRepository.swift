@@ -47,9 +47,41 @@ final class MeetingRepository {
         try modelContext.save()
     }
 
+    func insert(_ meeting: Meeting) {
+        modelContext.insert(meeting)
+    }
+
     func delete(_ meeting: Meeting) throws {
         modelContext.delete(meeting)
         try save()
+    }
+
+    func delete(_ chatMessage: ChatMessage) {
+        modelContext.delete(chatMessage)
+    }
+
+    func replaceSegments(for meeting: Meeting, with segments: [TranscriptSegment]) {
+        for existingSegment in meeting.segments {
+            modelContext.delete(existingSegment)
+        }
+
+        for segment in segments {
+            segment.meeting = meeting
+        }
+
+        meeting.segments = segments
+    }
+
+    func replaceChatMessages(for meeting: Meeting, with chatMessages: [ChatMessage]) {
+        for existingMessage in meeting.chatMessages {
+            modelContext.delete(existingMessage)
+        }
+
+        for message in chatMessages {
+            message.meeting = meeting
+        }
+
+        meeting.chatMessages = chatMessages
     }
 
     func seedPreviewDataIfNeeded(workspaceID: String?) {

@@ -10,6 +10,9 @@ final class AppContainer {
     let audioSessionCoordinator: AudioSessionCoordinator
     let audioRecorderService: AudioRecorderService
     let meetingRepository: MeetingRepository
+    let apiClient: APIClient
+    let workspaceBootstrapService: WorkspaceBootstrapService
+    let meetingSyncService: MeetingSyncService
     let meetingStore: MeetingStore
 
     init(inMemory: Bool = false) {
@@ -25,11 +28,24 @@ final class AppContainer {
         audioSessionCoordinator = AudioSessionCoordinator()
         audioRecorderService = AudioRecorderService(sessionCoordinator: audioSessionCoordinator)
         meetingRepository = MeetingRepository(modelContext: modelContainer.mainContext)
+        apiClient = APIClient(settingsStore: settingsStore)
+        workspaceBootstrapService = WorkspaceBootstrapService(
+            apiClient: apiClient,
+            settingsStore: settingsStore
+        )
+        meetingSyncService = MeetingSyncService(
+            repository: meetingRepository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
         meetingStore = MeetingStore(
             repository: meetingRepository,
             settingsStore: settingsStore,
             recordingSessionStore: recordingSessionStore,
-            audioRecorderService: audioRecorderService
+            audioRecorderService: audioRecorderService,
+            apiClient: apiClient,
+            workspaceBootstrapService: workspaceBootstrapService,
+            meetingSyncService: meetingSyncService
         )
 
         if inMemory {
