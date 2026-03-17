@@ -9,11 +9,14 @@ final class RecordingFlowUITests: XCTestCase {
     func testRecordingContinuesAfterBackgrounding() throws {
         let app = launchApp()
 
-        dismissPermissionAlertsIfNeeded(in: app)
+        let homeChatField = app.textFields["HomeGlobalChatField"]
+        XCTAssertTrue(homeChatField.waitForExistence(timeout: 8), "首页未正常加载。")
 
-        let newRecordingButton = element(in: app, identifier: "NewRecordingButton", fallbackLabel: "新录音")
-        XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 10), "首页录音入口未出现。")
+        let newRecordingButton = app.buttons["NewRecordingButton"]
+        XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 8), "首页录音入口未出现。")
         newRecordingButton.tap()
+
+        dismissPermissionAlertsIfNeeded(in: app)
         app.tap()
 
         let stopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
@@ -24,6 +27,7 @@ final class RecordingFlowUITests: XCTestCase {
         sleep(2)
 
         app.activate()
+        XCTAssertTrue(app.wait(for: .runningForeground, timeout: 8), "应用回到前台失败。")
         app.tap()
 
         let reactivatedStopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
