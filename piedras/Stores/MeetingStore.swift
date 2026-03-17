@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftUI
 
 @MainActor
 @Observable
@@ -7,6 +8,7 @@ final class MeetingStore {
     private let repository: MeetingRepository
     private let settingsStore: SettingsStore
     private let recordingSessionStore: RecordingSessionStore
+    private let appActivityCoordinator: AppActivityCoordinator
     private let audioRecorderService: AudioRecorderService
     private let apiClient: APIClient
     private let asrService: ASRService
@@ -32,6 +34,7 @@ final class MeetingStore {
         repository: MeetingRepository,
         settingsStore: SettingsStore,
         recordingSessionStore: RecordingSessionStore,
+        appActivityCoordinator: AppActivityCoordinator,
         audioRecorderService: AudioRecorderService,
         apiClient: APIClient,
         asrService: ASRService,
@@ -41,6 +44,7 @@ final class MeetingStore {
         self.repository = repository
         self.settingsStore = settingsStore
         self.recordingSessionStore = recordingSessionStore
+        self.appActivityCoordinator = appActivityCoordinator
         self.audioRecorderService = audioRecorderService
         self.apiClient = apiClient
         self.asrService = asrService
@@ -56,6 +60,7 @@ final class MeetingStore {
         self.asrService.onStateChange = { [weak self] state in
             self?.recordingSessionStore.asrState = state
             if state == .connected {
+                self?.recordingSessionStore.infoBanner = nil
                 self?.recordingSessionStore.errorBanner = nil
             }
         }
@@ -160,12 +165,15 @@ final class MeetingStore {
 
         do {
             recordingSessionStore.errorBanner = nil
+            recordingSessionStore.infoBanner = nil
             recordingSessionStore.currentPartial = ""
             recordingSessionStore.asrState = .connecting
             recordingSessionStore.meetingID = meetingID
             recordingSessionStore.phase = .starting
+            updateKeepScreenAwake()
             let fileURL = try await audioRecorderService.startRecording(meetingID: meetingID)
             recordingSessionStore.phase = .recording
+            updateKeepScreenAwake()
             meeting.date = .now
             meeting.audioLocalPath = fileURL.path
             meeting.audioMimeType = "audio/m4a"
@@ -183,6 +191,7 @@ final class MeetingStore {
             recordingSessionStore.phase = .idle
             recordingSessionStore.meetingID = nil
             recordingSessionStore.asrState = .idle
+            updateKeepScreenAwake()
             lastErrorMessage = error.localizedDescription
         }
     }
@@ -195,6 +204,8 @@ final class MeetingStore {
             await asrService.stopStreaming()
             recordingSessionStore.phase = .paused
             recordingSessionStore.currentPartial = ""
+            recordingSessionStore.infoBanner = nil
+            updateKeepScreenAwake()
             meeting.status = .paused
             meeting.markPending()
             try repository.save()
@@ -211,6 +222,8 @@ final class MeetingStore {
             try audioRecorderService.resumeRecording()
             recordingSessionStore.phase = .recording
             recordingSessionStore.asrState = .connecting
+            recordingSessionStore.infoBanner = nil
+            updateKeepScreenAwake()
             meeting.status = .recording
             meeting.markPending()
             try repository.save()
@@ -226,6 +239,8 @@ final class MeetingStore {
 
         do {
             recordingSessionStore.phase = .stopping
+            recordingSessionStore.infoBanner = nil
+            updateKeepScreenAwake()
             await asrService.stopStreaming()
             let artifact = try audioRecorderService.stopRecording()
             meeting.status = .ended
@@ -237,10 +252,45 @@ final class MeetingStore {
             meeting.markPending()
             try repository.save()
             recordingSessionStore.reset()
+            updateKeepScreenAwake()
             loadMeetings()
-            await finalizeStoppedMeeting(meetingID: meeting.id)
+            await appActivityCoordinator.performExpiringActivity(named: "finish-meeting-\(meeting.id)") { [weak self] in
+                await self?.finalizeStoppedMeeting(meetingID: meeting.id)
+            }
         } catch {
             recordingSessionStore.errorBanner = error.localizedDescription
+        }
+    }
+
+    func handleScenePhaseChange(_ phase: ScenePhase) {
+        let isBackground = phase == .background
+        recordingSessionStore.isAppInBackground = isBackground
+
+        guard let meetingID = recordingSessionStore.meetingID else {
+            recordingSessionStore.infoBanner = nil
+            return
+        }
+
+        switch phase {
+        case .background:
+            if recordingSessionStore.phase == .recording {
+                recordingSessionStore.currentPartial = ""
+                recordingSessionStore.infoBanner = "应用已切到后台，录音会继续；实时转写会在回到前台后自动恢复。"
+            }
+        case .active:
+            if recordingSessionStore.phase == .recording,
+               [.idle, .degraded, .disconnected].contains(recordingSessionStore.asrState) {
+                recordingSessionStore.infoBanner = "已回到前台，正在恢复实时转写连接。"
+                Task { @MainActor [weak self] in
+                    await self?.startASRIfPossible(for: meetingID)
+                }
+            } else if recordingSessionStore.phase != .recording {
+                recordingSessionStore.infoBanner = nil
+            }
+        case .inactive:
+            break
+        @unknown default:
+            break
         }
     }
 
@@ -294,32 +344,35 @@ final class MeetingStore {
     }
 
     func syncAllMeetings() async {
-        guard !settingsStore.isSyncing else {
-            return
-        }
+        await appActivityCoordinator.performExpiringActivity(named: "sync-all-meetings") { [weak self] in
+            guard let self else { return }
+            guard !settingsStore.isSyncing else {
+                return
+            }
 
-        settingsStore.isSyncing = true
-        defer { settingsStore.isSyncing = false }
+            settingsStore.isSyncing = true
+            defer { settingsStore.isSyncing = false }
 
-        guard await ensureBackendReachable(force: true) else {
-            settingsStore.syncStatusMessage = "后端不可达，未执行同步。"
-            return
-        }
+            guard await ensureBackendReachable(force: true) else {
+                settingsStore.syncStatusMessage = "后端不可达，未执行同步。"
+                return
+            }
 
-        guard await bootstrapHiddenWorkspace(force: false) != nil else {
-            settingsStore.syncStatusMessage = "隐藏工作区初始化失败。"
-            return
-        }
+            guard await bootstrapHiddenWorkspace(force: false) != nil else {
+                settingsStore.syncStatusMessage = "隐藏工作区初始化失败。"
+                return
+            }
 
-        let batchResult = await meetingSyncService.syncPendingMeetings()
+            let batchResult = await meetingSyncService.syncPendingMeetings()
 
-        do {
-            let refreshedCount = try await meetingSyncService.refreshRemoteMeetings()
-            loadMeetings()
-            settingsStore.syncStatusMessage = "已推送 \(batchResult.syncedCount) 条，失败 \(batchResult.failedCount) 条，刷新 \(refreshedCount) 条。"
-        } catch {
-            lastErrorMessage = error.localizedDescription
-            settingsStore.syncStatusMessage = "推送完成，但刷新远端失败。"
+            do {
+                let refreshedCount = try await meetingSyncService.refreshRemoteMeetings()
+                loadMeetings()
+                settingsStore.syncStatusMessage = "已推送 \(batchResult.syncedCount) 条，失败 \(batchResult.failedCount) 条，刷新 \(refreshedCount) 条。"
+            } catch {
+                lastErrorMessage = error.localizedDescription
+                settingsStore.syncStatusMessage = "推送完成，但刷新远端失败。"
+            }
         }
     }
 
@@ -487,15 +540,18 @@ final class MeetingStore {
     }
 
     private func syncMeetingIfPossible(meetingID: String) async {
-        guard await ensureBackendReachable(force: false) else { return }
-        guard await bootstrapHiddenWorkspace(force: false) != nil else { return }
+        await appActivityCoordinator.performExpiringActivity(named: "sync-meeting-\(meetingID)") { [weak self] in
+            guard let self else { return }
+            guard await ensureBackendReachable(force: false) else { return }
+            guard await bootstrapHiddenWorkspace(force: false) != nil else { return }
 
-        do {
-            try await meetingSyncService.syncMeeting(id: meetingID)
-            loadMeetings()
-        } catch {
-            lastErrorMessage = error.localizedDescription
-            loadMeetings()
+            do {
+                try await meetingSyncService.syncMeeting(id: meetingID)
+                loadMeetings()
+            } catch {
+                lastErrorMessage = error.localizedDescription
+                loadMeetings()
+            }
         }
     }
 
@@ -548,33 +604,49 @@ final class MeetingStore {
     }
 
     private func deleteMeetingRemotelyIfNeeded(id: String) async {
-        guard let meeting = meeting(withID: id) else { return }
+        await appActivityCoordinator.performExpiringActivity(named: "delete-meeting-\(id)") { [weak self] in
+            guard let self, let meeting = meeting(withID: id) else { return }
 
-        if meeting.lastSyncedAt != nil || meeting.syncState == .synced || meeting.audioRemotePath != nil {
-            guard await ensureBackendReachable(force: true) else {
-                lastErrorMessage = "后端不可达，已同步会议暂未删除。"
-                return
+            if meeting.lastSyncedAt != nil || meeting.syncState == .synced || meeting.audioRemotePath != nil {
+                guard await ensureBackendReachable(force: true) else {
+                    lastErrorMessage = "后端不可达，已同步会议暂未删除。"
+                    return
+                }
+
+                do {
+                    try await meetingSyncService.deleteRemoteMeeting(id: id)
+                } catch {
+                    lastErrorMessage = error.localizedDescription
+                    return
+                }
             }
 
             do {
-                try await meetingSyncService.deleteRemoteMeeting(id: id)
+                try repository.delete(meeting)
+                if selectedMeetingID == id {
+                    selectedMeetingID = nil
+                }
+                if recordingSessionStore.meetingID == id {
+                    recordingSessionStore.reset()
+                    updateKeepScreenAwake()
+                }
+                loadMeetings()
             } catch {
                 lastErrorMessage = error.localizedDescription
-                return
             }
+        }
+    }
+
+    private func updateKeepScreenAwake() {
+        let shouldKeepScreenAwake: Bool
+
+        switch recordingSessionStore.phase {
+        case .starting, .recording:
+            shouldKeepScreenAwake = true
+        case .idle, .paused, .stopping:
+            shouldKeepScreenAwake = false
         }
 
-        do {
-            try repository.delete(meeting)
-            if selectedMeetingID == id {
-                selectedMeetingID = nil
-            }
-            if recordingSessionStore.meetingID == id {
-                recordingSessionStore.reset()
-            }
-            loadMeetings()
-        } catch {
-            lastErrorMessage = error.localizedDescription
-        }
+        appActivityCoordinator.setKeepScreenAwake(shouldKeepScreenAwake)
     }
 }

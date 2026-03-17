@@ -93,6 +93,55 @@ extension TranscriptSegment {
     }
 }
 
+extension RecordingPhase {
+    var displayLabel: String {
+        switch self {
+        case .idle:
+            return "空闲"
+        case .starting:
+            return "启动中"
+        case .recording:
+            return "录音中"
+        case .paused:
+            return "已暂停"
+        case .stopping:
+            return "收尾中"
+        }
+    }
+}
+
+extension ASRConnectionState {
+    var displayLabel: String {
+        switch self {
+        case .idle:
+            return "未启动"
+        case .connecting:
+            return "连接中"
+        case .connected:
+            return "已连接"
+        case .degraded:
+            return "已降级"
+        case .disconnected:
+            return "已断开"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .idle:
+            return .secondary
+        case .connecting:
+            return .orange
+        case .connected:
+            return .green
+        case .degraded:
+            return .orange
+        case .disconnected:
+            return .red
+        }
+    }
+}
+
 extension TimeInterval {
     var mmss: String {
         let totalSeconds = max(Int(self.rounded()), 0)

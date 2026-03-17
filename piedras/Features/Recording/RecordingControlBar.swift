@@ -9,6 +9,14 @@ struct RecordingControlBar: View {
     var body: some View {
         VStack(spacing: 14) {
             if isActiveMeeting {
+                HStack(spacing: 8) {
+                    Label(recordingSessionStore.phase.displayLabel, systemImage: "record.circle")
+                    Label(recordingSessionStore.asrState.displayLabel, systemImage: "waveform.badge.mic")
+                        .foregroundStyle(recordingSessionStore.asrState.tint)
+                }
+                .font(.caption)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
                 WaveformView(samples: recordingSessionStore.waveformSamples)
                     .frame(height: 44)
 
@@ -69,6 +77,12 @@ struct RecordingControlBar: View {
                 Text(error)
                     .font(.caption)
                     .foregroundStyle(.red)
+            }
+
+            if let info = recordingSessionStore.infoBanner, isActiveMeeting {
+                Text(info)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding()

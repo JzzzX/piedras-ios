@@ -27,6 +27,8 @@ final class RecordingSessionStore {
     var waveformSamples: [Double] = Array(repeating: 0, count: 24)
     var currentPartial = ""
     var asrState: ASRConnectionState = .idle
+    var isAppInBackground = false
+    var infoBanner: String?
     var errorBanner: String?
 
     func reset() {
@@ -37,6 +39,8 @@ final class RecordingSessionStore {
         waveformSamples = Array(repeating: 0, count: 24)
         currentPartial = ""
         asrState = .idle
+        isAppInBackground = false
+        infoBanner = nil
         errorBanner = nil
     }
 

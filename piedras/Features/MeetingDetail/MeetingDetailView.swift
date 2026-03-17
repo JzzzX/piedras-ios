@@ -44,9 +44,12 @@ struct MeetingDetailView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("当前录音会话")
                                     .font(.subheadline.weight(.semibold))
-                                Text("阶段：\(recordingSessionStore.phase.rawValue) · ASR：\(recordingSessionStore.asrState.rawValue)")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 8) {
+                                    Label(recordingSessionStore.phase.displayLabel, systemImage: "record.circle")
+                                    Label(recordingSessionStore.asrState.displayLabel, systemImage: "waveform.badge.mic")
+                                        .foregroundStyle(recordingSessionStore.asrState.tint)
+                                }
+                                .font(.caption)
                             }
                         }
                     }

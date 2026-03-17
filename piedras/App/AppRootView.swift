@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct AppRootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(AppRouter.self) private var router
     @Environment(MeetingStore.self) private var meetingStore
 
@@ -19,7 +20,11 @@ struct AppRootView: View {
                 }
                 .task {
                     meetingStore.loadIfNeeded()
+                    meetingStore.handleScenePhaseChange(scenePhase)
                 }
+        }
+        .onChange(of: scenePhase, initial: true) { _, newPhase in
+            meetingStore.handleScenePhaseChange(newPhase)
         }
     }
 }

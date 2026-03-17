@@ -20,4 +20,8 @@ Package.resolved
 .DS_Store
 
 # Local verification artifacts
+tmp-*/
 tmp-*.png
+tmp-*.wav
+tmp-*.aiff
+tmp-*.mov
