@@ -161,6 +161,24 @@ final class APIClient {
         return StreamTextReader.stream(from: bytes)
     }
 
+    func streamGlobalChat(_ payload: GlobalChatRequestPayload) async throws -> AsyncThrowingStream<String, Error> {
+        var request = try makeRequest(path: "/api/chat/global", method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(payload)
+
+        let (bytes, response) = try await session.bytes(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIClientError.invalidResponse
+        }
+
+        guard (200 ..< 300).contains(httpResponse.statusCode) else {
+            let detail = try await StreamTextReader.collect(from: bytes)
+            throw APIClientError.requestFailed(detail.isEmpty ? "全局 AI 请求失败。" : detail)
+        }
+
+        return StreamTextReader.stream(from: bytes)
+    }
+
     func resolveAbsoluteURLString(_ path: String?) -> String? {
         guard let path, !path.isEmpty else {
             return nil

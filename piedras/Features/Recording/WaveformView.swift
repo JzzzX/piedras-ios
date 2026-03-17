@@ -13,7 +13,7 @@ struct WaveformView: View {
             HStack(alignment: .center, spacing: barWidth) {
                 ForEach(Array(samples.enumerated()), id: \.offset) { _, sample in
                     Capsule()
-                        .fill(sample > 0.08 ? Color.red : Color.secondary.opacity(0.4))
+                        .fill(sample > 0.08 ? AppTheme.highlight : AppTheme.border.opacity(0.8))
                         .frame(width: barWidth, height: max(6, height * sample))
                 }
             }

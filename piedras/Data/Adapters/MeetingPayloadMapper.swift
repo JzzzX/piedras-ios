@@ -149,6 +149,16 @@ struct ChatRequestPayload: Encodable {
     let question: String
 }
 
+struct GlobalChatFiltersPayload: Encodable {
+    let workspaceId: String?
+}
+
+struct GlobalChatRequestPayload: Encodable {
+    let question: String
+    let chatHistory: [ChatHistoryPayload]
+    let filters: GlobalChatFiltersPayload?
+}
+
 enum MeetingPayloadMapper {
     private static let iso8601FormatterWithFractionalSeconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

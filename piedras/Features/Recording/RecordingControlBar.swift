@@ -9,84 +9,153 @@ struct RecordingControlBar: View {
     var body: some View {
         VStack(spacing: 14) {
             if isActiveMeeting {
-                HStack(spacing: 8) {
-                    Label(recordingSessionStore.phase.displayLabel, systemImage: "record.circle")
-                    Label(recordingSessionStore.asrState.displayLabel, systemImage: "waveform.badge.mic")
-                        .foregroundStyle(recordingSessionStore.asrState.tint)
-                }
-                .font(.caption)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                WaveformView(samples: recordingSessionStore.waveformSamples)
-                    .frame(height: 44)
-
-                HStack(spacing: 12) {
-                    Button(role: .destructive) {
-                        Task {
-                            await meetingStore.stopRecording()
-                        }
-                    } label: {
-                        Label("停止", systemImage: "stop.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-
-                    Button {
-                        Task {
-                            switch recordingSessionStore.phase {
-                            case .paused:
-                                await meetingStore.resumeRecording()
-                            default:
-                                await meetingStore.pauseRecording()
-                            }
-                        }
-                    } label: {
-                        Label(
-                            recordingSessionStore.phase == .paused ? "继续" : "暂停",
-                            systemImage: recordingSessionStore.phase == .paused ? "play.fill" : "pause.fill"
-                        )
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                Text("录音时长 \(recordingSessionStore.durationSeconds.mmss)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                activeControls
             } else if isOtherMeetingRecording {
-                Label("另一场会议正在录音中，请先结束当前录音。", systemImage: "waveform.and.mic")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                passiveConflictState
             } else {
-                Button {
-                    Task {
-                        await meetingStore.startRecording(meetingID: meeting.id)
-                    }
-                } label: {
-                    Label(meeting.audioLocalPath == nil ? "开始录音" : "继续录音", systemImage: "record.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-
-            if !isActiveMeeting, let audioLocalPath = meeting.audioLocalPath {
-                AudioPlaybackBar(filePath: audioLocalPath)
-            }
-
-            if let error = recordingSessionStore.errorBanner, isActiveMeeting {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-            }
-
-            if let info = recordingSessionStore.infoBanner, isActiveMeeting {
-                Text(info)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                idleControls
             }
         }
-        .padding()
-        .background(.ultraThinMaterial)
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(AppTheme.surface, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(AppTheme.border.opacity(0.65), lineWidth: 1)
+        }
+    }
+
+    private var activeControls: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 12) {
+                statusPill(
+                    title: recordingSessionStore.phase.displayLabel,
+                    systemImage: "record.circle.fill",
+                    tint: AppTheme.highlightSoft,
+                    foreground: AppTheme.highlight
+                )
+                statusPill(
+                    title: recordingSessionStore.asrState.displayLabel,
+                    systemImage: "waveform",
+                    tint: AppTheme.accentSoft,
+                    foreground: AppTheme.accent
+                )
+                Spacer()
+                Text(recordingSessionStore.durationSeconds.mmss)
+                    .font(.headline.monospacedDigit())
+                    .foregroundStyle(AppTheme.ink)
+                    .accessibilityIdentifier("RecordDurationLabel")
+            }
+
+            WaveformView(samples: recordingSessionStore.waveformSamples)
+                .frame(height: 42)
+                .foregroundStyle(AppTheme.accent)
+
+            HStack(spacing: 12) {
+                Button {
+                    Task {
+                        switch recordingSessionStore.phase {
+                        case .paused:
+                            await meetingStore.resumeRecording()
+                        default:
+                            await meetingStore.pauseRecording()
+                        }
+                    }
+                } label: {
+                    Label(
+                        recordingSessionStore.phase == .paused ? "Resume" : "Pause",
+                        systemImage: recordingSessionStore.phase == .paused ? "play.fill" : "pause.fill"
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(AppTheme.ink)
+                .background(AppTheme.backgroundSecondary, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .accessibilityIdentifier("PauseRecordingButton")
+
+                Button {
+                    Task {
+                        await meetingStore.stopRecording()
+                    }
+                } label: {
+                    Label("Stop", systemImage: "stop.fill")
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 50)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.white)
+                .background(AppTheme.ink, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .accessibilityIdentifier("StopRecordingButton")
+            }
+
+            if let info = currentBannerMessage {
+                Text(info)
+                    .font(.footnote)
+                    .foregroundStyle(AppTheme.subtleInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var passiveConflictState: some View {
+        Label("另一条会议正在录音，先结束当前会话再切换。", systemImage: "mic.badge.xmark")
+            .font(.footnote)
+            .foregroundStyle(AppTheme.subtleInk)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+    }
+
+    private var idleControls: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(meeting.audioLocalPath == nil ? "Ready to record" : "Resume capture")
+                    .font(.headline)
+                    .foregroundStyle(AppTheme.ink)
+
+                Text("Open the mic, stream live transcript, and let the note build itself.")
+                    .font(.footnote)
+                    .foregroundStyle(AppTheme.subtleInk)
+            }
+
+            Spacer()
+
+            Button {
+                Task {
+                    await meetingStore.startRecording(meetingID: meeting.id)
+                }
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.headline)
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(AppTheme.ink, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(meeting.audioLocalPath == nil ? "开始录音" : "继续录音")
+            .accessibilityIdentifier("StartRecordingButton")
+        }
+    }
+
+    private func statusPill(title: String, systemImage: String, tint: Color, foreground: Color) -> some View {
+        Label(title, systemImage: systemImage)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(tint, in: Capsule())
+    }
+
+    private var currentBannerMessage: String? {
+        if let error = recordingSessionStore.errorBanner, !error.isEmpty {
+            return error
+        }
+
+        if let info = recordingSessionStore.infoBanner, !info.isEmpty {
+            return info
+        }
+
+        return nil
     }
 
     private var isActiveMeeting: Bool {

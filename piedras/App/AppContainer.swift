@@ -16,6 +16,7 @@ final class AppContainer {
     let workspaceBootstrapService: WorkspaceBootstrapService
     let meetingSyncService: MeetingSyncService
     let meetingStore: MeetingStore
+    let globalChatStore: GlobalChatStore
 
     init(inMemory: Bool = false) {
         do {
@@ -52,6 +53,11 @@ final class AppContainer {
             asrService: asrService,
             workspaceBootstrapService: workspaceBootstrapService,
             meetingSyncService: meetingSyncService
+        )
+        globalChatStore = GlobalChatStore(
+            apiClient: apiClient,
+            settingsStore: settingsStore,
+            workspaceBootstrapService: workspaceBootstrapService
         )
 
         if inMemory {

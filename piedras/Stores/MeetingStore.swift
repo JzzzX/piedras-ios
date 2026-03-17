@@ -80,6 +80,11 @@ final class MeetingStore {
         return try? repository.meeting(withID: selectedMeetingID)
     }
 
+    var activeRecordingMeeting: Meeting? {
+        guard let meetingID = recordingSessionStore.meetingID else { return nil }
+        return meeting(withID: meetingID)
+    }
+
     func loadIfNeeded() {
         guard !didLoad else { return }
         didLoad = true
@@ -122,6 +127,14 @@ final class MeetingStore {
 
     func meeting(withID id: String) -> Meeting? {
         try? repository.meeting(withID: id)
+    }
+
+    func searchMeetings(matching query: String) -> [Meeting] {
+        (try? repository.fetchMeetings(matching: query)) ?? []
+    }
+
+    func clearLastError() {
+        lastErrorMessage = nil
     }
 
     func updateTitle(_ title: String, for meeting: Meeting) {
@@ -557,17 +570,34 @@ final class MeetingStore {
 
     private func finalizeStoppedMeeting(meetingID: String) async {
         guard let meeting = meeting(withID: meetingID) else { return }
+        let transcript = MeetingPayloadMapper.transcriptText(from: meeting)
 
         if meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           !MeetingPayloadMapper.transcriptText(from: meeting).isEmpty,
+           !transcript.isEmpty,
            await ensureBackendReachable(force: false) {
             do {
                 let titleResponse = try await apiClient.generateMeetingTitle(
-                    transcript: MeetingPayloadMapper.transcriptText(from: meeting)
+                    transcript: transcript
                 )
                 let generatedTitle = titleResponse.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !generatedTitle.isEmpty {
                     meeting.title = generatedTitle
+                    meeting.markPending()
+                    try repository.save()
+                }
+            } catch {
+                lastErrorMessage = error.localizedDescription
+            }
+        }
+
+        if meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           !transcript.isEmpty,
+           await ensureBackendReachable(force: false) {
+            do {
+                let response = try await apiClient.enhanceNotes(MeetingPayloadMapper.makeEnhancePayload(from: meeting))
+                let content = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !content.isEmpty {
+                    meeting.enhancedNotes = content
                     meeting.markPending()
                     try repository.save()
                 }
@@ -622,6 +652,7 @@ final class MeetingStore {
             }
 
             do {
+                removeLocalAudioIfNeeded(for: meeting)
                 try repository.delete(meeting)
                 if selectedMeetingID == id {
                     selectedMeetingID = nil
@@ -648,5 +679,18 @@ final class MeetingStore {
         }
 
         appActivityCoordinator.setKeepScreenAwake(shouldKeepScreenAwake)
+    }
+
+    private func removeLocalAudioIfNeeded(for meeting: Meeting) {
+        guard let audioLocalPath = meeting.audioLocalPath else {
+            return
+        }
+
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: audioLocalPath) else {
+            return
+        }
+
+        try? fileManager.removeItem(atPath: audioLocalPath)
     }
 }

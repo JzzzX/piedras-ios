@@ -61,14 +61,11 @@ final class MeetingSyncService {
             )
             MeetingPayloadMapper.apply(remote: remoteMeeting, to: meeting, repository: repository, baseURL: apiClient.baseURL)
 
-            if shouldUploadAudio(for: meeting) {
-                try await uploadAudio(for: meeting)
-            }
-
             meeting.syncState = .synced
             meeting.lastSyncedAt = .now
             meeting.updatedAt = .now
             try repository.save()
+            try pruneLocalAudioIfNeeded(for: meeting)
         } catch {
             meeting.syncState = .failed
             try? repository.save()
@@ -111,37 +108,24 @@ final class MeetingSyncService {
         try await apiClient.deleteMeeting(id: id)
     }
 
-    private func shouldUploadAudio(for meeting: Meeting) -> Bool {
-        guard let audioLocalPath = meeting.audioLocalPath else {
-            return false
+    private func pruneLocalAudioIfNeeded(for meeting: Meeting) throws {
+        guard meeting.status == .ended else {
+            return
         }
 
-        guard FileManager.default.fileExists(atPath: audioLocalPath) else {
-            return false
-        }
-
-        guard let audioUpdatedAt = meeting.audioUpdatedAt else {
-            return meeting.audioRemotePath == nil
-        }
-
-        return meeting.audioRemotePath == nil || audioUpdatedAt > (meeting.lastSyncedAt ?? .distantPast)
-    }
-
-    private func uploadAudio(for meeting: Meeting) async throws {
         guard let audioLocalPath = meeting.audioLocalPath else {
             return
         }
 
-        let response = try await apiClient.uploadAudio(
-            meetingID: meeting.id,
-            fileURL: URL(fileURLWithPath: audioLocalPath),
-            duration: meeting.audioDuration,
-            mimeType: meeting.audioMimeType ?? "audio/m4a"
-        )
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: audioLocalPath) else {
+            meeting.audioLocalPath = nil
+            try repository.save()
+            return
+        }
 
-        meeting.audioRemotePath = apiClient.resolveAbsoluteURLString(response.audioUrl)
-        meeting.audioMimeType = response.audioMimeType ?? meeting.audioMimeType
-        meeting.audioDuration = response.audioDuration ?? meeting.audioDuration
-        meeting.audioUpdatedAt = response.audioUpdatedAt ?? meeting.audioUpdatedAt
+        try fileManager.removeItem(atPath: audioLocalPath)
+        meeting.audioLocalPath = nil
+        try repository.save()
     }
 }

@@ -14,14 +14,30 @@ struct AppRootView: View {
                     switch route {
                     case let .meeting(id):
                         MeetingDetailView(meetingID: id)
-                    case .settings:
-                        SettingsView()
                     }
                 }
                 .task {
                     meetingStore.loadIfNeeded()
                     meetingStore.handleScenePhaseChange(scenePhase)
                 }
+        }
+        .sheet(item: $router.sheet) { sheet in
+            switch sheet {
+            case .globalChat:
+                GlobalChatView()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            case .search:
+                MeetingSearchView()
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+            case .settings:
+                NavigationStack {
+                    SettingsView()
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+            }
         }
         .onChange(of: scenePhase, initial: true) { _, newPhase in
             meetingStore.handleScenePhaseChange(newPhase)

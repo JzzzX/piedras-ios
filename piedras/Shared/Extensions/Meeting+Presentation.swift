@@ -15,6 +15,11 @@ extension Meeting {
     }
 
     var previewText: String {
+        let enhanced = enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !enhanced.isEmpty {
+            return enhanced
+        }
+
         let notes = userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !notes.isEmpty {
             return notes
@@ -26,6 +31,30 @@ extension Meeting {
         }
 
         return ""
+    }
+
+    var daySectionTitle: String {
+        if Calendar.current.isDateInToday(date) {
+            return "Today"
+        }
+
+        if Calendar.current.isDateInYesterday(date) {
+            return "Yesterday"
+        }
+
+        return date.formatted(.dateTime.month(.wide).day())
+    }
+
+    var detailTimestampLabel: String {
+        date.formatted(.dateTime.weekday(.wide).month().day().hour().minute())
+    }
+
+    var compactTimestampLabel: String {
+        date.formatted(.dateTime.hour().minute())
+    }
+
+    var transcriptSummaryLabel: String {
+        "\(orderedSegments.count) 段转写"
     }
 
     var syncStateLabel: String {

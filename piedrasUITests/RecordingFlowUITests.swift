@@ -12,16 +12,11 @@ final class RecordingFlowUITests: XCTestCase {
 
         dismissPermissionAlertsIfNeeded(in: app)
 
-        let backButton = app.buttons["BackButton"]
-        if backButton.waitForExistence(timeout: 2) {
-            backButton.tap()
-        }
-
-        let newRecordingButton = app.buttons["新录音"]
+        let newRecordingButton = app.buttons["NewRecordingButton"]
         XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 10))
         newRecordingButton.tap()
 
-        let stopButton = app.buttons["停止"]
+        let stopButton = app.buttons["StopRecordingButton"]
         XCTAssertTrue(stopButton.waitForExistence(timeout: 12))
 
         sleep(2)
@@ -29,15 +24,13 @@ final class RecordingFlowUITests: XCTestCase {
         sleep(2)
 
         app.activate()
-        XCTAssertTrue(app.buttons["停止"].waitForExistence(timeout: 12))
+        let reactivatedStopButton = app.buttons["StopRecordingButton"]
+        XCTAssertTrue(reactivatedStopButton.waitForExistence(timeout: 12))
 
-        let durationLabel = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "录音时长 ")).firstMatch
+        let durationLabel = app.staticTexts["RecordDurationLabel"]
         XCTAssertTrue(durationLabel.waitForExistence(timeout: 5))
 
-        stopButton.tap()
-
-        let restartButton = app.buttons["继续录音"]
-        XCTAssertTrue(restartButton.waitForExistence(timeout: 12))
+        reactivatedStopButton.tap()
     }
 
     private func dismissPermissionAlertsIfNeeded(in app: XCUIApplication) {
