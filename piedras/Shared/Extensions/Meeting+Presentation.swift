@@ -190,6 +190,17 @@ extension ASRConnectionState {
     }
 }
 
+extension RecordingInputMode {
+    var meetingMode: MeetingRecordingMode {
+        switch self {
+        case .microphone:
+            return .microphone
+        case .fileMix:
+            return .fileMix
+        }
+    }
+}
+
 extension TimeInterval {
     var mmss: String {
         let totalSeconds = max(Int(self.rounded()), 0)

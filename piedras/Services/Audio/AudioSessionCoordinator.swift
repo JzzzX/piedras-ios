@@ -27,10 +27,10 @@ final class AudioSessionCoordinator {
         }
     }
 
-    func configureForRecording() throws {
+    func configureForRecording(allowsFilePlayback: Bool = false) throws {
         try session.setCategory(
             .playAndRecord,
-            mode: .spokenAudio,
+            mode: allowsFilePlayback ? .default : .spokenAudio,
             options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP]
         )
         try session.setActive(true, options: .notifyOthersOnDeactivation)

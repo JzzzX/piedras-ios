@@ -13,21 +13,21 @@ struct AppGlassBackdrop: View {
 
             Circle()
                 .fill(AppTheme.ambientBlue.opacity(0.42))
-                .frame(width: 320, height: 320)
-                .blur(radius: 36)
-                .offset(x: 110, y: -260)
+                .frame(width: 360, height: 360)
+                .blur(radius: 42)
+                .offset(x: 130, y: -250)
 
             Circle()
                 .fill(AppTheme.ambientMint.opacity(0.28))
-                .frame(width: 260, height: 260)
-                .blur(radius: 28)
-                .offset(x: -120, y: -180)
+                .frame(width: 280, height: 280)
+                .blur(radius: 30)
+                .offset(x: -130, y: -170)
 
             Circle()
                 .fill(AppTheme.ambientSand.opacity(0.30))
-                .frame(width: 280, height: 280)
-                .blur(radius: 36)
-                .offset(x: -80, y: 300)
+                .frame(width: 320, height: 320)
+                .blur(radius: 38)
+                .offset(x: -70, y: 310)
         }
         .ignoresSafeArea()
     }
@@ -48,13 +48,13 @@ struct AppGlassSurface: View {
                     .fill(style == .clear ? .thinMaterial : .ultraThinMaterial)
                     .overlay {
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(Color.white.opacity(style == .clear ? 0.10 : 0.16))
+                            .fill(AppTheme.surfaceElevated.opacity(style == .clear ? 0.10 : 0.22))
                     }
             }
         }
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(Color.white.opacity(borderOpacity), lineWidth: 1)
+                .stroke(Color.white.opacity(borderOpacity), lineWidth: 0.9)
         }
         .shadow(color: Color.black.opacity(shadowOpacity), radius: 28, x: 0, y: 16)
     }

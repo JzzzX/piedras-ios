@@ -20,12 +20,20 @@ enum MeetingSyncState: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum MeetingRecordingMode: String, Codable, CaseIterable, Identifiable {
+    case microphone
+    case fileMix
+
+    var id: String { rawValue }
+}
+
 @Model
 final class Meeting {
     @Attribute(.unique) var id: String
     var title: String
     var date: Date
     var statusRaw: String
+    var recordingModeRaw: String
     var durationSeconds: Int
     var userNotesPlainText: String
     var enhancedNotes: String
@@ -34,6 +42,9 @@ final class Meeting {
     var audioMimeType: String?
     var audioDuration: Int
     var audioUpdatedAt: Date?
+    var sourceAudioLocalPath: String?
+    var sourceAudioDisplayName: String?
+    var sourceAudioDuration: Int
     var hiddenWorkspaceId: String?
     var syncStateRaw: String
     var lastSyncedAt: Date?
@@ -51,6 +62,7 @@ final class Meeting {
         title: String = "",
         date: Date = .now,
         status: MeetingStatus = .idle,
+        recordingMode: MeetingRecordingMode = .microphone,
         durationSeconds: Int = 0,
         userNotesPlainText: String = "",
         enhancedNotes: String = "",
@@ -59,6 +71,9 @@ final class Meeting {
         audioMimeType: String? = nil,
         audioDuration: Int = 0,
         audioUpdatedAt: Date? = nil,
+        sourceAudioLocalPath: String? = nil,
+        sourceAudioDisplayName: String? = nil,
+        sourceAudioDuration: Int = 0,
         hiddenWorkspaceId: String? = nil,
         syncState: MeetingSyncState = .pending,
         lastSyncedAt: Date? = nil,
@@ -71,6 +86,7 @@ final class Meeting {
         self.title = title
         self.date = date
         self.statusRaw = status.rawValue
+        self.recordingModeRaw = recordingMode.rawValue
         self.durationSeconds = durationSeconds
         self.userNotesPlainText = userNotesPlainText
         self.enhancedNotes = enhancedNotes
@@ -79,6 +95,9 @@ final class Meeting {
         self.audioMimeType = audioMimeType
         self.audioDuration = audioDuration
         self.audioUpdatedAt = audioUpdatedAt
+        self.sourceAudioLocalPath = sourceAudioLocalPath
+        self.sourceAudioDisplayName = sourceAudioDisplayName
+        self.sourceAudioDuration = sourceAudioDuration
         self.hiddenWorkspaceId = hiddenWorkspaceId
         self.syncStateRaw = syncState.rawValue
         self.lastSyncedAt = lastSyncedAt
@@ -91,6 +110,11 @@ final class Meeting {
     var status: MeetingStatus {
         get { MeetingStatus(rawValue: statusRaw) ?? .idle }
         set { statusRaw = newValue.rawValue }
+    }
+
+    var recordingMode: MeetingRecordingMode {
+        get { MeetingRecordingMode(rawValue: recordingModeRaw) ?? .microphone }
+        set { recordingModeRaw = newValue.rawValue }
     }
 
     var syncState: MeetingSyncState {
@@ -126,7 +150,7 @@ final class Meeting {
     }
 
     var searchIndexText: String {
-        [title, userNotesPlainText, enhancedNotes, transcriptText]
+        [title, userNotesPlainText, enhancedNotes, transcriptText, sourceAudioDisplayName ?? ""]
             .joined(separator: "\n")
             .lowercased()
     }

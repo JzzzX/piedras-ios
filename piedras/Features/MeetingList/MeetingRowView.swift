@@ -6,24 +6,15 @@ struct MeetingRowView: View {
     let onOpen: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 16) {
+        HStack(alignment: .center, spacing: 12) {
             leadingIcon
 
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(meeting.displayTitle)
-                            .font(.system(size: 22, weight: .regular, design: .serif))
-                            .foregroundStyle(AppTheme.ink)
-                            .lineLimit(2)
-
-                        if !previewText.isEmpty {
-                            Text(previewText)
-                                .font(.subheadline)
-                                .foregroundStyle(AppTheme.mutedInk)
-                                .lineLimit(2)
-                        }
-                    }
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(meeting.displayTitle)
+                        .font(.system(size: 18, weight: .regular, design: .serif))
+                        .foregroundStyle(AppTheme.ink)
+                        .lineLimit(2)
 
                     Spacer(minLength: 0)
 
@@ -42,75 +33,72 @@ struct MeetingRowView: View {
                 }
             }
         }
-        .padding(18)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             AppGlassSurface(
-                cornerRadius: 30,
+                cornerRadius: 24,
                 style: isRecording ? .regular : .clear,
-                borderOpacity: isRecording ? 0.34 : 0.24,
-                shadowOpacity: 0.10
+                borderOpacity: isRecording ? 0.30 : 0.22,
+                shadowOpacity: 0.08
             )
         }
-        .contentShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .accessibilityIdentifier("MeetingRow")
         .onTapGesture(perform: onOpen)
     }
 
     private var leadingIcon: some View {
         ZStack(alignment: .topTrailing) {
-            AppGlassSurface(cornerRadius: 22, style: .regular, shadowOpacity: 0.05)
-                .frame(width: 56, height: 56)
+            AppGlassSurface(cornerRadius: 18, style: .regular, shadowOpacity: 0.04)
+                .frame(width: 44, height: 44)
                 .overlay {
                     Image(systemName: "doc.text")
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(AppTheme.ink)
                 }
 
             if isRecording {
                 Circle()
                     .fill(AppTheme.highlight)
-                    .frame(width: 12, height: 12)
+                    .frame(width: 10, height: 10)
                     .overlay {
                         Circle()
                             .stroke(Color.white.opacity(0.85), lineWidth: 2)
                     }
-                    .offset(x: 4, y: -4)
+                    .offset(x: 3, y: -3)
             }
         }
     }
 
     private func metadataPill(systemName: String, label: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             Image(systemName: systemName)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
 
             if !label.isEmpty {
                 Text(label)
-                    .font(.caption.weight(.semibold))
+                    .font(.caption2.weight(.semibold))
             }
         }
         .foregroundStyle(AppTheme.mutedInk)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 5)
         .background {
-            AppGlassSurface(cornerRadius: 15, style: .clear, shadowOpacity: 0.03)
+            AppGlassSurface(cornerRadius: 12, style: .clear, shadowOpacity: 0.02)
         }
     }
 
     private var syncBadge: some View {
         Image(systemName: meeting.syncStateIconName)
-            .font(.system(size: 13, weight: .semibold))
+            .font(.system(size: 11, weight: .semibold))
             .foregroundStyle(syncForeground)
-            .frame(width: 32, height: 32)
+            .frame(width: 24, height: 24)
             .background {
-                AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.03)
+                AppGlassSurface(cornerRadius: 12, style: .clear, shadowOpacity: 0.02)
             }
             .accessibilityLabel(meeting.syncStateLabel)
-    }
-
-    private var previewText: String {
-        meeting.previewText.replacingOccurrences(of: "\n", with: " ")
     }
 
     private var syncForeground: Color {

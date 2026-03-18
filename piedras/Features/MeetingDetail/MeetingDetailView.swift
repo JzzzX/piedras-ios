@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 private enum MeetingDetailMode: String, CaseIterable, Identifiable {
     case transcript = "Transcript"
@@ -25,6 +26,8 @@ struct MeetingDetailView: View {
 
     @State private var selectedMode: MeetingDetailMode = .transcript
     @State private var noteSaveTask: Task<Void, Never>?
+    @State private var showsRecordingModeDialog = false
+    @State private var isImportingSourceAudio = false
 
     var body: some View {
         Group {
@@ -45,11 +48,38 @@ struct MeetingDetailView: View {
                 }
                 .toolbar(.hidden, for: .navigationBar)
                 .safeAreaInset(edge: .bottom) {
-                    RecordingControlBar(meeting: meeting)
+                    RecordingControlBar(
+                        meeting: meeting,
+                        onRequestStartRecording: {
+                            showsRecordingModeDialog = true
+                        }
+                    )
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                         .padding(.bottom, 12)
                         .background(Color.clear)
+                }
+                .confirmationDialog("选择录音方式", isPresented: $showsRecordingModeDialog, titleVisibility: .visible) {
+                    Button("仅麦克风") {
+                        Task {
+                            await meetingStore.startRecording(meetingID: meeting.id)
+                        }
+                    }
+
+                    Button("音频文件 + 麦克风") {
+                        isImportingSourceAudio = true
+                    }
+
+                    Button("取消", role: .cancel) {}
+                } message: {
+                    Text("选择这次会议的录音输入。")
+                }
+                .fileImporter(
+                    isPresented: $isImportingSourceAudio,
+                    allowedContentTypes: [.audio],
+                    allowsMultipleSelection: false
+                ) { result in
+                    handleSourceAudioSelection(result, meetingID: meeting.id)
                 }
             } else {
                 ContentUnavailableView(
@@ -187,6 +217,25 @@ struct MeetingDetailView: View {
         .padding(.vertical, 7)
         .background {
             AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.03)
+        }
+    }
+
+    private func handleSourceAudioSelection(_ result: Result<[URL], Error>, meetingID: String) {
+        switch result {
+        case let .success(urls):
+            guard let sourceURL = urls.first else { return }
+            let displayName = sourceURL.deletingPathExtension().lastPathComponent
+            Task {
+                await meetingStore.startRecording(
+                    meetingID: meetingID,
+                    sourceAudio: SourceAudioAsset(
+                        fileURL: sourceURL,
+                        displayName: displayName
+                    )
+                )
+            }
+        case let .failure(error):
+            meetingStore.lastErrorMessage = error.localizedDescription
         }
     }
 }

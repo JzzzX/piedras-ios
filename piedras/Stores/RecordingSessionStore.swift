@@ -19,11 +19,14 @@ enum ASRConnectionState: String {
 
 enum RecordingInputMode: String {
     case microphone
+    case fileMix
 
     var label: String {
         switch self {
         case .microphone:
             return "Mic"
+        case .fileMix:
+            return "Mix"
         }
     }
 }
@@ -48,6 +51,10 @@ final class RecordingSessionStore {
     var capturedPCMBytes = 0
     var sentPCMChunks = 0
     var sentPCMBytes = 0
+    var sourceAudioDisplayName: String?
+    var sourceAudioCurrentTime: TimeInterval = 0
+    var sourceAudioDuration: TimeInterval = 0
+    var isSourceAudioPlaying = false
 
     func reset() {
         meetingID = nil
@@ -67,6 +74,10 @@ final class RecordingSessionStore {
         capturedPCMBytes = 0
         sentPCMChunks = 0
         sentPCMBytes = 0
+        sourceAudioDisplayName = nil
+        sourceAudioCurrentTime = 0
+        sourceAudioDuration = 0
+        isSourceAudioPlaying = false
     }
 
     func pushAudioLevelSample(_ sample: Double) {
@@ -78,7 +89,11 @@ final class RecordingSessionStore {
         }
     }
 
-    func beginSession(inputMode: RecordingInputMode = .microphone) {
+    func beginSession(
+        inputMode: RecordingInputMode = .microphone,
+        sourceAudioDisplayName: String? = nil,
+        sourceAudioDuration: TimeInterval = 0
+    ) {
         self.inputMode = inputMode
         audioCaptureState = "准备录音"
         lastASRTransportMessage = "等待连接"
@@ -88,6 +103,10 @@ final class RecordingSessionStore {
         sentPCMBytes = 0
         currentPartial = ""
         errorBanner = nil
+        self.sourceAudioDisplayName = sourceAudioDisplayName
+        self.sourceAudioCurrentTime = 0
+        self.sourceAudioDuration = sourceAudioDuration
+        isSourceAudioPlaying = false
     }
 
     func registerCapturedPCM(bytes: Int) {
@@ -100,5 +119,11 @@ final class RecordingSessionStore {
         guard bytes > 0 else { return }
         sentPCMChunks += 1
         sentPCMBytes += bytes
+    }
+
+    func updateSourceAudioPlayback(currentTime: TimeInterval, duration: TimeInterval, isPlaying: Bool) {
+        sourceAudioCurrentTime = max(0, currentTime)
+        sourceAudioDuration = max(0, duration)
+        isSourceAudioPlaying = isPlaying
     }
 }

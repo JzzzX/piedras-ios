@@ -29,6 +29,7 @@ final class MeetingStore {
     private var didLoad = false
     private var didStartBackendPreparation = false
     private var scheduledSyncTasks: [String: Task<Void, Never>] = [:]
+    private let isUITestRuntime = ProcessInfo.processInfo.arguments.contains { $0.hasPrefix("UITEST_") }
 
     init(
         repository: MeetingRepository,
@@ -56,6 +57,14 @@ final class MeetingStore {
         }
         self.audioRecorderService.onCaptureStateChange = { [weak self] state in
             self?.recordingSessionStore.audioCaptureState = state
+        }
+        self.audioRecorderService.onSourcePlaybackUpdate = { [weak self] currentTime, duration, isPlaying, displayName in
+            self?.recordingSessionStore.sourceAudioDisplayName = displayName
+            self?.recordingSessionStore.updateSourceAudioPlayback(
+                currentTime: currentTime,
+                duration: duration,
+                isPlaying: isPlaying
+            )
         }
         self.audioRecorderService.onPCMData = { [weak self] data in
             self?.recordingSessionStore.registerCapturedPCM(bytes: data.count)
@@ -197,7 +206,7 @@ final class MeetingStore {
         }
     }
 
-    func startRecording(meetingID: String) async {
+    func startRecording(meetingID: String, sourceAudio: SourceAudioAsset? = nil) async {
         if let activeMeetingID = recordingSessionStore.meetingID,
            activeMeetingID != meetingID,
            recordingSessionStore.phase != .idle {
@@ -210,18 +219,29 @@ final class MeetingStore {
         do {
             recordingSessionStore.errorBanner = nil
             recordingSessionStore.infoBanner = nil
-            recordingSessionStore.beginSession()
+            let inputMode: RecordingInputMode = sourceAudio == nil ? .microphone : .fileMix
+            recordingSessionStore.beginSession(
+                inputMode: inputMode,
+                sourceAudioDisplayName: sourceAudio?.displayName
+            )
             recordingSessionStore.asrState = .connecting
             recordingSessionStore.meetingID = meetingID
             recordingSessionStore.phase = .starting
             updateKeepScreenAwake()
-            let fileURL = try await audioRecorderService.startRecording(meetingID: meetingID)
+            let artifact = try await audioRecorderService.startRecording(
+                meetingID: meetingID,
+                sourceAudio: sourceAudio
+            )
             recordingSessionStore.phase = .recording
             updateKeepScreenAwake()
             meeting.date = .now
-            meeting.audioLocalPath = fileURL.path
-            meeting.audioMimeType = "audio/m4a"
+            meeting.recordingMode = artifact.inputMode.meetingMode
+            meeting.audioLocalPath = artifact.fileURL.path
+            meeting.audioMimeType = artifact.mimeType
             meeting.audioUpdatedAt = .now
+            meeting.sourceAudioLocalPath = artifact.sourceAudioLocalPath
+            meeting.sourceAudioDisplayName = artifact.sourceAudioDisplayName
+            meeting.sourceAudioDuration = artifact.sourceAudioDurationSeconds
             meeting.status = .recording
             meeting.markPending()
             try repository.save()
@@ -564,6 +584,14 @@ final class MeetingStore {
         await ensureAIReady(force: force)
     }
 
+    func toggleSourceAudioPlayback() {
+        do {
+            try audioRecorderService.toggleSourceAudioPlayback()
+        } catch {
+            recordingSessionStore.errorBanner = error.localizedDescription
+        }
+    }
+
     private func currentRecordingMeeting() -> Meeting? {
         guard let meetingID = recordingSessionStore.meetingID else { return nil }
         return meeting(withID: meetingID)
@@ -592,7 +620,7 @@ final class MeetingStore {
 
         let nextIndex = (meeting.orderedSegments.last?.orderIndex ?? -1) + 1
         let segment = TranscriptSegment(
-            speaker: "麦克风",
+            speaker: meeting.recordingMode == .fileMix ? "混合音频" : "麦克风",
             text: result.text,
             startTime: result.startTime,
             endTime: max(result.endTime, result.startTime),
@@ -614,6 +642,7 @@ final class MeetingStore {
 
     private func startBackendPreparationIfNeeded() {
         guard !didStartBackendPreparation else { return }
+        guard !isUITestRuntime else { return }
         didStartBackendPreparation = true
 
         Task { @MainActor [weak self] in
@@ -826,16 +855,15 @@ final class MeetingStore {
     }
 
     private func removeLocalAudioIfNeeded(for meeting: Meeting) {
-        guard let audioLocalPath = meeting.audioLocalPath else {
-            return
-        }
-
         let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: audioLocalPath) else {
-            return
-        }
 
-        try? fileManager.removeItem(atPath: audioLocalPath)
+        for path in [meeting.audioLocalPath, meeting.sourceAudioLocalPath].compactMap({ $0 }) {
+            guard fileManager.fileExists(atPath: path) else {
+                continue
+            }
+
+            try? fileManager.removeItem(atPath: path)
+        }
     }
 
     private func deleteMeetingLocally(_ meeting: Meeting) throws {

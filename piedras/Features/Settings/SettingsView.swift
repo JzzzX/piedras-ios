@@ -10,10 +10,10 @@ struct SettingsView: View {
             AppGlassBackdrop()
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 14) {
                     header
 
-                    AppGlassCard(cornerRadius: 34, style: .regular, padding: 20, shadowOpacity: 0.08) {
+                    AppGlassCard(cornerRadius: 28, style: .regular, padding: 16, shadowOpacity: 0.06) {
                         VStack(spacing: 0) {
                             settingsRow(systemName: "network", title: "Service", value: settingsStore.serviceModeLabel)
                             AppGlassDivider(inset: 42)
@@ -25,8 +25,8 @@ struct SettingsView: View {
                         }
                     }
 
-                    AppGlassCard(cornerRadius: 34, style: .regular, padding: 20, shadowOpacity: 0.08) {
-                        VStack(alignment: .leading, spacing: 14) {
+                    AppGlassCard(cornerRadius: 28, style: .regular, padding: 16, shadowOpacity: 0.06) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Text(AppEnvironment.cloudName)
                                 .font(.headline)
                                 .foregroundStyle(AppTheme.ink)
@@ -38,7 +38,7 @@ struct SettingsView: View {
 
                             AppGlassCapsuleButton(
                                 prominent: !settingsStore.isCheckingHealth,
-                                minHeight: 48,
+                                minHeight: 42,
                                 action: {
                                     Task {
                                         await meetingStore.checkBackendHealth(force: true)
@@ -46,7 +46,7 @@ struct SettingsView: View {
                                 }
                             ) {
                                 Text(settingsStore.isCheckingHealth ? "Checking..." : "Refresh Status")
-                                    .font(.headline)
+                                    .font(.subheadline.weight(.semibold))
                                     .foregroundStyle(settingsStore.isCheckingHealth ? AppTheme.subtleInk : .white)
                             }
                             .disabled(settingsStore.isCheckingHealth)
@@ -68,7 +68,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    AppGlassCard(cornerRadius: 34, style: .regular, padding: 20, shadowOpacity: 0.08) {
+                    AppGlassCard(cornerRadius: 28, style: .regular, padding: 16, shadowOpacity: 0.06) {
                         VStack(spacing: 0) {
                             statusRow(title: "Backend", value: backendStateLabel)
                             AppGlassDivider(inset: 0)
@@ -80,9 +80,9 @@ struct SettingsView: View {
                         }
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 20)
-                .padding(.bottom, 40)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 32)
             }
         }
         .toolbar(.hidden, for: .navigationBar)
@@ -95,60 +95,60 @@ struct SettingsView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text("Settings")
-                    .font(.system(size: 36, weight: .regular, design: .serif))
+                    .font(.system(size: 30, weight: .regular, design: .serif))
                     .foregroundStyle(AppTheme.ink)
 
                 Text("Service & status")
-                    .font(.subheadline)
+                    .font(.footnote)
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
             Spacer()
 
-            AppGlassCircleButton(systemName: "xmark", accessibilityLabel: "关闭") {
+            AppGlassCircleButton(systemName: "xmark", accessibilityLabel: "关闭", size: 40) {
                 dismiss()
             }
         }
     }
 
     private func settingsRow(systemName: String, title: String, value: String) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: systemName)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
-                .frame(width: 30, height: 30)
+                .frame(width: 26, height: 26)
                 .background {
-                    AppGlassSurface(cornerRadius: 15, style: .clear, shadowOpacity: 0.03)
+                    AppGlassSurface(cornerRadius: 13, style: .clear, shadowOpacity: 0.02)
                 }
 
             Text(title)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.ink)
 
             Spacer()
 
             Text(value)
-                .font(.subheadline.weight(.medium))
+                .font(.footnote.weight(.medium))
                 .foregroundStyle(AppTheme.subtleInk)
                 .multilineTextAlignment(.trailing)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 11)
     }
 
     private func statusRow(title: String, value: String) -> some View {
         HStack {
             Text(title)
-                .font(.headline)
+                .font(.subheadline.weight(.semibold))
                 .foregroundStyle(AppTheme.ink)
 
             Spacer()
 
             Text(value)
-                .font(.subheadline)
+                .font(.footnote)
                 .foregroundStyle(AppTheme.subtleInk)
                 .multilineTextAlignment(.trailing)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 11)
     }
 
     private var cloudHelpText: String {

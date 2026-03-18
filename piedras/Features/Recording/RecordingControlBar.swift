@@ -5,6 +5,7 @@ struct RecordingControlBar: View {
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
 
     let meeting: Meeting
+    var onRequestStartRecording: (() -> Void)? = nil
 
     var body: some View {
         AppGlassCard(cornerRadius: 30, style: .regular, padding: 16, shadowOpacity: 0.14) {
@@ -97,6 +98,10 @@ struct RecordingControlBar: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            if showsSourcePlaybackStrip {
+                sourcePlaybackStrip
+            }
+
             diagnosticsStrip
         }
     }
@@ -139,8 +144,12 @@ struct RecordingControlBar: View {
             Spacer()
 
             Button {
-                Task {
-                    await meetingStore.startRecording(meetingID: meeting.id)
+                if let onRequestStartRecording {
+                    onRequestStartRecording()
+                } else {
+                    Task {
+                        await meetingStore.startRecording(meetingID: meeting.id)
+                    }
                 }
             } label: {
                 Image(systemName: "mic.fill")
@@ -169,6 +178,46 @@ struct RecordingControlBar: View {
         }
 
         return nil
+    }
+
+    private var sourcePlaybackStrip: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.02)
+                    .frame(width: 34, height: 34)
+
+                Image(systemName: "music.note")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(recordingSessionStore.sourceAudioDisplayName ?? "Source")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .lineLimit(1)
+
+                Text(sourceProgressLabel)
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(AppTheme.subtleInk)
+            }
+
+            Spacer()
+
+            Button {
+                meetingStore.toggleSourceAudioPlayback()
+            } label: {
+                Image(systemName: recordingSessionStore.isSourceAudioPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .frame(width: 34, height: 34)
+                    .background {
+                        AppGlassSurface(cornerRadius: 17, style: .clear, shadowOpacity: 0.03)
+                    }
+            }
+            .buttonStyle(.plain)
+            .disabled(recordingSessionStore.phase != .recording)
+        }
     }
 
     private var diagnosticsStrip: some View {
@@ -201,6 +250,18 @@ struct RecordingControlBar: View {
         .background {
             AppGlassSurface(cornerRadius: 14, style: .clear, shadowOpacity: 0.02)
         }
+    }
+
+    private var sourceProgressLabel: String {
+        let current = recordingSessionStore.sourceAudioCurrentTime.mmss
+        let duration = recordingSessionStore.sourceAudioDuration.mmss
+        return "\(current) / \(duration)"
+    }
+
+    private var showsSourcePlaybackStrip: Bool {
+        recordingSessionStore.inputMode == .fileMix
+            && recordingSessionStore.meetingID == meeting.id
+            && recordingSessionStore.sourceAudioDisplayName != nil
     }
 
     private var isActiveMeeting: Bool {
