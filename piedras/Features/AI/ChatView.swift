@@ -39,7 +39,7 @@ struct ChatView: View {
     }
 
     private var messageList: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: 28) {
             ForEach(meeting.orderedChatMessages) { message in
                 messageRow(message)
                     .id(message.id)
@@ -50,8 +50,8 @@ struct ChatView: View {
     private func messageRow(_ message: ChatMessage) -> some View {
         let isUser = message.role == "user"
 
-        return VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
-            Text(isUser ? "You" : "Piedras")
+        return VStack(alignment: .leading, spacing: 10) {
+            Text(isUser ? "You" : "AI")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(AppTheme.subtleInk)
 
@@ -61,24 +61,14 @@ struct ChatView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 Text(message.content)
-                    .font(.body)
-                    .lineSpacing(10)
+                    .font(AppTheme.editorialFont(size: 20))
+                    .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
-                    .padding(.horizontal, isUser ? 16 : 0)
-                    .padding(.vertical, isUser ? 14 : 0)
-                    .background {
-                        if isUser {
-                            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .fill(AppTheme.documentPaperSecondary)
-                        }
-                    }
             }
         }
-        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
-        .padding(.leading, isUser ? 56 : 0)
-        .padding(.trailing, isUser ? 0 : 56)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var composer: some View {
@@ -90,6 +80,7 @@ struct ChatView: View {
 
                 TextField("Ask about this note", text: $input)
                     .textFieldStyle(.plain)
+                    .font(AppTheme.editorialFont(size: 18))
                     .foregroundStyle(AppTheme.ink)
                     .focused($isInputFocused)
                     .submitLabel(.send)
@@ -106,9 +97,12 @@ struct ChatView: View {
             Button(action: sendCurrentInput) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppTheme.ink)
                     .frame(width: 50, height: 50)
-                    .background(AppTheme.ink, in: Circle())
+                    .background {
+                        AppGlassSurface(cornerRadius: 25, style: .clear, borderOpacity: 0.18, shadowOpacity: 0.08)
+                            .clipShape(Circle())
+                    }
             }
             .buttonStyle(.plain)
             .disabled(trimmedInput.isEmpty || meetingStore.isStreamingChat(meetingID: meeting.id))

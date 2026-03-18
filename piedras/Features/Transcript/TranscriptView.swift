@@ -13,7 +13,7 @@ struct TranscriptView: View {
     let meeting: Meeting
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 30) {
+        LazyVStack(alignment: .leading, spacing: 28) {
             if paragraphs.isEmpty && !showsLiveParagraph {
                 emptyState
             } else {
@@ -46,15 +46,15 @@ struct TranscriptView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 18) {
             skeletonLine(width: 46, height: 9, opacity: 0.26)
-            skeletonLine(width: nil, height: 14, opacity: 0.18)
-            skeletonLine(width: nil, height: 14, opacity: 0.16)
-            skeletonLine(width: 260, height: 14, opacity: 0.14)
+            skeletonLine(width: nil, height: 16, opacity: 0.18)
+            skeletonLine(width: nil, height: 16, opacity: 0.16)
+            skeletonLine(width: 260, height: 16, opacity: 0.14)
 
             skeletonLine(width: 46, height: 9, opacity: 0.22)
                 .padding(.top, 4)
-            skeletonLine(width: nil, height: 14, opacity: 0.16)
-            skeletonLine(width: nil, height: 14, opacity: 0.14)
-            skeletonLine(width: 210, height: 14, opacity: 0.12)
+            skeletonLine(width: nil, height: 16, opacity: 0.16)
+            skeletonLine(width: nil, height: 16, opacity: 0.14)
+            skeletonLine(width: 210, height: 16, opacity: 0.12)
         }
         .padding(.top, 2)
     }
@@ -72,10 +72,17 @@ struct TranscriptView: View {
         isLive: Bool
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 Text(timeLabel)
-                    .font(.caption2.monospacedDigit())
+                    .font(.caption2.monospacedDigit().weight(.medium))
                     .foregroundStyle(AppTheme.subtleInk)
+
+                if let speakerLabel = speakerLabel(for: speaker) {
+                    Text(speakerLabel)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.mutedInk)
+                        .lineLimit(1)
+                }
 
                 if isLive {
                     Circle()
@@ -85,18 +92,13 @@ struct TranscriptView: View {
                     Text("LIVE")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(AppTheme.highlight)
-                } else if let speakerLabel = speakerLabel(for: speaker) {
-                    Text(speakerLabel)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(AppTheme.mutedInk)
-                        .lineLimit(1)
                 }
             }
 
             Text(text)
-                .font(.body)
-                .lineSpacing(11)
-                .foregroundStyle(isLive ? AppTheme.mutedInk : AppTheme.ink)
+                .font(AppTheme.editorialFont(size: 20))
+                .lineSpacing(AppTheme.editorialBodyLineSpacing)
+                .foregroundStyle(AppTheme.ink.opacity(isLive ? 0.84 : 1))
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

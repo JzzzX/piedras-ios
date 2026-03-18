@@ -96,13 +96,20 @@ final class RecordingFlowUITests: XCTestCase {
         XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
         firstRow.tap()
 
+        XCTAssertFalse(app.staticTexts["Piedras AI"].exists, "详情页不应再展示品牌标题。")
+        XCTAssertTrue(app.buttons["MeetingModeTranscriptTab"].waitForExistence(timeout: 3), "缺少 Transcript 页签。")
+        XCTAssertTrue(app.buttons["MeetingModeSummaryTab"].exists, "缺少 AI Notes 页签。")
+
+        app.buttons["MeetingModeSummaryTab"].tap()
+        XCTAssertTrue(app.buttons["MeetingAskButton"].waitForExistence(timeout: 3), "AI Notes 页缺少 Ask 入口。")
+
         let moreButton = app.buttons["MeetingDetailMoreButton"]
         XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "详情页更多按钮未出现。")
         moreButton.tap()
 
         XCTAssertTrue(app.buttons["Edit title"].waitForExistence(timeout: 2), "缺少 Edit title 动作。")
         XCTAssertTrue(app.buttons["Show my notes"].exists, "缺少 Show my notes 动作。")
-        XCTAssertTrue(app.buttons["Copy transcript"].exists, "缺少 Copy transcript 动作。")
+        XCTAssertTrue(app.buttons["Copy notes"].exists, "缺少 Copy notes 动作。")
     }
 
     private func launchApp() -> XCUIApplication {

@@ -25,9 +25,7 @@ struct EnhancedNotesView: View {
     let meeting: Meeting
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            header
-
+        VStack(alignment: .leading, spacing: AppTheme.editorialParagraphSpacing) {
             if meetingStore.isEnhancing(meetingID: meeting.id) && trimmedContent.isEmpty {
                 documentSkeleton
             } else if displayBlocks.isEmpty {
@@ -38,40 +36,6 @@ struct EnhancedNotesView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .textSelection(.enabled)
-    }
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 7) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AppTheme.documentOlive)
-
-                Text("AI Notes")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.subtleInk)
-            }
-
-            Spacer()
-
-            Button {
-                Task {
-                    await meetingStore.generateEnhancedNotes(for: meeting.id)
-                }
-            } label: {
-                Image(systemName: meetingStore.isEnhancing(meetingID: meeting.id) ? "hourglass" : "arrow.clockwise")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(canGenerate ? AppTheme.ink : AppTheme.subtleInk)
-                    .frame(width: 30, height: 30)
-                    .background {
-                        Circle()
-                            .fill(AppTheme.documentPaperSecondary)
-                    }
-            }
-            .buttonStyle(.plain)
-            .disabled(meetingStore.isEnhancing(meetingID: meeting.id) || !canGenerate)
-            .accessibilityLabel(actionAccessibilityLabel)
-        }
     }
 
     private var documentBody: some View {
@@ -88,25 +52,25 @@ struct EnhancedNotesView: View {
         switch block.kind {
         case let .title(title):
             Text(title)
-                .font(.system(size: 26, weight: .semibold, design: .serif))
+                .font(AppTheme.editorialEmphasisFont(size: 28))
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
         case let .section(title):
             Text(title)
-                .font(.system(size: 21, weight: .semibold, design: .serif))
+                .font(AppTheme.editorialEmphasisFont(size: 22))
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
         case let .paragraph(text):
             Text(text)
-                .font(.body)
-                .lineSpacing(10)
+                .font(AppTheme.editorialFont(size: 20))
+                .lineSpacing(AppTheme.editorialBodyLineSpacing)
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
         case let .bullets(items):
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 ForEach(items, id: \.self) { item in
                     HStack(alignment: .top, spacing: 10) {
                         Circle()
@@ -115,8 +79,8 @@ struct EnhancedNotesView: View {
                             .padding(.top, 10)
 
                         Text(item)
-                            .font(.body)
-                            .lineSpacing(9)
+                            .font(AppTheme.editorialFont(size: 20))
+                            .lineSpacing(AppTheme.editorialBodyLineSpacing - 1)
                             .foregroundStyle(AppTheme.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -124,7 +88,7 @@ struct EnhancedNotesView: View {
             }
 
         case let .checklist(items):
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 ForEach(items) { item in
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
@@ -133,8 +97,8 @@ struct EnhancedNotesView: View {
                             .padding(.top, 4)
 
                         Text(item.text)
-                            .font(.body)
-                            .lineSpacing(9)
+                            .font(AppTheme.editorialFont(size: 20))
+                            .lineSpacing(AppTheme.editorialBodyLineSpacing - 1)
                             .foregroundStyle(AppTheme.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -196,30 +160,16 @@ struct EnhancedNotesView: View {
 
         return blocks
     }
-
-    private var canGenerate: Bool {
-        !meeting.userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private var actionAccessibilityLabel: String {
-        if meetingStore.isEnhancing(meetingID: meeting.id) {
-            return "Generating notes"
-        }
-
-        return trimmedContent.isEmpty ? "Generate notes" : "Refresh notes"
-    }
-
     private func blockSpacing(after kind: EnhancedNoteBlockKind, index: Int) -> CGFloat {
         let isLast = index == displayBlocks.count - 1
 
         switch kind {
         case .title:
-            return isLast ? 0 : 18
+            return isLast ? 0 : 20
         case .section:
-            return isLast ? 0 : 14
+            return isLast ? 0 : 16
         case .paragraph, .bullets, .checklist:
-            return isLast ? 0 : 24
+            return isLast ? 0 : AppTheme.editorialParagraphSpacing
         }
     }
 

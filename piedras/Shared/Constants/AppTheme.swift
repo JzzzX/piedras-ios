@@ -74,6 +74,17 @@ enum AppTheme {
     }
 
     static var cardShadow: Color { rgba(light: (0x00, 0x00, 0x00, 0.08), dark: (0x00, 0x00, 0x00, 0.26)) }
+    static let editorialBodyLineSpacing: CGFloat = 12
+    static let editorialSectionSpacing: CGFloat = 18
+    static let editorialParagraphSpacing: CGFloat = 26
+
+    static func editorialFont(size: CGFloat) -> Font {
+        Font(editorialUIFont(size: size, weight: .regular))
+    }
+
+    static func editorialEmphasisFont(size: CGFloat) -> Font {
+        Font(editorialUIFont(size: size, weight: .semibold))
+    }
 
     private static func color(light: UInt32, dark: UInt32) -> Color {
         Color(
@@ -95,6 +106,26 @@ enum AppTheme {
                 )
             }
         )
+    }
+
+    private static func editorialUIFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        let candidateNames: [String]
+
+        if weight.rawValue >= UIFont.Weight.semibold.rawValue {
+            candidateNames = ["Songti SC Bold", "Songti SC Semibold", "Songti SC"]
+        } else if weight.rawValue <= UIFont.Weight.light.rawValue {
+            candidateNames = ["Songti SC Light", "Songti SC", "STSongti-SC-Light"]
+        } else {
+            candidateNames = ["Songti SC", "Songti SC Regular", "STSongti-SC-Regular"]
+        }
+
+        for name in candidateNames {
+            if let font = UIFont(name: name, size: size) {
+                return font
+            }
+        }
+
+        return UIFont.systemFont(ofSize: size, weight: weight)
     }
 }
 

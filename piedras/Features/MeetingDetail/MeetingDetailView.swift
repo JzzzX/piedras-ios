@@ -78,7 +78,7 @@ struct MeetingDetailView: View {
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 22) {
+                    VStack(alignment: .leading, spacing: 18) {
                         Color.clear
                             .frame(height: 0)
                             .id(topAnchorID)
@@ -86,12 +86,14 @@ struct MeetingDetailView: View {
                         topBar(meeting: meeting)
                             .zIndex(3)
 
+                        modePicker
+
                         titleBlock(meeting: meeting)
 
                         documentPage(meeting: meeting)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 14)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 16)
                     .padding(.bottom, contentBottomPadding(for: meeting))
                 }
                 .onChange(of: selectedMode, initial: false) { _, _ in
@@ -148,54 +150,68 @@ struct MeetingDetailView: View {
     }
 
     private func topBar(meeting: Meeting) -> some View {
-        HStack {
+        HStack(alignment: .center, spacing: 12) {
             AppGlassCircleButton(systemName: "chevron.left", accessibilityLabel: "返回") {
+                closeActionMenu()
                 dismiss()
             }
             .accessibilityIdentifier("BackButton")
 
             Spacer()
 
-            Button {
-                withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
-                    showsActionMenu.toggle()
-                }
-            } label: {
-                Image(systemName: "ellipsis")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
-                    .frame(width: 40, height: 40)
-                    .background {
-                        AppGlassSurface(cornerRadius: 20, style: .clear, borderOpacity: 0.18, shadowOpacity: 0.08)
+            HStack(spacing: 10) {
+                if selectedMode == .summary {
+                    Button {
+                        closeActionMenu()
+                        Task {
+                            await meetingStore.generateEnhancedNotes(for: meeting.id)
+                        }
+                    } label: {
+                        detailToolLabel(systemName: meetingStore.isEnhancing(meetingID: meeting.id) ? "hourglass" : "arrow.clockwise")
                     }
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("MeetingDetailMoreButton")
-            .overlay(alignment: .topTrailing) {
-                if showsActionMenu {
-                    actionMenu(meeting: meeting)
-                        .offset(y: 54)
-                        .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+                    .buttonStyle(.plain)
+                    .disabled(meetingStore.isEnhancing(meetingID: meeting.id) || !canRefreshSummary(for: meeting))
+                    .accessibilityLabel(meetingStore.isEnhancing(meetingID: meeting.id) ? "Generating notes" : "Refresh notes")
+                    .accessibilityIdentifier("MeetingRefreshSummaryButton")
+                }
+
+                ShareLink(item: sharePayload(for: meeting)) {
+                    detailToolLabel(systemName: "square.and.arrow.up")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("分享")
+                .accessibilityIdentifier("MeetingShareButton")
+
+                Button {
+                    withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
+                        showsActionMenu.toggle()
+                    }
+                } label: {
+                    detailToolLabel(systemName: "ellipsis")
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("MeetingDetailMoreButton")
+                .overlay(alignment: .topTrailing) {
+                    if showsActionMenu {
+                        actionMenu(meeting: meeting)
+                            .offset(y: 54)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+                    }
                 }
             }
-        }
-        .overlay {
-            Text("Piedras AI")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(AppTheme.ink)
         }
     }
 
     private func titleBlock(meeting: Meeting) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             Text(meeting.displayTitle)
-                .font(.system(size: 36, weight: .semibold, design: .serif))
+                .font(AppTheme.editorialEmphasisFont(size: 34))
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(metaLine(for: meeting))
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(AppTheme.subtleInk)
 
                 if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
@@ -214,14 +230,9 @@ struct MeetingDetailView: View {
     }
 
     private func documentPage(meeting: Meeting) -> some View {
-        VStack(spacing: 0) {
-            modePicker
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 14)
-
-            PaperDivider(inset: 20)
-                .opacity(0.72)
+        VStack(alignment: .leading, spacing: 0) {
+            PaperDivider()
+                .opacity(0.62)
 
             Group {
                 if selectedMode == .transcript {
@@ -230,24 +241,15 @@ struct MeetingDetailView: View {
                     EnhancedNotesView(meeting: meeting)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 22)
+            .padding(.top, 20)
             .padding(.bottom, 34)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, minHeight: minimumPageHeight, alignment: .topLeading)
-        .background {
-            PaperSurface(
-                cornerRadius: 36,
-                fill: AppTheme.documentPaper,
-                border: AppTheme.documentHairline,
-                shadowOpacity: 0.05
-            )
-        }
     }
 
     private var modePicker: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 24) {
             ForEach(MeetingDetailMode.allCases) { mode in
                 Button {
                     closeActionMenu()
@@ -255,26 +257,21 @@ struct MeetingDetailView: View {
                         selectedMode = mode
                     }
                 } label: {
-                    Text(mode.rawValue)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(selectedMode == mode ? AppTheme.ink : AppTheme.subtleInk)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 34)
-                        .background {
-                            if selectedMode == mode {
-                                Capsule()
-                                    .fill(AppTheme.documentPaper)
-                            }
-                        }
+                    VStack(spacing: 8) {
+                        Text(mode.rawValue)
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(selectedMode == mode ? AppTheme.ink : AppTheme.subtleInk)
+
+                        Capsule()
+                            .fill(selectedMode == mode ? AppTheme.ink : Color.clear)
+                            .frame(height: 2)
+                    }
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier(mode == .transcript ? "MeetingModeTranscriptTab" : "MeetingModeSummaryTab")
             }
         }
-        .padding(4)
-        .background(
-            Capsule()
-                .fill(AppTheme.documentPaperSecondary)
-        )
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
@@ -295,13 +292,19 @@ struct MeetingDetailView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 12)
         } else if selectedMode == .summary {
-            AppGlassCapsuleButton(prominent: true) {
+            AppGlassCapsuleButton(prominent: false) {
                 activeSheet = .chat
             } label: {
-                Text("Chat with note")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white)
+                HStack(spacing: 10) {
+                    Image(systemName: "bubble.left.and.sparkles")
+                        .font(.system(size: 13, weight: .semibold))
+
+                    Text("Ask")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(AppTheme.ink)
             }
+            .accessibilityIdentifier("MeetingAskButton")
             .padding(.horizontal, 20)
             .padding(.top, 8)
             .padding(.bottom, 12)
@@ -322,7 +325,7 @@ struct MeetingDetailView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         TextField("Untitled note", text: $titleDraft, axis: .vertical)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 34, weight: .semibold, design: .serif))
+                            .font(AppTheme.editorialEmphasisFont(size: 34))
                             .foregroundStyle(AppTheme.ink)
                             .focused($isTitleEditorFocused)
                             .lineLimit(3, reservesSpace: false)
@@ -373,19 +376,11 @@ struct MeetingDetailView: View {
                     DocumentBackdrop()
 
                     VStack(spacing: 0) {
-                        SheetHeaderBar(title: "Chat with note") {
+                        SheetHeaderBar(title: "Ask") {
                             activeSheet = nil
                         }
 
                         ChatView(meeting: meeting)
-                            .background {
-                                PaperSurface(
-                                    cornerRadius: 34,
-                                    fill: AppTheme.documentPaper,
-                                    border: AppTheme.documentHairline,
-                                    shadowOpacity: 0.05
-                                )
-                            }
                             .padding(.horizontal, 18)
                             .padding(.top, 12)
                             .padding(.bottom, 8)
@@ -500,6 +495,23 @@ struct MeetingDetailView: View {
         activeSheet = .summaryEditor
     }
 
+    private func sharePayload(for meeting: Meeting) -> String {
+        let body: String
+
+        switch selectedMode {
+        case .transcript:
+            body = meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        case .summary:
+            body = meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        if body.isEmpty {
+            return meeting.displayTitle
+        }
+
+        return "\(meeting.displayTitle)\n\n\(body)"
+    }
+
     private func copyCurrentContent(for meeting: Meeting) {
         let content: String
         let toast: String
@@ -548,6 +560,11 @@ struct MeetingDetailView: View {
         }
     }
 
+    private func canRefreshSummary(for meeting: Meeting) -> Bool {
+        !meeting.userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+            !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func metaLine(for meeting: Meeting) -> String {
         let date = meeting.date.formatted(.dateTime.month(.wide).day().year())
         let duration = meeting.durationSeconds > 0 ? "\(meeting.durationLabel) recording" : "Not recorded yet"
@@ -563,7 +580,7 @@ struct MeetingDetailView: View {
         case .transcript:
             return meeting.audioLocalPath == nil ? 64 : 176
         case .summary:
-            return 142
+            return 132
         }
     }
 
@@ -584,6 +601,17 @@ struct MeetingDetailView: View {
         case let .failure(error):
             meetingStore.lastErrorMessage = error.localizedDescription
         }
+    }
+
+    private func detailToolLabel(systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(AppTheme.ink)
+            .frame(width: 40, height: 40)
+            .background {
+                AppGlassSurface(cornerRadius: 20, style: .clear, borderOpacity: 0.18, shadowOpacity: 0.08)
+                    .clipShape(Circle())
+            }
     }
 }
 
@@ -641,7 +669,7 @@ private struct SheetHeaderBar: View {
                 Spacer()
 
                 Text(title)
-                    .font(.headline.weight(.semibold))
+                    .font(AppTheme.editorialEmphasisFont(size: 18))
                     .foregroundStyle(AppTheme.ink)
 
                 Spacer()

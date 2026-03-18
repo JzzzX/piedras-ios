@@ -16,7 +16,7 @@ struct NoteEditorView: View {
                         .foregroundStyle(AppTheme.mutedInk)
 
                     Text(title)
-                        .font(.headline)
+                        .font(AppTheme.editorialEmphasisFont(size: 20))
                         .foregroundStyle(AppTheme.ink)
 
                     Spacer()
@@ -26,7 +26,7 @@ struct NoteEditorView: View {
             ZStack(alignment: .topLeading) {
                 if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(placeholder)
-                        .font(.body)
+                        .font(AppTheme.editorialFont(size: 19))
                         .foregroundStyle(AppTheme.subtleInk)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 10)
@@ -34,7 +34,7 @@ struct NoteEditorView: View {
                 }
 
                 TextEditor(text: $text)
-                    .font(.body)
+                    .font(AppTheme.editorialFont(size: 19))
                     .foregroundStyle(AppTheme.ink)
                     .scrollContentBackground(.hidden)
                     .frame(minHeight: minHeight)
