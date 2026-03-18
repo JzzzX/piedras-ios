@@ -514,7 +514,7 @@ final class MeetingStore {
 
         do {
             let response = try await apiClient.enhanceNotes(MeetingPayloadMapper.makeEnhancePayload(from: meeting))
-            meeting.enhancedNotes = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+            meeting.enhancedNotes = normalizeGeneratedNotes(response.content)
             meeting.markPending()
             try repository.save()
             settingsStore.markLLMRequestSucceeded(provider: response.provider)
@@ -745,7 +745,7 @@ final class MeetingStore {
            await ensureAIReady(force: false) {
             do {
                 let response = try await apiClient.enhanceNotes(MeetingPayloadMapper.makeEnhancePayload(from: meeting))
-                let content = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
+                let content = normalizeGeneratedNotes(response.content)
                 if !content.isEmpty {
                     meeting.enhancedNotes = content
                     meeting.markPending()
@@ -887,5 +887,61 @@ final class MeetingStore {
         }
 
         loadMeetings()
+    }
+
+    private func normalizeGeneratedNotes(_ content: String) -> String {
+        content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .components(separatedBy: .newlines)
+            .map { rawLine in
+                let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+
+                if let title = trimmed.dropMarkdownTitlePrefix() {
+                    return title
+                }
+
+                if let checklist = trimmed.dropChecklistPrefix(isChecked: false) {
+                    return "□ \(checklist)"
+                }
+
+                if let checklist = trimmed.dropChecklistPrefix(isChecked: true) {
+                    return "☑ \(checklist)"
+                }
+
+                if let bullet = trimmed.dropBulletPrefix() {
+                    return "• \(bullet)"
+                }
+
+                return trimmed
+            }
+            .joined(separator: "\n")
+            .replacingOccurrences(of: "\n\n\n", with: "\n\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+private extension String {
+    func dropMarkdownTitlePrefix() -> String? {
+        dropPrefix("# ") ?? dropPrefix("## ") ?? dropPrefix("### ")
+    }
+
+    func dropChecklistPrefix(isChecked: Bool) -> String? {
+        if isChecked {
+            return dropPrefix("- [x] ")
+                ?? dropPrefix("- [X] ")
+                ?? dropPrefix("[x] ")
+                ?? dropPrefix("[X] ")
+        }
+
+        return dropPrefix("- [ ] ") ?? dropPrefix("[ ] ")
+    }
+
+    func dropBulletPrefix() -> String? {
+        dropPrefix("- ") ?? dropPrefix("* ") ?? dropPrefix("• ")
+    }
+
+    func dropPrefix(_ prefix: String) -> String? {
+        guard hasPrefix(prefix) else { return nil }
+        return String(dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

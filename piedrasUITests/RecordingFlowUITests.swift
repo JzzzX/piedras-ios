@@ -99,9 +99,11 @@ final class RecordingFlowUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["Piedras AI"].exists, "详情页不应再展示品牌标题。")
         XCTAssertTrue(app.buttons["MeetingModeTranscriptTab"].waitForExistence(timeout: 3), "缺少 Transcript 页签。")
         XCTAssertTrue(app.buttons["MeetingModeSummaryTab"].exists, "缺少 AI Notes 页签。")
+        XCTAssertTrue(app.staticTexts.matching(identifier: "TranscriptTimestamp").firstMatch.waitForExistence(timeout: 3), "Transcript 缺少时间戳。")
 
         app.buttons["MeetingModeSummaryTab"].tap()
         XCTAssertTrue(app.buttons["MeetingAskButton"].waitForExistence(timeout: 3), "AI Notes 页缺少 Ask 入口。")
+        XCTAssertTrue(app.textViews["EnhancedNotesEditor"].waitForExistence(timeout: 3), "AI Notes 应为整页可编辑文稿。")
 
         let moreButton = app.buttons["MeetingDetailMoreButton"]
         XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "详情页更多按钮未出现。")
@@ -110,6 +112,7 @@ final class RecordingFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Edit title"].waitForExistence(timeout: 2), "缺少 Edit title 动作。")
         XCTAssertTrue(app.buttons["Show my notes"].exists, "缺少 Show my notes 动作。")
         XCTAssertTrue(app.buttons["Copy notes"].exists, "缺少 Copy notes 动作。")
+        XCTAssertFalse(app.buttons["Edit AI summary"].exists, "AI Notes 已改为整页直编，不应再出现单独编辑动作。")
     }
 
     private func launchApp() -> XCUIApplication {

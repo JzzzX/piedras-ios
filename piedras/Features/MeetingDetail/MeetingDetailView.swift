@@ -11,7 +11,6 @@ private enum MeetingDetailMode: String, CaseIterable, Identifiable {
 
 private enum MeetingDetailSheet: String, Identifiable {
     case titleEditor
-    case summaryEditor
     case rawNotes
     case chat
 
@@ -40,7 +39,6 @@ struct MeetingDetailView: View {
     @State private var activeSheet: MeetingDetailSheet?
     @State private var showsActionMenu = false
     @State private var titleDraft = ""
-    @State private var enhancedNotesDraft = ""
     @State private var toastMessage: String?
     @FocusState private var isTitleEditorFocused: Bool
 
@@ -101,6 +99,7 @@ struct MeetingDetailView: View {
                         proxy.scrollTo(topAnchorID, anchor: .top)
                     }
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
 
             if let toastMessage {
@@ -205,7 +204,7 @@ struct MeetingDetailView: View {
     private func titleBlock(meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(meeting.displayTitle)
-                .font(AppTheme.editorialEmphasisFont(size: 34))
+                .font(AppTheme.editorialEmphasisFont(size: 32))
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -238,7 +237,10 @@ struct MeetingDetailView: View {
                 if selectedMode == .transcript {
                     TranscriptView(meeting: meeting)
                 } else {
-                    EnhancedNotesView(meeting: meeting)
+                    EnhancedNotesView(
+                        text: enhancedNotesBinding(for: meeting),
+                        meetingID: meeting.id
+                    )
                 }
             }
             .padding(.top, 20)
@@ -340,20 +342,6 @@ struct MeetingDetailView: View {
                     .dismissKeyboardOnTap(isFocused: $isTitleEditorFocused)
                 }
 
-            case .summaryEditor:
-                DocumentSheetScaffold(title: "Edit AI summary", onDone: {
-                    meetingStore.updateEnhancedNotes(enhancedNotesDraft, for: meeting)
-                    activeSheet = nil
-                }) {
-                    NoteEditorView(
-                        text: $enhancedNotesDraft,
-                        showsHeader: false,
-                        title: "AI summary",
-                        placeholder: "Start with a clean summary.",
-                        minHeight: 520
-                    )
-                }
-
             case .rawNotes:
                 DocumentSheetScaffold(title: "My notes", onDone: {
                     meetingStore.updateNotes(meeting.userNotesPlainText, for: meeting)
@@ -443,9 +431,6 @@ struct MeetingDetailView: View {
                 MeetingActionItem(title: "Edit title", systemName: "pencil") {
                     openTitleEditor(for: meeting)
                 },
-                MeetingActionItem(title: "Edit AI summary", systemName: "wand.and.stars") {
-                    openSummaryEditor(for: meeting)
-                },
                 MeetingActionItem(title: "View transcript", systemName: "doc.text") {
                     closeActionMenu()
                     selectedMode = .transcript
@@ -487,12 +472,6 @@ struct MeetingDetailView: View {
         titleDraft = meeting.title
         closeActionMenu()
         activeSheet = .titleEditor
-    }
-
-    private func openSummaryEditor(for meeting: Meeting) {
-        enhancedNotesDraft = meeting.enhancedNotes
-        closeActionMenu()
-        activeSheet = .summaryEditor
     }
 
     private func sharePayload(for meeting: Meeting) -> String {
@@ -558,6 +537,23 @@ struct MeetingDetailView: View {
             guard !Task.isCancelled else { return }
             meetingStore.updateNotes(newValue, for: meeting)
         }
+    }
+
+    private func scheduleEnhancedNotesSave(_ newValue: String, for meeting: Meeting) {
+        noteSaveTask?.cancel()
+        meeting.enhancedNotes = newValue
+        noteSaveTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            meetingStore.updateEnhancedNotes(newValue, for: meeting)
+        }
+    }
+
+    private func enhancedNotesBinding(for meeting: Meeting) -> Binding<String> {
+        Binding(
+            get: { meeting.enhancedNotes },
+            set: { scheduleEnhancedNotesSave($0, for: meeting) }
+        )
     }
 
     private func canRefreshSummary(for meeting: Meeting) -> Bool {

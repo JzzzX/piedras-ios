@@ -1,10 +1,10 @@
 import SwiftUI
 
-private struct TranscriptParagraph: Identifiable {
+private struct TranscriptSentence: Identifiable {
     let id: String
-    let speaker: String
-    let startTime: Double
+    let timeLabel: String
     let text: String
+    let isLive: Bool
 }
 
 struct TranscriptView: View {
@@ -13,50 +13,60 @@ struct TranscriptView: View {
     let meeting: Meeting
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 28) {
-            if paragraphs.isEmpty && !showsLiveParagraph {
+        LazyVStack(alignment: .leading, spacing: 18) {
+            if sentences.isEmpty {
                 emptyState
             } else {
-                ForEach(paragraphs) { paragraph in
-                    paragraphRow(
-                        timeLabel: timeLabel(for: paragraph.startTime),
-                        speaker: paragraph.speaker,
-                        text: paragraph.text,
-                        isLive: false
-                    )
-                }
-
-                if showsLiveParagraph {
-                    paragraphRow(
-                        timeLabel: recordingSessionStore.durationSeconds.mmss,
-                        speaker: liveSpeakerName,
-                        text: recordingSessionStore.currentPartial,
-                        isLive: true
-                    )
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                ForEach(sentences) { sentence in
+                    sentenceRow(sentence)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .animation(.easeOut(duration: 0.22), value: recordingSessionStore.currentPartial)
-        .animation(.easeOut(duration: 0.22), value: meeting.orderedSegments.count)
+        .animation(.easeOut(duration: 0.18), value: recordingSessionStore.currentPartial)
+        .animation(.easeOut(duration: 0.18), value: meeting.orderedSegments.count)
         .textSelection(.enabled)
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            skeletonLine(width: 46, height: 9, opacity: 0.26)
-            skeletonLine(width: nil, height: 16, opacity: 0.18)
-            skeletonLine(width: nil, height: 16, opacity: 0.16)
-            skeletonLine(width: 260, height: 16, opacity: 0.14)
+        VStack(alignment: .leading, spacing: 14) {
+            skeletonLine(width: 44, height: 8, opacity: 0.22)
+            skeletonLine(width: nil, height: 14, opacity: 0.16)
+            skeletonLine(width: 240, height: 14, opacity: 0.14)
 
-            skeletonLine(width: 46, height: 9, opacity: 0.22)
-                .padding(.top, 4)
-            skeletonLine(width: nil, height: 16, opacity: 0.16)
-            skeletonLine(width: nil, height: 16, opacity: 0.14)
-            skeletonLine(width: 210, height: 16, opacity: 0.12)
+            skeletonLine(width: 44, height: 8, opacity: 0.20)
+                .padding(.top, 2)
+            skeletonLine(width: nil, height: 14, opacity: 0.14)
+            skeletonLine(width: 210, height: 14, opacity: 0.12)
         }
         .padding(.top, 2)
+    }
+
+    private func sentenceRow(_ sentence: TranscriptSentence) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(sentence.timeLabel)
+                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(AppTheme.subtleInk)
+                    .accessibilityIdentifier("TranscriptTimestamp")
+
+                if sentence.isLive {
+                    Circle()
+                        .fill(AppTheme.highlight)
+                        .frame(width: 4, height: 4)
+
+                    Text("LIVE")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(AppTheme.highlight)
+                }
+            }
+
+            Text(sentence.text)
+                .font(AppTheme.editorialFont(size: 17))
+                .lineSpacing(AppTheme.editorialBodyLineSpacing)
+                .foregroundStyle(AppTheme.ink.opacity(sentence.isLive ? 0.84 : 1))
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private func skeletonLine(width: CGFloat?, height: CGFloat, opacity: Double) -> some View {
@@ -65,105 +75,41 @@ struct TranscriptView: View {
             .frame(width: width, height: height)
     }
 
-    private func paragraphRow(
-        timeLabel: String,
-        speaker: String,
-        text: String,
-        isLive: Bool
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 7) {
-                Text(timeLabel)
-                    .font(.caption2.monospacedDigit().weight(.medium))
-                    .foregroundStyle(AppTheme.subtleInk)
-
-                if let speakerLabel = speakerLabel(for: speaker) {
-                    Text(speakerLabel)
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(AppTheme.mutedInk)
-                        .lineLimit(1)
-                }
-
-                if isLive {
-                    Circle()
-                        .fill(AppTheme.highlight)
-                        .frame(width: 5, height: 5)
-
-                    Text("LIVE")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(AppTheme.highlight)
-                }
-            }
-
-            Text(text)
-                .font(AppTheme.editorialFont(size: 20))
-                .lineSpacing(AppTheme.editorialBodyLineSpacing)
-                .foregroundStyle(AppTheme.ink.opacity(isLive ? 0.84 : 1))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var paragraphs: [TranscriptParagraph] {
-        var grouped: [TranscriptParagraph] = []
-
-        for segment in meeting.orderedSegments {
+    private var sentences: [TranscriptSentence] {
+        var items = meeting.orderedSegments.compactMap { segment -> TranscriptSentence? in
             let trimmedText = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmedText.isEmpty else { continue }
+            guard !trimmedText.isEmpty else { return nil }
 
-            if let last = grouped.last,
-               last.speaker == segment.speaker {
-                let mergedText = [last.text, trimmedText]
-                    .filter { !$0.isEmpty }
-                    .joined(separator: "\n\n")
-                grouped[grouped.count - 1] = TranscriptParagraph(
-                    id: last.id + "-" + segment.id,
-                    speaker: last.speaker,
-                    startTime: last.startTime,
-                    text: mergedText
-                )
-            } else {
-                grouped.append(
-                    TranscriptParagraph(
-                        id: segment.id,
-                        speaker: segment.speaker,
-                        startTime: segment.startTime,
-                        text: trimmedText
-                    )
-                )
-            }
+            return TranscriptSentence(
+                id: segment.id,
+                timeLabel: timeLabel(for: segment.startTime),
+                text: trimmedText,
+                isLive: false
+            )
         }
 
-        return grouped
-    }
-
-    private var showsLiveParagraph: Bool {
-        recordingSessionStore.meetingID == meeting.id && !recordingSessionStore.currentPartial.isEmpty
-    }
-
-    private var liveSpeakerName: String {
-        switch meeting.recordingMode {
-        case .microphone:
-            return ""
-        case .fileMix:
-            return "Mixed audio"
+        if showsLiveSentence {
+            items.append(
+                TranscriptSentence(
+                    id: "live-\(meeting.id)",
+                    timeLabel: recordingSessionStore.durationSeconds.mmss,
+                    text: recordingSessionStore.currentPartial.trimmingCharacters(in: .whitespacesAndNewlines),
+                    isLive: true
+                )
+            )
         }
+
+        return items
+    }
+
+    private var showsLiveSentence: Bool {
+        recordingSessionStore.meetingID == meeting.id &&
+            !recordingSessionStore.currentPartial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func timeLabel(for startTime: Double) -> String {
-        let normalizedMilliseconds = max(0, (startTime - baseTime) / 1000)
-        return TimeInterval(normalizedMilliseconds).mmss
-    }
-
-    private func speakerLabel(for speaker: String) -> String? {
-        let trimmed = speaker.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        let lowered = trimmed.lowercased()
-        if lowered == "speaker" || lowered == "mic" || lowered == "microphone" || trimmed == "麦克风" {
-            return nil
-        }
-
-        return trimmed
+        let normalizedSeconds = max(0, (startTime - baseTime) / 1000)
+        return TimeInterval(normalizedSeconds).mmss
     }
 
     private var baseTime: Double {

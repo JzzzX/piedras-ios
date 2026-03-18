@@ -24,22 +24,12 @@ struct NoteEditorView: View {
             }
 
             ZStack(alignment: .topLeading) {
-                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(placeholder)
-                        .font(AppTheme.editorialFont(size: 19))
-                        .foregroundStyle(AppTheme.subtleInk)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 10)
-                        .allowsHitTesting(false)
-                }
-
-                TextEditor(text: $text)
-                    .font(AppTheme.editorialFont(size: 19))
-                    .foregroundStyle(AppTheme.ink)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: minHeight)
-                    .padding(.horizontal, -5)
-                    .padding(.vertical, -8)
+                EditorialDocumentEditor(
+                    text: $text,
+                    placeholder: placeholder,
+                    minHeight: minHeight,
+                    fontSize: 17
+                )
             }
         }
     }

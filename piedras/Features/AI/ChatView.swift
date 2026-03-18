@@ -11,7 +11,7 @@ struct ChatView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .leading, spacing: 22) {
                     if meeting.orderedChatMessages.isEmpty {
                         Color.clear
                             .frame(height: 8)
@@ -39,7 +39,7 @@ struct ChatView: View {
     }
 
     private var messageList: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 22) {
             ForEach(meeting.orderedChatMessages) { message in
                 messageRow(message)
                     .id(message.id)
@@ -61,7 +61,7 @@ struct ChatView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 Text(message.content)
-                    .font(AppTheme.editorialFont(size: 20))
+                    .font(AppTheme.editorialFont(size: 17))
                     .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -80,7 +80,7 @@ struct ChatView: View {
 
                 TextField("Ask about this note", text: $input)
                     .textFieldStyle(.plain)
-                    .font(AppTheme.editorialFont(size: 18))
+                    .font(AppTheme.editorialFont(size: 16))
                     .foregroundStyle(AppTheme.ink)
                     .focused($isInputFocused)
                     .submitLabel(.send)
