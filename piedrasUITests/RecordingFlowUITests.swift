@@ -40,13 +40,13 @@ final class RecordingFlowUITests: XCTestCase {
     }
 
     @MainActor
-    func testInitialLaunchPromptsForBackendSetupWhenServerMissing() throws {
+    func testInitialLaunchShowsHomeWithoutBackendPrompt() throws {
         let app = XCUIApplication()
         app.launchArguments.append("UITEST_ISOLATED_DEFAULTS")
         app.launch()
 
-        XCTAssertTrue(app.staticTexts["Connect your Mac backend first."].waitForExistence(timeout: 5), "首次启动未展示后端配置引导。")
-        XCTAssertTrue(app.textFields["BackendURLField"].waitForExistence(timeout: 5), "后端地址输入框未出现。")
+        XCTAssertTrue(app.textFields["HomeGlobalChatField"].waitForExistence(timeout: 8), "首页未正常加载。")
+        XCTAssertFalse(app.staticTexts["Connect your Mac backend first."].exists, "不应再展示本地后端配置引导。")
     }
 
     @MainActor

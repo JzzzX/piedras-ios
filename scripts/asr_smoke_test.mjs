@@ -6,7 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 const targetSampleRate = 16000;
 const defaultChunkDurationMS = 100;
-const defaultBackendBaseURL = process.env.PIEDRAS_BACKEND_URL ?? 'http://127.0.0.1:3000';
+const defaultBackendBaseURL = process.env.PIEDRAS_BACKEND_URL ?? 'https://piedras-api.vercel.app';
 
 const [, , inputFilePath, backendBaseURL = defaultBackendBaseURL] = process.argv;
 

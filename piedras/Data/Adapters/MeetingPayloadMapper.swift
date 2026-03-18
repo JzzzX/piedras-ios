@@ -8,17 +8,25 @@ struct RemoteWorkspace: Decodable {
 struct RemoteASRStatus: Decodable {
     let mode: String
     let provider: String
+    let configured: Bool?
+    let reachable: Bool?
     let ready: Bool
     let missing: [String]
     let message: String
+    let checkedAt: Date?
+    let lastError: String?
 }
 
 struct RemoteLLMStatus: Decodable {
+    let configured: Bool?
+    let reachable: Bool?
     let ready: Bool
     let provider: String
     let model: String?
     let preset: String?
     let message: String
+    let checkedAt: Date?
+    let lastError: String?
 }
 
 struct RemoteASRSession: Decodable {

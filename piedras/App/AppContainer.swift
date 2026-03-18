@@ -40,7 +40,7 @@ final class AppContainer {
         router = AppRouter()
         settingsStore = SettingsStore(
             defaults: settingsDefaults,
-            defaultBackendBaseURLString: shouldDefaultToSimulatorBackend ? SettingsStore.simulatorLoopbackBaseURLString : ""
+            debugDefaultBackendBaseURLString: shouldDefaultToSimulatorBackend ? SettingsStore.simulatorLoopbackBaseURLString : nil
         )
         recordingSessionStore = RecordingSessionStore()
         appActivityCoordinator = AppActivityCoordinator()

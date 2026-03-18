@@ -2,7 +2,6 @@ import Foundation
 import Observation
 
 enum BackendConnectionState {
-    case unconfigured
     case configuredUnchecked
     case reachable
     case unreachable
@@ -19,27 +18,30 @@ enum RemoteCapabilityKind {
 @Observable
 final class SettingsStore {
     private enum Key {
-        static let backendBaseURLString = "piedras.settings.backendBaseURLString"
         static let hiddenWorkspaceID = "piedras.settings.hiddenWorkspaceID"
-        static let lastSuccessfulBackendURLString = "piedras.settings.lastSuccessfulBackendURLString"
+#if DEBUG
+        static let debugBackendBaseURLString = "piedras.settings.debugBackendBaseURLString"
+#endif
     }
 
     private let defaults: UserDefaults
 
-    var backendBaseURLString: String {
+#if DEBUG
+    var debugBackendBaseURLString: String {
         didSet {
-            defaults.set(backendBaseURLString, forKey: Key.backendBaseURLString)
+            defaults.set(debugBackendBaseURLString, forKey: Key.debugBackendBaseURLString)
 
-            guard normalized(backendBaseURLString) != normalized(oldValue) else {
+            guard normalized(debugBackendBaseURLString) != normalized(oldValue) else {
                 return
             }
 
             hiddenWorkspaceID = nil
             workspaceBootstrapState = .idle
-            workspaceStatusMessage = "等待连接后端"
+            workspaceStatusMessage = "等待连接云端"
             resetRemoteStatus()
         }
     }
+#endif
 
     var hiddenWorkspaceID: String? {
         didSet {
@@ -47,15 +49,11 @@ final class SettingsStore {
         }
     }
 
-    var lastSuccessfulBackendURLString: String? {
-        didSet {
-            defaults.set(lastSuccessfulBackendURLString, forKey: Key.lastSuccessfulBackendURLString)
-        }
-    }
-
     var apiReachable = false
     var asrReady = false
     var llmReady = false
+    var asrReachable = false
+    var llmReachable = false
     var lastHealthCheckAt: Date?
     var workspaceBootstrapState: WorkspaceBootstrapState = .idle
     var backendStatusMessage = "未检查"
@@ -69,59 +67,42 @@ final class SettingsStore {
     var isCheckingHealth = false
     var isSyncing = false
 
-    init(defaults: UserDefaults = .standard, defaultBackendBaseURLString: String = "") {
+    init(defaults: UserDefaults = .standard, debugDefaultBackendBaseURLString: String? = nil) {
         self.defaults = defaults
-        let storedBackendURLString = defaults.string(forKey: Key.backendBaseURLString)
-        let storedLastSuccessfulBackendURLString = defaults.string(forKey: Key.lastSuccessfulBackendURLString)
-        let migratedBackendURLString: String
-
-        if storedBackendURLString == Self.simulatorLoopbackBaseURLString,
-           (storedLastSuccessfulBackendURLString ?? "").isEmpty,
-           defaultBackendBaseURLString.isEmpty {
-            migratedBackendURLString = ""
-        } else {
-            migratedBackendURLString = storedBackendURLString ?? defaultBackendBaseURLString
-        }
-
-        backendBaseURLString = migratedBackendURLString
         hiddenWorkspaceID = defaults.string(forKey: Key.hiddenWorkspaceID)
-        lastSuccessfulBackendURLString = storedLastSuccessfulBackendURLString
-
-        if hasConfiguredBackendURL {
-            backendStatusMessage = "Connection not checked"
-            asrStatusMessage = "Check the server first"
-            llmStatusMessage = "Check the server first"
-            workspaceStatusMessage = "等待连接后端"
-        } else {
-            markBackendUnconfigured()
-        }
+#if DEBUG
+        debugBackendBaseURLString = defaults.string(forKey: Key.debugBackendBaseURLString)
+            ?? debugDefaultBackendBaseURLString
+            ?? ""
+#endif
+        workspaceStatusMessage = "等待连接云端"
+        resetRemoteStatus()
     }
 
     var backendBaseURL: URL? {
-        guard hasConfiguredBackendURL else {
-            return nil
+        #if DEBUG
+        let override = normalized(debugBackendBaseURLString)
+        if !override.isEmpty, let url = URL(string: override) {
+            return url
         }
+        #endif
 
-        return URL(string: trimmedBackendBaseURLString)
+        return AppEnvironment.productionBackendBaseURL
     }
 
-    var trimmedBackendBaseURLString: String {
-        normalized(backendBaseURLString)
+    var backendDisplayURLString: String {
+        backendBaseURL?.absoluteString ?? AppEnvironment.productionBackendBaseURLString
     }
 
     var hasConfiguredBackendURL: Bool {
-        !trimmedBackendBaseURLString.isEmpty
+        backendBaseURL != nil
     }
 
     var requiresInitialBackendSetup: Bool {
-        !hasConfiguredBackendURL
+        false
     }
 
     var backendConnectionState: BackendConnectionState {
-        if !hasConfiguredBackendURL {
-            return .unconfigured
-        }
-
         if apiReachable {
             return .reachable
         }
@@ -134,76 +115,90 @@ final class SettingsStore {
     }
 
     func blockingMessage(for capability: RemoteCapabilityKind) -> String? {
-        if !hasConfiguredBackendURL {
-            switch capability {
-            case .backend:
-                return "Set your Mac backend address in Settings."
-            case .ai:
-                return "Set your Mac backend address in Settings to use AI."
-            case .asr:
-                return "Set your Mac backend address in Settings to enable live transcription."
-            case .sync:
-                return "Set your Mac backend address in Settings before syncing."
-            }
-        }
-
         if lastHealthCheckAt != nil, !apiReachable {
             switch capability {
             case .backend, .sync:
-                return "Backend offline. Start ai_notepad on your Mac or update the server address in Settings."
-            case .ai:
-                return "Backend offline. Start ai_notepad on your Mac or update the server address in Settings."
-            case .asr:
-                return "Backend offline. Live transcription is unavailable until ai_notepad is running."
+                return "\(AppEnvironment.cloudName) 暂时不可用。"
+            case .ai, .asr:
+                return nil
             }
-        }
-
-        switch capability {
-        case .ai:
-            if lastHealthCheckAt != nil, apiReachable, !llmReady {
-                return "AI unavailable. Check the backend LLM status in Settings."
-            }
-        case .asr:
-            if lastHealthCheckAt != nil, apiReachable, !asrReady {
-                return "Transcription unavailable. Check the backend ASR status in Settings."
-            }
-        case .backend, .sync:
-            break
         }
 
         return nil
     }
 
-    func markBackendUnconfigured() {
-        apiReachable = false
-        asrReady = false
-        llmReady = false
-        lastHealthCheckAt = nil
-        backendStatusMessage = "Backend not configured"
-        asrStatusMessage = "Add a server first"
-        llmStatusMessage = "Add a server first"
-        llmProvider = "none"
-        llmModel = nil
-        llmPreset = nil
-    }
-
-    func markBackendReachable(message: String = "Backend online") {
+    func markBackendReachable(message: String = "\(AppEnvironment.cloudName) 在线") {
         apiReachable = true
         backendStatusMessage = message
         lastHealthCheckAt = .now
-        lastSuccessfulBackendURLString = trimmedBackendBaseURLString
     }
 
     func markBackendUnreachable(message: String) {
         apiReachable = false
         asrReady = false
         llmReady = false
+        asrReachable = false
+        llmReachable = false
         backendStatusMessage = message
-        asrStatusMessage = "Unavailable"
-        llmStatusMessage = "Unavailable"
+        asrStatusMessage = "服务不可用"
+        llmStatusMessage = "服务不可用"
         llmProvider = "none"
         llmModel = nil
         llmPreset = nil
+        lastHealthCheckAt = .now
+    }
+
+    func updateASRStatus(_ status: RemoteASRStatus) {
+        asrReady = status.ready
+        asrReachable = status.reachable ?? status.ready
+        asrStatusMessage = status.message
+        if let checkedAt = status.checkedAt {
+            lastHealthCheckAt = checkedAt
+        }
+    }
+
+    func updateLLMStatus(_ status: RemoteLLMStatus) {
+        llmReady = status.ready
+        llmReachable = status.reachable ?? status.ready
+        llmStatusMessage = status.message
+        llmProvider = status.provider
+        llmModel = status.model
+        llmPreset = status.preset
+        if let checkedAt = status.checkedAt {
+            lastHealthCheckAt = checkedAt
+        }
+    }
+
+    func markLLMRequestSucceeded(provider: String? = nil) {
+        apiReachable = true
+        llmReady = true
+        llmReachable = true
+        llmStatusMessage = "AI 服务可用"
+        lastHealthCheckAt = .now
+        if let provider, !provider.isEmpty {
+            llmProvider = provider
+        }
+    }
+
+    func markLLMRequestFailed(message: String) {
+        llmReady = false
+        llmReachable = false
+        llmStatusMessage = message
+        lastHealthCheckAt = .now
+    }
+
+    func markASRStreamSucceeded() {
+        apiReachable = true
+        asrReady = true
+        asrReachable = true
+        asrStatusMessage = "实时转写已连接"
+        lastHealthCheckAt = .now
+    }
+
+    func markASRStreamFailed(message: String) {
+        asrReady = false
+        asrReachable = false
+        asrStatusMessage = message
         lastHealthCheckAt = .now
     }
 
@@ -211,20 +206,45 @@ final class SettingsStore {
         apiReachable = false
         asrReady = false
         llmReady = false
+        asrReachable = false
+        llmReachable = false
         lastHealthCheckAt = nil
         llmProvider = "none"
         llmModel = nil
         llmPreset = nil
+        backendStatusMessage = "等待检查"
+        asrStatusMessage = "等待检查"
+        llmStatusMessage = "等待检查"
+    }
 
-        if hasConfiguredBackendURL {
-            backendStatusMessage = "Connection not checked"
-            asrStatusMessage = "Check the server first"
-            llmStatusMessage = "Check the server first"
-        } else {
-            backendStatusMessage = "Backend not configured"
-            asrStatusMessage = "Add a server first"
-            llmStatusMessage = "Add a server first"
-        }
+    var backendHostLabel: String {
+        backendBaseURL?.host ?? AppEnvironment.cloudName
+    }
+
+    var serviceModeLabel: String {
+        #if DEBUG
+        return isUsingDebugBackendOverride ? "Debug" : "Cloud"
+        #else
+        return "Cloud"
+        #endif
+    }
+
+    #if DEBUG
+    var isUsingDebugBackendOverride: Bool {
+        !normalized(debugBackendBaseURLString).isEmpty
+    }
+
+    func clearDebugBackendOverride() {
+        debugBackendBaseURLString = ""
+    }
+    #else
+    var isUsingDebugBackendOverride: Bool {
+        false
+    }
+    #endif
+
+    func markBackendUnconfigured() {
+        resetRemoteStatus()
     }
 
     static let simulatorLoopbackBaseURLString = "http://127.0.0.1:3000"

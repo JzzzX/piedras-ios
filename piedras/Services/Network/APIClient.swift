@@ -13,7 +13,7 @@ enum APIClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingBaseURL:
-            return "请先在设置中填写可访问的后端地址。"
+            return "服务地址不可用。"
         case .invalidResponse:
             return "后端返回了无法识别的响应。"
         case let .requestFailed(message):

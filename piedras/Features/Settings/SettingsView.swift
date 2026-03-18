@@ -6,8 +6,6 @@ struct SettingsView: View {
     @Environment(MeetingStore.self) private var meetingStore
 
     var body: some View {
-        @Bindable var settingsStore = settingsStore
-
         ZStack {
             AppGlassBackdrop()
 
@@ -15,57 +13,31 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     header
 
-                    if settingsStore.requiresInitialBackendSetup {
-                        setupBanner
-                    }
-
                     AppGlassCard(cornerRadius: 34, style: .regular, padding: 20, shadowOpacity: 0.08) {
                         VStack(spacing: 0) {
+                            settingsRow(systemName: "network", title: "Service", value: settingsStore.serviceModeLabel)
+                            AppGlassDivider(inset: 42)
                             settingsRow(systemName: "mic.fill", title: "Recording", value: "16 kHz")
                             AppGlassDivider(inset: 42)
-                            settingsRow(systemName: "waveform", title: "Transcript", value: transcriptValue)
-                            AppGlassDivider(inset: 42)
-                            settingsRow(systemName: "sparkles", title: "AI", value: aiValue)
-                            AppGlassDivider(inset: 42)
                             settingsRow(systemName: "internaldrive", title: "Storage", value: "On Device")
+                            AppGlassDivider(inset: 42)
+                            settingsRow(systemName: "app.badge", title: "Version", value: AppEnvironment.versionDescription)
                         }
                     }
 
                     AppGlassCard(cornerRadius: 34, style: .regular, padding: 20, shadowOpacity: 0.08) {
                         VStack(alignment: .leading, spacing: 14) {
-                            Text("Backend Setup")
+                            Text(AppEnvironment.cloudName)
                                 .font(.headline)
                                 .foregroundStyle(AppTheme.ink)
 
-                            TextField("http://192.168.x.x:3000", text: $settingsStore.backendBaseURLString)
-                                .textInputAutocapitalization(.never)
-                                .keyboardType(.URL)
-                                .autocorrectionDisabled()
-                                .padding(.horizontal, 14)
-                                .frame(height: 50)
-                                .background {
-                                    AppGlassSurface(cornerRadius: 18, style: .clear, shadowOpacity: 0.03)
-                                }
-                                .accessibilityIdentifier("BackendURLField")
-
-                            HStack(spacing: 10) {
-                                Button("Use localhost") {
-                                    settingsStore.backendBaseURLString = SettingsStore.simulatorLoopbackBaseURLString
-                                }
-                                .buttonStyle(.plain)
-                                .font(.footnote.weight(.medium))
-                                .foregroundStyle(AppTheme.ink)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 10)
-                                .background {
-                                    AppGlassSurface(cornerRadius: 18, style: .clear, shadowOpacity: 0.03)
-                                }
-
-                                Spacer()
-                            }
+                            Text(settingsStore.backendDisplayURLString)
+                                .font(.footnote)
+                                .foregroundStyle(AppTheme.subtleInk)
+                                .textSelection(.enabled)
 
                             AppGlassCapsuleButton(
-                                prominent: canCheckBackend,
+                                prominent: !settingsStore.isCheckingHealth,
                                 minHeight: 48,
                                 action: {
                                     Task {
@@ -73,15 +45,26 @@ struct SettingsView: View {
                                     }
                                 }
                             ) {
-                                Text(settingsStore.isCheckingHealth ? "Checking..." : "Check Connection")
+                                Text(settingsStore.isCheckingHealth ? "Checking..." : "Refresh Status")
                                     .font(.headline)
-                                    .foregroundStyle(canCheckBackend && !settingsStore.isCheckingHealth ? .white : AppTheme.subtleInk)
+                                    .foregroundStyle(settingsStore.isCheckingHealth ? AppTheme.subtleInk : .white)
                             }
-                            .disabled(!canCheckBackend || settingsStore.isCheckingHealth)
+                            .disabled(settingsStore.isCheckingHealth)
 
-                            Text(serverHelpText)
+                            Text(cloudHelpText)
                                 .font(.footnote)
                                 .foregroundStyle(AppTheme.subtleInk)
+
+                            #if DEBUG
+                            if settingsStore.isUsingDebugBackendOverride {
+                                Button("Use Cloud Default") {
+                                    settingsStore.clearDebugBackendOverride()
+                                }
+                                .buttonStyle(.plain)
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(AppTheme.ink)
+                            }
+                            #endif
                         }
                     }
 
@@ -115,40 +98,16 @@ struct SettingsView: View {
                     .font(.system(size: 36, weight: .regular, design: .serif))
                     .foregroundStyle(AppTheme.ink)
 
-                Text("Backend & status")
+                Text("Service & status")
                     .font(.subheadline)
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
             Spacer()
 
-            if !settingsStore.requiresInitialBackendSetup {
-                AppGlassCircleButton(systemName: "xmark", accessibilityLabel: "关闭") {
-                    dismiss()
-                }
+            AppGlassCircleButton(systemName: "xmark", accessibilityLabel: "关闭") {
+                dismiss()
             }
-        }
-    }
-
-    private var setupBanner: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "macbook.and.iphone")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(AppTheme.ink)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Connect your Mac backend first.")
-                    .font(.headline)
-                    .foregroundStyle(AppTheme.ink)
-
-                Text("AI and live transcription stay off until a server address is configured.")
-                    .font(.footnote)
-                    .foregroundStyle(AppTheme.subtleInk)
-            }
-        }
-        .padding(16)
-        .background {
-            AppGlassSurface(cornerRadius: 22, style: .clear, shadowOpacity: 0.03)
         }
     }
 
@@ -192,23 +151,14 @@ struct SettingsView: View {
         .padding(.vertical, 14)
     }
 
-    private var canCheckBackend: Bool {
-        settingsStore.hasConfiguredBackendURL
-    }
-
-    private var serverHelpText: String {
+    private var cloudHelpText: String {
         switch settingsStore.backendConnectionState {
-        case .unconfigured:
-            return "On iPhone, use your Mac LAN address. On Simulator, localhost also works."
         case .configuredUnchecked:
-            return "Save an address, then run Check Connection."
+            return "Connects to \(AppEnvironment.cloudName) by default."
         case .reachable:
-            return "Current server: \(settingsStore.trimmedBackendBaseURLString)"
+            return "Current endpoint: \(settingsStore.backendHostLabel)"
         case .unreachable:
-            if let lastSuccessful = settingsStore.lastSuccessfulBackendURLString, !lastSuccessful.isEmpty {
-                return "Last working server: \(lastSuccessful)"
-            }
-            return "The configured server is offline or unreachable."
+            return "\(AppEnvironment.cloudName) is offline or unreachable."
         }
     }
 
@@ -219,10 +169,8 @@ struct SettingsView: View {
 
     private var transcriptValue: String {
         switch settingsStore.backendConnectionState {
-        case .unconfigured:
-            return "Setup"
         case .configuredUnchecked:
-            return "Needs Check"
+            return "Standby"
         case .reachable:
             return settingsStore.asrReady ? "Ready" : "Unavailable"
         case .unreachable:
@@ -232,10 +180,8 @@ struct SettingsView: View {
 
     private var aiValue: String {
         switch settingsStore.backendConnectionState {
-        case .unconfigured:
-            return "Setup"
         case .configuredUnchecked:
-            return "Needs Check"
+            return "Standby"
         case .reachable:
             return settingsStore.llmReady ? "Ready" : "Unavailable"
         case .unreachable:
@@ -245,10 +191,8 @@ struct SettingsView: View {
 
     private var backendStateLabel: String {
         switch settingsStore.backendConnectionState {
-        case .unconfigured:
-            return "Setup required"
         case .configuredUnchecked:
-            return "Not checked"
+            return "Standby"
         case .reachable:
             return settingsStore.backendStatusMessage
         case .unreachable:
@@ -258,10 +202,8 @@ struct SettingsView: View {
 
     private var asrStateLabel: String {
         switch settingsStore.backendConnectionState {
-        case .unconfigured:
-            return "Set backend first"
         case .configuredUnchecked:
-            return "Check connection first"
+            return "Standby"
         case .reachable, .unreachable:
             return settingsStore.asrStatusMessage
         }
@@ -269,10 +211,8 @@ struct SettingsView: View {
 
     private var llmStateLabel: String {
         switch settingsStore.backendConnectionState {
-        case .unconfigured:
-            return "Set backend first"
         case .configuredUnchecked:
-            return "Check connection first"
+            return "Standby"
         case .unreachable:
             return "Offline"
         case .reachable:

@@ -58,10 +58,12 @@ final class MeetingStore {
             self?.handlePCMChunk(data)
         }
         self.asrService.onStateChange = { [weak self] state in
-            self?.recordingSessionStore.asrState = state
+            guard let self else { return }
+            self.recordingSessionStore.asrState = state
             if state == .connected {
-                self?.recordingSessionStore.infoBanner = nil
-                self?.recordingSessionStore.errorBanner = nil
+                self.recordingSessionStore.infoBanner = nil
+                self.recordingSessionStore.errorBanner = nil
+                self.settingsStore.markASRStreamSucceeded()
             }
         }
         self.asrService.onPartialText = { [weak self] partial in
@@ -71,7 +73,9 @@ final class MeetingStore {
             self?.handleFinalTranscript(result)
         }
         self.asrService.onError = { [weak self] message in
+            self?.recordingSessionStore.infoBanner = "实时转写暂时不可用，录音会继续。"
             self?.recordingSessionStore.errorBanner = message
+            self?.settingsStore.markASRStreamFailed(message: message)
         }
     }
 
@@ -325,11 +329,6 @@ final class MeetingStore {
     }
 
     func checkBackendHealth(force: Bool = true) async {
-        guard settingsStore.hasConfiguredBackendURL else {
-            settingsStore.markBackendUnconfigured()
-            return
-        }
-
         if !force,
            let lastHealthCheckAt = settingsStore.lastHealthCheckAt,
            Date().timeIntervalSince(lastHealthCheckAt) < 60 {
@@ -343,28 +342,45 @@ final class MeetingStore {
         settingsStore.isCheckingHealth = true
         defer { settingsStore.isCheckingHealth = false }
 
+        var asrError: Error?
+        var llmError: Error?
+        var didReachBackend = false
+
         do {
             let asrStatus = try await apiClient.fetchASRStatus()
             settingsStore.markBackendReachable()
-            settingsStore.asrReady = asrStatus.ready
-            settingsStore.asrStatusMessage = asrStatus.message
-
-            do {
-                let llmStatus = try await apiClient.fetchLLMStatus()
-                settingsStore.llmReady = llmStatus.ready
-                settingsStore.llmStatusMessage = llmStatus.message
-                settingsStore.llmProvider = llmStatus.provider
-                settingsStore.llmModel = llmStatus.model
-                settingsStore.llmPreset = llmStatus.preset
-            } catch {
-                settingsStore.llmReady = false
-                settingsStore.llmStatusMessage = error.localizedDescription
-                settingsStore.llmProvider = "none"
-                settingsStore.llmModel = nil
-                settingsStore.llmPreset = nil
-            }
+            settingsStore.updateASRStatus(asrStatus)
+            didReachBackend = true
         } catch {
-            settingsStore.markBackendUnreachable(message: error.localizedDescription)
+            asrError = error
+        }
+
+        do {
+            let llmStatus = try await apiClient.fetchLLMStatus()
+            if !didReachBackend {
+                settingsStore.markBackendReachable()
+            }
+            settingsStore.updateLLMStatus(llmStatus)
+            didReachBackend = true
+        } catch {
+            llmError = error
+        }
+
+        guard didReachBackend else {
+            settingsStore.markBackendUnreachable(
+                message: asrError?.localizedDescription
+                    ?? llmError?.localizedDescription
+                    ?? "\(AppEnvironment.cloudName) 暂时不可用。"
+            )
+            return
+        }
+
+        if let asrError {
+            settingsStore.markASRStreamFailed(message: asrError.localizedDescription)
+        }
+
+        if let llmError {
+            settingsStore.markLLMRequestFailed(message: llmError.localizedDescription)
         }
     }
 
@@ -423,7 +439,7 @@ final class MeetingStore {
         guard let meeting = meeting(withID: meetingID) else { return }
         guard !enhancingMeetingIDs.contains(meetingID) else { return }
         guard await ensureAIReady(force: false) else {
-            lastErrorMessage = settingsStore.blockingMessage(for: .ai) ?? "AI unavailable."
+            lastErrorMessage = "\(AppEnvironment.cloudName) 暂时不可用。"
             return
         }
 
@@ -435,10 +451,12 @@ final class MeetingStore {
             meeting.enhancedNotes = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
             meeting.markPending()
             try repository.save()
+            settingsStore.markLLMRequestSucceeded(provider: response.provider)
             loadMeetings()
             await syncMeetingIfPossible(meetingID: meetingID)
         } catch {
             lastErrorMessage = error.localizedDescription
+            settingsStore.markLLMRequestFailed(message: error.localizedDescription)
         }
     }
 
@@ -448,7 +466,7 @@ final class MeetingStore {
         guard let meeting = meeting(withID: meetingID) else { return false }
         guard !streamingChatMeetingIDs.contains(meetingID) else { return false }
         guard await ensureAIReady(force: false) else {
-            lastErrorMessage = settingsStore.blockingMessage(for: .ai) ?? "AI unavailable."
+            lastErrorMessage = "\(AppEnvironment.cloudName) 暂时不可用。"
             return false
         }
 
@@ -482,6 +500,7 @@ final class MeetingStore {
             assistantMessage.timestamp = .now
             meeting.markPending()
             try repository.save()
+            settingsStore.markLLMRequestSucceeded()
             await syncMeetingIfPossible(meetingID: meetingID)
             return true
         } catch {
@@ -489,6 +508,7 @@ final class MeetingStore {
             repository.delete(assistantMessage)
             try? repository.save()
             lastErrorMessage = error.localizedDescription
+            settingsStore.markLLMRequestFailed(message: error.localizedDescription)
             return false
         }
     }
@@ -571,11 +591,6 @@ final class MeetingStore {
     }
 
     private func ensureBackendReachable(force: Bool) async -> Bool {
-        guard settingsStore.hasConfiguredBackendURL else {
-            settingsStore.markBackendUnconfigured()
-            return false
-        }
-
         let shouldCheck = force || settingsStore.lastHealthCheckAt == nil || Date().timeIntervalSince(settingsStore.lastHealthCheckAt ?? .distantPast) > 60
         if shouldCheck {
             await checkBackendHealth(force: true)
@@ -584,19 +599,11 @@ final class MeetingStore {
     }
 
     private func ensureAIReady(force: Bool) async -> Bool {
-        guard await ensureBackendReachable(force: force) else {
-            return false
-        }
-
-        return settingsStore.llmReady
+        await ensureBackendReachable(force: force)
     }
 
     private func ensureASRReady(force: Bool) async -> Bool {
-        guard await ensureBackendReachable(force: force) else {
-            return false
-        }
-
-        return settingsStore.asrReady
+        await ensureBackendReachable(force: force)
     }
 
     private func scheduleMeetingSync(meetingID: String, delay: Duration) {
@@ -641,9 +648,11 @@ final class MeetingStore {
                     meeting.title = generatedTitle
                     meeting.markPending()
                     try repository.save()
+                    settingsStore.markLLMRequestSucceeded(provider: titleResponse.provider)
                 }
             } catch {
                 lastErrorMessage = error.localizedDescription
+                settingsStore.markLLMRequestFailed(message: error.localizedDescription)
             }
         }
 
@@ -657,9 +666,11 @@ final class MeetingStore {
                     meeting.enhancedNotes = content
                     meeting.markPending()
                     try repository.save()
+                    settingsStore.markLLMRequestSucceeded(provider: response.provider)
                 }
             } catch {
                 lastErrorMessage = error.localizedDescription
+                settingsStore.markLLMRequestFailed(message: error.localizedDescription)
             }
         }
 
@@ -672,8 +683,8 @@ final class MeetingStore {
 
         guard await ensureASRReady(force: true) else {
             guard recordingSessionStore.meetingID == meetingID else { return }
-            recordingSessionStore.asrState = settingsStore.hasConfiguredBackendURL ? .degraded : .idle
-            recordingSessionStore.infoBanner = settingsStore.blockingMessage(for: .asr)
+            recordingSessionStore.asrState = .degraded
+            recordingSessionStore.infoBanner = "实时转写暂时不可用，录音会继续。"
             return
         }
 
@@ -693,7 +704,9 @@ final class MeetingStore {
         } catch {
             guard recordingSessionStore.meetingID == meetingID else { return }
             recordingSessionStore.asrState = .degraded
+            recordingSessionStore.infoBanner = "实时转写暂时不可用，录音会继续。"
             recordingSessionStore.errorBanner = "实时转写未启动：\(error.localizedDescription)"
+            settingsStore.markASRStreamFailed(message: error.localizedDescription)
         }
     }
 
@@ -703,7 +716,7 @@ final class MeetingStore {
 
             if meeting.lastSyncedAt != nil || meeting.syncState == .synced || meeting.audioRemotePath != nil {
                 guard await ensureBackendReachable(force: true) else {
-                    lastErrorMessage = settingsStore.blockingMessage(for: .backend) ?? "Backend unavailable."
+                    lastErrorMessage = settingsStore.blockingMessage(for: .backend) ?? "\(AppEnvironment.cloudName) 暂时不可用。"
                     return
                 }
 

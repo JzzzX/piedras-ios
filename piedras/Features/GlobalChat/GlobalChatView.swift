@@ -282,11 +282,6 @@ struct GlobalChatView: View {
 
     private func prepareAIRequest() async -> Bool {
         await meetingStore.checkBackendHealth(force: false)
-
-        if settingsStore.requiresInitialBackendSetup {
-            router.showSettings()
-        }
-
-        return settingsStore.blockingMessage(for: .ai) == nil
+        return true
     }
 }

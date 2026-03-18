@@ -46,11 +46,6 @@ final class GlobalChatStore {
         guard !trimmedQuestion.isEmpty else { return false }
         guard !isStreaming else { return false }
 
-        if let blockingMessage = settingsStore.blockingMessage(for: .ai) {
-            lastErrorMessage = blockingMessage
-            return false
-        }
-
         lastErrorMessage = nil
         isStreaming = true
 
@@ -83,10 +78,12 @@ final class GlobalChatStore {
                 messages[index].content = "当前没有返回内容。"
             }
 
+            settingsStore.markLLMRequestSucceeded()
             return true
         } catch {
             messages.removeAll(where: { $0.id == assistantMessageID })
             lastErrorMessage = error.localizedDescription
+            settingsStore.markLLMRequestFailed(message: error.localizedDescription)
             return false
         }
     }
