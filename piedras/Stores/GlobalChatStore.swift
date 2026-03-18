@@ -20,6 +20,13 @@ struct GlobalChatMessage: Identifiable, Hashable {
     }
 }
 
+enum GlobalChatPhase {
+    case idle
+    case preparing
+    case streaming
+    case failed
+}
+
 @MainActor
 @Observable
 final class GlobalChatStore {
@@ -28,8 +35,13 @@ final class GlobalChatStore {
     private let workspaceBootstrapService: WorkspaceBootstrapService
 
     var messages: [GlobalChatMessage] = []
-    var isStreaming = false
+    var phase: GlobalChatPhase = .idle
+    var statusMessage: String?
     var lastErrorMessage: String?
+
+    var isStreaming: Bool {
+        phase == .streaming
+    }
 
     init(
         apiClient: APIClient,
@@ -44,10 +56,11 @@ final class GlobalChatStore {
     func sendMessage(_ question: String) async -> Bool {
         let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuestion.isEmpty else { return false }
-        guard !isStreaming else { return false }
+        guard phase != .streaming else { return false }
 
         lastErrorMessage = nil
-        isStreaming = true
+        statusMessage = "AI 正在生成"
+        phase = .streaming
 
         let userMessage = GlobalChatMessage(role: "user", content: trimmedQuestion)
         let assistantMessageID = UUID().uuidString.lowercased()
@@ -55,7 +68,11 @@ final class GlobalChatStore {
         messages.append(userMessage)
         messages.append(GlobalChatMessage(id: assistantMessageID, role: "assistant", content: ""))
 
-        defer { isStreaming = false }
+        defer {
+            if phase != .failed {
+                phase = .idle
+            }
+        }
 
         do {
             let workspaceID = try await resolveWorkspaceID()
@@ -78,18 +95,42 @@ final class GlobalChatStore {
                 messages[index].content = "当前没有返回内容。"
             }
 
+            statusMessage = nil
             settingsStore.markLLMRequestSucceeded()
             return true
         } catch {
             messages.removeAll(where: { $0.id == assistantMessageID })
             lastErrorMessage = error.localizedDescription
+            statusMessage = nil
+            phase = .failed
             settingsStore.markLLMRequestFailed(message: error.localizedDescription)
             return false
         }
     }
 
+    func beginPreparing() {
+        lastErrorMessage = nil
+        statusMessage = "正在检查 AI 服务"
+        phase = .preparing
+    }
+
+    func finishPreparing() {
+        if phase == .preparing {
+            statusMessage = nil
+            phase = .idle
+        }
+    }
+
+    func failPreparing(message: String) {
+        lastErrorMessage = message
+        statusMessage = nil
+        phase = .failed
+    }
+
     func resetConversation() {
         messages.removeAll()
+        phase = .idle
+        statusMessage = nil
         lastErrorMessage = nil
     }
 

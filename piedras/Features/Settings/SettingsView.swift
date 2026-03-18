@@ -152,12 +152,14 @@ struct SettingsView: View {
     }
 
     private var cloudHelpText: String {
-        switch settingsStore.backendConnectionState {
-        case .configuredUnchecked:
+        switch settingsStore.backendCapabilityStatus {
+        case .checking:
+            return "Checking current endpoint and capabilities."
+        case .standby:
             return "Connects to \(AppEnvironment.cloudName) by default."
-        case .reachable:
+        case .ready:
             return "Current endpoint: \(settingsStore.backendHostLabel)"
-        case .unreachable:
+        case .offline, .unavailable:
             return "\(AppEnvironment.cloudName) is offline or unreachable."
         }
     }
@@ -190,32 +192,38 @@ struct SettingsView: View {
     }
 
     private var backendStateLabel: String {
-        switch settingsStore.backendConnectionState {
-        case .configuredUnchecked:
+        switch settingsStore.backendCapabilityStatus {
+        case .checking:
+            return "Checking..."
+        case .standby:
             return "Standby"
-        case .reachable:
+        case .ready:
             return settingsStore.backendStatusMessage
-        case .unreachable:
-            return "Offline"
+        case .offline, .unavailable:
+            return settingsStore.backendStatusMessage
         }
     }
 
     private var asrStateLabel: String {
-        switch settingsStore.backendConnectionState {
-        case .configuredUnchecked:
+        switch settingsStore.asrCapabilityStatus {
+        case .checking:
+            return "Checking..."
+        case .standby:
             return "Standby"
-        case .reachable, .unreachable:
+        case .ready, .unavailable, .offline:
             return settingsStore.asrStatusMessage
         }
     }
 
     private var llmStateLabel: String {
-        switch settingsStore.backendConnectionState {
-        case .configuredUnchecked:
+        switch settingsStore.llmCapabilityStatus {
+        case .checking:
+            return "Checking..."
+        case .standby:
             return "Standby"
-        case .unreachable:
-            return "Offline"
-        case .reachable:
+        case .offline, .unavailable:
+            return settingsStore.llmStatusMessage
+        case .ready:
             guard settingsStore.llmReady else {
                 return settingsStore.llmStatusMessage
             }

@@ -11,6 +11,7 @@ struct LocalAudioArtifact {
 final class AudioRecorderService: NSObject {
     var onProgress: ((Double, Int) -> Void)?
     var onPCMData: ((Data) -> Void)?
+    var onCaptureStateChange: ((String) -> Void)?
 
     private let sessionCoordinator: AudioSessionCoordinator
     private var recorder: AVAudioRecorder?
@@ -57,6 +58,7 @@ final class AudioRecorderService: NSObject {
         recordingURL = outputURL
         accumulatedDuration = 0
         recordingStartedAt = .now
+        onCaptureStateChange?("麦克风已启动")
         try startPCMStreaming()
         startMetering()
         onProgress?(0, 0)
@@ -75,6 +77,7 @@ final class AudioRecorderService: NSObject {
         audioEngine.pause()
         stopMetering()
         recorder.updateMeters()
+        onCaptureStateChange?("录音已暂停")
         onProgress?(normalizedPower(from: recorder), Int(accumulatedDuration.rounded()))
     }
 
@@ -92,6 +95,7 @@ final class AudioRecorderService: NSObject {
         if !audioEngine.isRunning {
             try startPCMStreaming()
         }
+        onCaptureStateChange?("麦克风已恢复")
         startMetering()
     }
 
@@ -108,6 +112,7 @@ final class AudioRecorderService: NSObject {
         self.recordingURL = nil
         recordingStartedAt = nil
         accumulatedDuration = 0
+        onCaptureStateChange?("录音已停止")
         sessionCoordinator.deactivate()
 
         return LocalAudioArtifact(
@@ -173,6 +178,7 @@ final class AudioRecorderService: NSObject {
 
         audioEngine.stop()
         audioEngine.reset()
+        onCaptureStateChange?("PCM 采集已停止")
     }
 
     private func normalizedPower(from recorder: AVAudioRecorder) -> Double {

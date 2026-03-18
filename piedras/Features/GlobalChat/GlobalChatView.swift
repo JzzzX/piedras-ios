@@ -27,6 +27,8 @@ struct GlobalChatView: View {
 
                         if let availabilityMessage {
                             statusBanner(availabilityMessage)
+                        } else if let statusMessage = globalChatStore.statusMessage {
+                            statusBanner(statusMessage)
                         }
 
                         if globalChatStore.messages.isEmpty {
@@ -260,7 +262,7 @@ struct GlobalChatView: View {
     }
 
     private var isComposerBlocked: Bool {
-        availabilityMessage != nil
+        availabilityMessage != nil || globalChatStore.phase == .preparing
     }
 
     private var trimmedInput: String {
@@ -281,7 +283,19 @@ struct GlobalChatView: View {
     }
 
     private func prepareAIRequest() async -> Bool {
-        await meetingStore.checkBackendHealth(force: false)
+        globalChatStore.beginPreparing()
+        let isReady = await meetingStore.prepareAI(force: false)
+
+        guard isReady else {
+            let message = settingsStore.blockingMessage(for: .ai)
+                ?? (settingsStore.llmStatusMessage.isEmpty
+                    ? "\(AppEnvironment.cloudName) 暂时不可用。"
+                    : settingsStore.llmStatusMessage)
+            globalChatStore.failPreparing(message: message)
+            return false
+        }
+
+        globalChatStore.finishPreparing()
         return true
     }
 }

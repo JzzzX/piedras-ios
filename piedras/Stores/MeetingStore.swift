@@ -54,7 +54,11 @@ final class MeetingStore {
         self.audioRecorderService.onProgress = { [weak self] level, duration in
             self?.handleRecordingProgress(level: level, duration: duration)
         }
+        self.audioRecorderService.onCaptureStateChange = { [weak self] state in
+            self?.recordingSessionStore.audioCaptureState = state
+        }
         self.audioRecorderService.onPCMData = { [weak self] data in
+            self?.recordingSessionStore.registerCapturedPCM(bytes: data.count)
             self?.handlePCMChunk(data)
         }
         self.asrService.onStateChange = { [weak self] state in
@@ -65,6 +69,12 @@ final class MeetingStore {
                 self.recordingSessionStore.errorBanner = nil
                 self.settingsStore.markASRStreamSucceeded()
             }
+        }
+        self.asrService.onTransportEvent = { [weak self] message in
+            self?.recordingSessionStore.lastASRTransportMessage = message
+        }
+        self.asrService.onPCMChunkSent = { [weak self] bytes in
+            self?.recordingSessionStore.registerSentPCM(bytes: bytes)
         }
         self.asrService.onPartialText = { [weak self] partial in
             self?.recordingSessionStore.currentPartial = partial
@@ -200,7 +210,7 @@ final class MeetingStore {
         do {
             recordingSessionStore.errorBanner = nil
             recordingSessionStore.infoBanner = nil
-            recordingSessionStore.currentPartial = ""
+            recordingSessionStore.beginSession()
             recordingSessionStore.asrState = .connecting
             recordingSessionStore.meetingID = meetingID
             recordingSessionStore.phase = .starting
@@ -329,57 +339,86 @@ final class MeetingStore {
     }
 
     func checkBackendHealth(force: Bool = true) async {
-        if !force,
-           let lastHealthCheckAt = settingsStore.lastHealthCheckAt,
-           Date().timeIntervalSince(lastHealthCheckAt) < 60 {
+        if !needsFreshHealthCheck(force: force) {
             return
         }
 
         if settingsStore.isCheckingHealth {
+            while settingsStore.isCheckingHealth {
+                try? await Task.sleep(for: .milliseconds(120))
+            }
             return
         }
 
         settingsStore.isCheckingHealth = true
         defer { settingsStore.isCheckingHealth = false }
 
+        var backendError: Error?
         var asrError: Error?
         var llmError: Error?
         var didReachBackend = false
+        var backendHealth: RemoteBackendHealth?
 
         do {
-            let asrStatus = try await apiClient.fetchASRStatus()
-            settingsStore.markBackendReachable()
-            settingsStore.updateASRStatus(asrStatus)
+            backendHealth = try await apiClient.fetchBackendHealth()
+            settingsStore.markBackendReachable(
+                message: backendStatusMessage(from: backendHealth),
+                checkedAt: backendHealth?.checkedAt
+            )
             didReachBackend = true
         } catch {
-            asrError = error
+            backendError = error
         }
 
-        do {
-            let llmStatus = try await apiClient.fetchLLMStatus()
-            if !didReachBackend {
-                settingsStore.markBackendReachable()
+        if let asrStatus = backendHealth?.asr {
+            settingsStore.updateASRStatus(asrStatus)
+        } else {
+            do {
+                let asrStatus = try await apiClient.fetchASRStatus()
+                if !didReachBackend {
+                    settingsStore.markBackendReachable(
+                        checkedAt: asrStatus.checkedAt
+                    )
+                }
+                settingsStore.updateASRStatus(asrStatus)
+                didReachBackend = true
+            } catch {
+                asrError = error
             }
+        }
+
+        if let llmStatus = backendHealth?.llm {
             settingsStore.updateLLMStatus(llmStatus)
-            didReachBackend = true
-        } catch {
-            llmError = error
+        } else {
+            do {
+                let llmStatus = try await apiClient.fetchLLMStatus()
+                if !didReachBackend {
+                    settingsStore.markBackendReachable(
+                        checkedAt: llmStatus.checkedAt
+                    )
+                }
+                settingsStore.updateLLMStatus(llmStatus)
+                didReachBackend = true
+            } catch {
+                llmError = error
+            }
         }
 
         guard didReachBackend else {
             settingsStore.markBackendUnreachable(
-                message: asrError?.localizedDescription
+                message: backendError?.localizedDescription
+                    ?? asrError?.localizedDescription
                     ?? llmError?.localizedDescription
                     ?? "\(AppEnvironment.cloudName) 暂时不可用。"
             )
             return
         }
 
-        if let asrError {
+        if backendHealth?.asr == nil, let asrError {
             settingsStore.markASRStreamFailed(message: asrError.localizedDescription)
         }
 
-        if let llmError {
+        if backendHealth?.llm == nil, let llmError {
             settingsStore.markLLMRequestFailed(message: llmError.localizedDescription)
         }
     }
@@ -521,6 +560,10 @@ final class MeetingStore {
         streamingChatMeetingIDs.contains(meetingID)
     }
 
+    func prepareAI(force: Bool = false) async -> Bool {
+        await ensureAIReady(force: force)
+    }
+
     private func currentRecordingMeeting() -> Meeting? {
         guard let meetingID = recordingSessionStore.meetingID else { return nil }
         return meeting(withID: meetingID)
@@ -591,19 +634,24 @@ final class MeetingStore {
     }
 
     private func ensureBackendReachable(force: Bool) async -> Bool {
-        let shouldCheck = force || settingsStore.lastHealthCheckAt == nil || Date().timeIntervalSince(settingsStore.lastHealthCheckAt ?? .distantPast) > 60
-        if shouldCheck {
+        if needsFreshHealthCheck(force: force) {
             await checkBackendHealth(force: true)
         }
         return settingsStore.apiReachable
     }
 
     private func ensureAIReady(force: Bool) async -> Bool {
-        await ensureBackendReachable(force: force)
+        if force || !settingsStore.apiReachable || !settingsStore.llmReady || needsFreshHealthCheck(force: false) {
+            await checkBackendHealth(force: true)
+        }
+        return settingsStore.apiReachable && settingsStore.llmReady
     }
 
     private func ensureASRReady(force: Bool) async -> Bool {
-        await ensureBackendReachable(force: force)
+        if force || !settingsStore.apiReachable || !settingsStore.asrReady || needsFreshHealthCheck(force: false) {
+            await checkBackendHealth(force: true)
+        }
+        return settingsStore.apiReachable && settingsStore.asrReady
     }
 
     private func scheduleMeetingSync(meetingID: String, delay: Duration) {
@@ -675,6 +723,34 @@ final class MeetingStore {
         }
 
         await syncMeetingIfPossible(meetingID: meetingID)
+    }
+
+    private func needsFreshHealthCheck(force: Bool) -> Bool {
+        if force {
+            return true
+        }
+
+        guard let lastHealthCheckAt = settingsStore.lastHealthCheckAt else {
+            return true
+        }
+
+        return Date().timeIntervalSince(lastHealthCheckAt) > 60
+    }
+
+    private func backendStatusMessage(from health: RemoteBackendHealth?) -> String {
+        guard let health else {
+            return "\(AppEnvironment.cloudName) 在线"
+        }
+
+        if health.database == false {
+            return "\(AppEnvironment.cloudName) 已响应，数据库异常"
+        }
+
+        if health.ok == false {
+            return "\(AppEnvironment.cloudName) 已响应"
+        }
+
+        return "\(AppEnvironment.cloudName) 在线"
     }
 
     private func startASRIfPossible(for meetingID: String) async {

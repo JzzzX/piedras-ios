@@ -96,6 +96,8 @@ struct RecordingControlBar: View {
                     .foregroundStyle(AppTheme.subtleInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            diagnosticsStrip
         }
     }
 
@@ -167,6 +169,38 @@ struct RecordingControlBar: View {
         }
 
         return nil
+    }
+
+    private var diagnosticsStrip: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                diagnosticPill(systemName: "mic.fill", label: recordingSessionStore.inputMode.label)
+                diagnosticPill(systemName: "waveform", label: "\(recordingSessionStore.capturedPCMChunks)")
+                diagnosticPill(systemName: "dot.radiowaves.left.and.right", label: "\(recordingSessionStore.sentPCMChunks)")
+            }
+
+            Text("\(recordingSessionStore.audioCaptureState) · \(recordingSessionStore.lastASRTransportMessage)")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.subtleInk)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func diagnosticPill(systemName: String, label: String) -> some View {
+        HStack(spacing: 5) {
+            Image(systemName: systemName)
+                .font(.system(size: 10, weight: .semibold))
+
+            Text(label)
+                .font(.caption2.monospacedDigit().weight(.semibold))
+        }
+        .foregroundStyle(AppTheme.mutedInk)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background {
+            AppGlassSurface(cornerRadius: 14, style: .clear, shadowOpacity: 0.02)
+        }
     }
 
     private var isActiveMeeting: Bool {

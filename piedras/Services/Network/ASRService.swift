@@ -33,6 +33,8 @@ final class ASRService {
     var onFinalResult: ((ASRFinalResult) -> Void)?
     var onStateChange: ((ASRConnectionState) -> Void)?
     var onError: ((String) -> Void)?
+    var onTransportEvent: ((String) -> Void)?
+    var onPCMChunkSent: ((Int) -> Void)?
 
     init(apiClient: APIClient, session: URLSession = .shared) {
         self.apiClient = apiClient
@@ -44,6 +46,7 @@ final class ASRService {
 
         onPartialText?("")
         transition(to: .connecting)
+        onTransportEvent?("正在请求 ASR 会话")
 
         let response = try await apiClient.createASRSession(
             sampleRate: Int(PCMConverter.targetSampleRate),
@@ -71,6 +74,7 @@ final class ASRService {
         let task = session.webSocketTask(with: url)
         webSocketTask = task
         task.resume()
+        onTransportEvent?("WebSocket 已建立")
 
         receiveTask = Task { [weak self, task] in
             await self?.receiveLoop(task: task)
@@ -101,6 +105,7 @@ final class ASRService {
             drainSendQueueIfNeeded()
             try? await waitForQueueToDrain(timeoutMS: 800)
             try? await sendStopMessage()
+            onTransportEvent?("已发送停止指令")
             try? await Task.sleep(for: .milliseconds(250))
         }
 
@@ -141,6 +146,7 @@ final class ASRService {
         case "ready":
             readyForAudio = true
             transition(to: .connected)
+            onTransportEvent?("ASR 已就绪")
             flushPendingChunksIfReady()
 
         case "partial":
@@ -152,13 +158,16 @@ final class ASRService {
             let startTime = message.startTimeMs ?? 0
             let endTime = max(message.endTimeMs ?? startTime, startTime)
             onPartialText?("")
+            onTransportEvent?("收到句末结果")
             onFinalResult?(ASRFinalResult(text: result, startTime: startTime, endTime: endTime))
 
         case "error":
             transition(to: .degraded)
+            onTransportEvent?(message.message ?? "实时转写服务异常")
             onError?(message.message ?? "实时转写服务异常。")
 
         case "closed":
+            onTransportEvent?(isStopping ? "ASR 已关闭" : "ASR 连接关闭")
             transition(to: isStopping ? .disconnected : .degraded)
 
         default:
@@ -200,9 +209,11 @@ final class ASRService {
                 guard let webSocketTask else { break }
                 do {
                     try await webSocketTask.send(.data(payload))
+                    onPCMChunkSent?(payload.count)
                 } catch {
                     guard !isStopping else { break }
                     transition(to: .degraded)
+                    onTransportEvent?(error.localizedDescription)
                     onError?(error.localizedDescription)
                     await cleanupTransport(notifyDisconnected: false)
                     break
@@ -251,6 +262,7 @@ final class ASRService {
         isDrainingSendQueue = false
 
         onPartialText?("")
+        onTransportEvent?(notifyDisconnected ? "ASR 已断开" : "等待连接")
         transition(to: notifyDisconnected ? .disconnected : .idle)
     }
 

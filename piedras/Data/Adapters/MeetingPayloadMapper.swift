@@ -29,6 +29,14 @@ struct RemoteLLMStatus: Decodable {
     let lastError: String?
 }
 
+struct RemoteBackendHealth: Decodable {
+    let ok: Bool?
+    let database: Bool?
+    let asr: RemoteASRStatus?
+    let llm: RemoteLLMStatus?
+    let checkedAt: Date?
+}
+
 struct RemoteASRSession: Decodable {
     let wsUrl: String
     let token: String?

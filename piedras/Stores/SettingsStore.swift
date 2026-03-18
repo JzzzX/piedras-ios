@@ -7,6 +7,14 @@ enum BackendConnectionState {
     case unreachable
 }
 
+enum CapabilityStatusKind {
+    case standby
+    case checking
+    case ready
+    case unavailable
+    case offline
+}
+
 enum RemoteCapabilityKind {
     case backend
     case ai
@@ -116,21 +124,32 @@ final class SettingsStore {
 
     func blockingMessage(for capability: RemoteCapabilityKind) -> String? {
         if lastHealthCheckAt != nil, !apiReachable {
-            switch capability {
-            case .backend, .sync:
-                return "\(AppEnvironment.cloudName) 暂时不可用。"
-            case .ai, .asr:
-                return nil
+            return backendStatusMessage.isEmpty ? "\(AppEnvironment.cloudName) 暂时不可用。" : backendStatusMessage
+        }
+
+        switch capability {
+        case .ai:
+            if lastHealthCheckAt != nil, !llmReady {
+                return llmStatusMessage
             }
+        case .asr:
+            if lastHealthCheckAt != nil, !asrReady {
+                return asrStatusMessage
+            }
+        case .backend, .sync:
+            break
         }
 
         return nil
     }
 
-    func markBackendReachable(message: String = "\(AppEnvironment.cloudName) 在线") {
+    func markBackendReachable(
+        message: String = "\(AppEnvironment.cloudName) 在线",
+        checkedAt: Date? = .now
+    ) {
         apiReachable = true
         backendStatusMessage = message
-        lastHealthCheckAt = .now
+        lastHealthCheckAt = checkedAt ?? .now
     }
 
     func markBackendUnreachable(message: String) {
@@ -215,6 +234,51 @@ final class SettingsStore {
         backendStatusMessage = "等待检查"
         asrStatusMessage = "等待检查"
         llmStatusMessage = "等待检查"
+    }
+
+    var backendCapabilityStatus: CapabilityStatusKind {
+        if isCheckingHealth {
+            return .checking
+        }
+
+        switch backendConnectionState {
+        case .configuredUnchecked:
+            return .standby
+        case .reachable:
+            return .ready
+        case .unreachable:
+            return .offline
+        }
+    }
+
+    var asrCapabilityStatus: CapabilityStatusKind {
+        if isCheckingHealth {
+            return .checking
+        }
+
+        switch backendConnectionState {
+        case .configuredUnchecked:
+            return .standby
+        case .unreachable:
+            return .offline
+        case .reachable:
+            return asrReady ? .ready : .unavailable
+        }
+    }
+
+    var llmCapabilityStatus: CapabilityStatusKind {
+        if isCheckingHealth {
+            return .checking
+        }
+
+        switch backendConnectionState {
+        case .configuredUnchecked:
+            return .standby
+        case .unreachable:
+            return .offline
+        case .reachable:
+            return llmReady ? .ready : .unavailable
+        }
     }
 
     var backendHostLabel: String {

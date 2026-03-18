@@ -54,6 +54,10 @@ final class APIClient {
         settingsStore.backendBaseURL
     }
 
+    func fetchBackendHealth() async throws -> RemoteBackendHealth {
+        try await sendJSONRequest(path: "/healthz", method: "GET", responseType: RemoteBackendHealth.self)
+    }
+
     func fetchASRStatus() async throws -> RemoteASRStatus {
         try await sendJSONRequest(path: "/api/asr/status", method: "GET", responseType: RemoteASRStatus.self)
     }
