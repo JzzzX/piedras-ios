@@ -1,0 +1,14 @@
+FROM node:20-alpine
+
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY cloud/asr-proxy/package.json ./package.json
+COPY cloud/asr-proxy/package-lock.json ./package-lock.json
+RUN npm ci --omit=dev
+
+COPY cloud/asr-proxy/server.cjs ./server.cjs
+
+EXPOSE 8080
+
+CMD ["node", "server.cjs"]

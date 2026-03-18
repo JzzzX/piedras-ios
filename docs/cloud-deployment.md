@@ -9,6 +9,8 @@
 - Vercel: `cloud/api`
 - Zeabur: `cloud/asr-proxy`
 
+主仓根目录额外提供了 `Dockerfile.asr-proxy`，用于兼容已经直接绑定仓库根目录的 Zeabur 服务。
+
 ## Vercel
 
 ### 项目 Root Directory
@@ -48,6 +50,14 @@ ASR_PROXY_PUBLIC_BASE_URL=https://your-asr-proxy.example.com
 ```text
 cloud/asr-proxy
 ```
+
+如果现有服务已经直接绑定了仓库根目录，也可以保留根目录不改，并设置：
+
+```bash
+ZBPACK_DOCKERFILE_NAME=asr-proxy
+```
+
+Zeabur 会按官方约定优先使用根目录的 `Dockerfile.asr-proxy` 来部署 `cloud/asr-proxy`。
 
 ### 环境变量
 
