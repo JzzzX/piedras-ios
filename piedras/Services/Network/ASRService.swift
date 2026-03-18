@@ -1,32 +1,11 @@
 import Foundation
 
-private struct AliyunWSMessage: Decodable {
-    struct Header: Decodable {
-        let name: String?
-        let status: Int?
-        let statusText: String?
-
-        private enum CodingKeys: String, CodingKey {
-            case name
-            case status
-            case statusText = "status_text"
-        }
-    }
-
-    struct Payload: Decodable {
-        let result: String?
-        let beginTime: Double?
-        let endTime: Double?
-
-        private enum CodingKeys: String, CodingKey {
-            case result
-            case beginTime = "begin_time"
-            case endTime = "end_time"
-        }
-    }
-
-    let header: Header?
-    let payload: Payload?
+private struct ProxyASRMessage: Decodable {
+    let type: String
+    let text: String?
+    let startTimeMs: Double?
+    let endTimeMs: Double?
+    let message: String?
 }
 
 struct ASRFinalResult {
@@ -42,15 +21,13 @@ final class ASRService {
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
-    private var pendingPCM: [Data] = []
+    private var packetByteSize = 6_400
+    private var readyForAudio = false
+    private var isStopping = false
+    private var pendingPCMBuffer = Data()
+    private var pendingPCMChunks: [Data] = []
     private var sendQueue: [Data] = []
     private var isDrainingSendQueue = false
-    private var hasStartedTranscription = false
-    private var isStopping = false
-    private var currentTaskID = ""
-    private var currentAppKey = ""
-    private var currentVocabularyID: String?
-    private var sessionStartEpochMS: Double = 0
 
     var onPartialText: ((String) -> Void)?
     var onFinalResult: ((ASRFinalResult) -> Void)?
@@ -74,24 +51,22 @@ final class ASRService {
             workspaceID: workspaceID
         )
 
-        guard let descriptor = response.session else {
+        guard let descriptor = response.session,
+              let url = URL(string: descriptor.wsUrl) else {
             throw APIClientError.requestFailed(response.error ?? "ASR 会话返回不完整。")
         }
 
-        guard let encodedToken = descriptor.token.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let url = URL(string: "\(descriptor.wsUrl)?token=\(encodedToken)") else {
-            throw APIClientError.invalidResponse
-        }
-
-        pendingPCM.removeAll()
-        sendQueue.removeAll()
-        isDrainingSendQueue = false
-        hasStartedTranscription = false
+        readyForAudio = false
         isStopping = false
-        currentTaskID = Self.makeMessageID()
-        currentAppKey = descriptor.appKey
-        currentVocabularyID = descriptor.vocabularyId
-        sessionStartEpochMS = Date().timeIntervalSince1970 * 1000
+        pendingPCMBuffer.removeAll(keepingCapacity: false)
+        pendingPCMChunks.removeAll(keepingCapacity: false)
+        sendQueue.removeAll(keepingCapacity: false)
+        isDrainingSendQueue = false
+        packetByteSize = Self.makePacketByteSize(
+            sampleRate: descriptor.sampleRate ?? Int(PCMConverter.targetSampleRate),
+            channels: descriptor.channels ?? 1,
+            packetDurationMs: descriptor.packetDurationMs ?? 200
+        )
 
         let task = session.webSocketTask(with: url)
         webSocketTask = task
@@ -100,24 +75,15 @@ final class ASRService {
         receiveTask = Task { [weak self, task] in
             await self?.receiveLoop(task: task)
         }
-
-        try await sendStartMessage()
     }
 
     func enqueuePCM(_ data: Data) {
-        guard webSocketTask != nil, !isStopping else {
+        guard webSocketTask != nil, !isStopping, !data.isEmpty else {
             return
         }
 
-        if hasStartedTranscription {
-            sendQueue.append(data)
-            drainSendQueueIfNeeded()
-        } else {
-            pendingPCM.append(data)
-            if pendingPCM.count > 12 {
-                pendingPCM.removeFirst(pendingPCM.count - 12)
-            }
-        }
+        pendingPCMBuffer.append(data)
+        flushBufferIntoChunks(includeRemainder: false)
     }
 
     func stopStreaming() async {
@@ -128,10 +94,14 @@ final class ASRService {
         }
 
         isStopping = true
+        flushBufferIntoChunks(includeRemainder: true)
+        flushPendingChunksIfReady()
 
-        if hasStartedTranscription {
+        if readyForAudio {
+            drainSendQueueIfNeeded()
+            try? await waitForQueueToDrain(timeoutMS: 800)
             try? await sendStopMessage()
-            try? await Task.sleep(for: .milliseconds(350))
+            try? await Task.sleep(for: .milliseconds(250))
         }
 
         await cleanupTransport(notifyDisconnected: true)
@@ -163,60 +133,64 @@ final class ASRService {
 
     private func handleTextMessage(_ text: String) {
         guard let data = text.data(using: .utf8),
-              let message = try? JSONDecoder().decode(AliyunWSMessage.self, from: data) else {
+              let message = try? JSONDecoder().decode(ProxyASRMessage.self, from: data) else {
             return
         }
 
-        let eventName = message.header?.name
-        let result = message.payload?.result?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        switch eventName {
-        case "TranscriptionStarted":
-            hasStartedTranscription = true
+        switch message.type {
+        case "ready":
+            readyForAudio = true
             transition(to: .connected)
-            flushPendingPCM()
+            flushPendingChunksIfReady()
 
-        case "TranscriptionResultChanged":
-            onPartialText?(result)
+        case "partial":
+            onPartialText?(message.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
 
-        case "SentenceEnd":
+        case "final":
+            let result = message.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !result.isEmpty else { return }
-            let beginTime = message.payload?.beginTime ?? 0
-            let endTime = message.payload?.endTime ?? beginTime
+            let startTime = message.startTimeMs ?? 0
+            let endTime = max(message.endTimeMs ?? startTime, startTime)
             onPartialText?("")
-            onFinalResult?(
-                ASRFinalResult(
-                    text: result,
-                    startTime: sessionStartEpochMS + beginTime,
-                    endTime: sessionStartEpochMS + max(endTime, beginTime)
-                )
-            )
+            onFinalResult?(ASRFinalResult(text: result, startTime: startTime, endTime: endTime))
 
-        case "TaskFailed":
-            let errorText = message.header?.statusText ?? "阿里云 ASR 任务失败。"
+        case "error":
             transition(to: .degraded)
-            onError?(errorText)
-            pendingPCM.removeAll()
-            sendQueue.removeAll()
+            onError?(message.message ?? "实时转写服务异常。")
 
-        case "TranscriptionCompleted":
-            transition(to: .disconnected)
+        case "closed":
+            transition(to: isStopping ? .disconnected : .degraded)
 
         default:
             break
         }
     }
 
-    private func flushPendingPCM() {
-        guard !pendingPCM.isEmpty else { return }
-        sendQueue.append(contentsOf: pendingPCM)
-        pendingPCM.removeAll()
+    private func flushBufferIntoChunks(includeRemainder: Bool) {
+        while pendingPCMBuffer.count >= packetByteSize {
+            pendingPCMChunks.append(Data(pendingPCMBuffer.prefix(packetByteSize)))
+            pendingPCMBuffer.removeFirst(packetByteSize)
+        }
+
+        if includeRemainder, !pendingPCMBuffer.isEmpty {
+            pendingPCMChunks.append(pendingPCMBuffer)
+            pendingPCMBuffer.removeAll(keepingCapacity: false)
+        }
+
+        flushPendingChunksIfReady()
+    }
+
+    private func flushPendingChunksIfReady() {
+        guard readyForAudio else { return }
+        guard !pendingPCMChunks.isEmpty else { return }
+        sendQueue.append(contentsOf: pendingPCMChunks)
+        pendingPCMChunks.removeAll(keepingCapacity: false)
         drainSendQueueIfNeeded()
     }
 
     private func drainSendQueueIfNeeded() {
         guard !isDrainingSendQueue else { return }
-        guard webSocketTask != nil else { return }
+        guard webSocketTask != nil, readyForAudio else { return }
 
         isDrainingSendQueue = true
         Task { [weak self] in
@@ -240,93 +214,52 @@ final class ASRService {
     }
 
     private func nextPCMChunk() -> Data? {
-        guard !isStopping, !sendQueue.isEmpty else { return nil }
+        guard readyForAudio, !sendQueue.isEmpty else { return nil }
         return sendQueue.removeFirst()
     }
 
-    private func sendStartMessage() async throws {
-        var payloadBody: [String: Any] = [
-            "format": "pcm",
-            "sample_rate": Int(PCMConverter.targetSampleRate),
-            "enable_intermediate_result": true,
-            "enable_punctuation_prediction": true,
-            "enable_inverse_text_normalization": true,
-        ]
-
-        if let currentVocabularyID {
-            payloadBody["vocabulary_id"] = currentVocabularyID
+    private func waitForQueueToDrain(timeoutMS: Int) async throws {
+        let deadline = Date().addingTimeInterval(Double(timeoutMS) / 1000)
+        while (!sendQueue.isEmpty || isDrainingSendQueue) && Date() < deadline {
+            try await Task.sleep(for: .milliseconds(40))
         }
-
-        let payload: [String: Any] = [
-            "header": [
-                "appkey": currentAppKey,
-                "message_id": Self.makeMessageID(),
-                "task_id": currentTaskID,
-                "namespace": "SpeechTranscriber",
-                "name": "StartTranscription",
-            ],
-            "payload": payloadBody,
-        ]
-
-        try await sendJSON(payload)
     }
 
     private func sendStopMessage() async throws {
-        let payload: [String: Any] = [
-            "header": [
-                "appkey": currentAppKey,
-                "message_id": Self.makeMessageID(),
-                "task_id": currentTaskID,
-                "namespace": "SpeechTranscriber",
-                "name": "StopTranscription",
-            ],
-        ]
-
-        try await sendJSON(payload)
-    }
-
-    private func sendJSON(_ payload: [String: Any]) async throws {
-        guard let webSocketTask else {
-            throw APIClientError.invalidResponse
-        }
-
-        let data = try JSONSerialization.data(withJSONObject: payload)
-        guard let text = String(data: data, encoding: .utf8) else {
-            throw APIClientError.invalidResponse
-        }
-
-        try await webSocketTask.send(.string(text))
-    }
-
-    private func cleanupTransport(notifyDisconnected: Bool) async {
-        receiveTask?.cancel()
-        receiveTask = nil
-
-        webSocketTask?.cancel(with: .goingAway, reason: nil)
-        webSocketTask = nil
-
-        pendingPCM.removeAll()
-        sendQueue.removeAll()
-        isDrainingSendQueue = false
-        hasStartedTranscription = false
-        isStopping = false
-        currentTaskID = ""
-        currentAppKey = ""
-        currentVocabularyID = nil
-        sessionStartEpochMS = 0
-
-        onPartialText?("")
-
-        if notifyDisconnected {
-            transition(to: .disconnected)
-        }
+        guard let webSocketTask else { return }
+        try await webSocketTask.send(.string("{\"type\":\"stop\"}"))
     }
 
     private func transition(to state: ASRConnectionState) {
         onStateChange?(state)
     }
 
-    private static func makeMessageID() -> String {
-        UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+    private func cleanupTransport(notifyDisconnected: Bool) async {
+        receiveTask?.cancel()
+        receiveTask = nil
+
+        if let webSocketTask {
+            webSocketTask.cancel(with: .goingAway, reason: nil)
+        }
+
+        webSocketTask = nil
+        readyForAudio = false
+        isStopping = false
+        pendingPCMBuffer.removeAll(keepingCapacity: false)
+        pendingPCMChunks.removeAll(keepingCapacity: false)
+        sendQueue.removeAll(keepingCapacity: false)
+        isDrainingSendQueue = false
+
+        onPartialText?("")
+        transition(to: notifyDisconnected ? .disconnected : .idle)
+    }
+
+    private static func makePacketByteSize(sampleRate: Int, channels: Int, packetDurationMs: Int) -> Int {
+        let normalizedRate = max(sampleRate, 8_000)
+        let normalizedChannels = max(channels, 1)
+        let normalizedDuration = max(packetDurationMs, 50)
+        let bytesPerSecond = normalizedRate * normalizedChannels * 2
+        let computedSize = Int((Double(bytesPerSecond) * Double(normalizedDuration)) / 1000)
+        return max(computedSize, 3_200)
     }
 }

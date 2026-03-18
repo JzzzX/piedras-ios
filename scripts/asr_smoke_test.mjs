@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -14,10 +13,6 @@ const [, , inputFilePath, backendBaseURL = defaultBackendBaseURL] = process.argv
 if (!inputFilePath) {
   console.error('Usage: node scripts/asr_smoke_test.mjs <wav-file> [backend-base-url]');
   process.exit(1);
-}
-
-function makeMessageID() {
-  return randomUUID().replaceAll('-', '');
 }
 
 function clampPCM(sample) {
@@ -168,22 +163,23 @@ async function main() {
   }
 
   const descriptor = sessionPayload.session;
-  if (!descriptor?.wsUrl || !descriptor?.token || !descriptor?.appKey) {
+  if (!descriptor?.wsUrl) {
     throw new Error('ASR session response is incomplete.');
   }
 
-  const taskID = makeMessageID();
-  const socket = new WebSocket(`${descriptor.wsUrl}?token=${encodeURIComponent(descriptor.token)}`);
-  const chunkByteLength = Math.floor((targetSampleRate * 2 * defaultChunkDurationMS) / 1000);
+  const socket = new WebSocket(descriptor.wsUrl);
+  const packetDurationMS = Number(descriptor.packetDurationMs) || defaultChunkDurationMS;
+  const chunkByteLength = Math.floor((targetSampleRate * 2 * packetDurationMS) / 1000);
   const finals = [];
 
-  let transcriptionStarted;
+  let transcriptionReady;
   let transcriptionCompleted;
-  let startError;
 
   const startedPromise = new Promise((resolve, reject) => {
-    transcriptionStarted = resolve;
-    startError = reject;
+    transcriptionReady = resolve;
+    socket.addEventListener('error', (event) => reject(event.error ?? new Error('WebSocket failed.')), {
+      once: true,
+    });
   });
 
   const completedPromise = new Promise((resolve, reject) => {
@@ -201,29 +197,26 @@ async function main() {
       return;
     }
 
-    const eventName = payload?.header?.name;
-    const result = payload?.payload?.result?.trim() ?? '';
-
-    switch (eventName) {
-      case 'TranscriptionStarted':
-        console.log('ASR session started.');
-        transcriptionStarted?.();
+    switch (payload?.type) {
+      case 'ready':
+        console.log('ASR proxy ready.');
+        transcriptionReady?.();
         break;
-      case 'TranscriptionResultChanged':
-        if (result) {
-          console.log(`[partial] ${result}`);
+      case 'partial':
+        if (payload?.text?.trim()) {
+          console.log(`[partial] ${payload.text.trim()}`);
         }
         break;
-      case 'SentenceEnd':
-        if (result) {
-          finals.push(result);
-          console.log(`[final] ${result}`);
+      case 'final':
+        if (payload?.text?.trim()) {
+          finals.push(payload.text.trim());
+          console.log(`[final] ${payload.text.trim()}`);
         }
         break;
-      case 'TaskFailed':
-        startError?.(new Error(payload?.header?.status_text ?? 'Aliyun ASR task failed.'));
+      case 'error':
+        console.log(`[error] ${payload?.message ?? 'unknown'}`);
         break;
-      case 'TranscriptionCompleted':
+      case 'closed':
         transcriptionCompleted?.();
         break;
       default:
@@ -233,45 +226,15 @@ async function main() {
 
   await waitForSocketOpen(socket);
 
-  socket.send(
-    JSON.stringify({
-      header: {
-        appkey: descriptor.appKey,
-        message_id: makeMessageID(),
-        task_id: taskID,
-        namespace: 'SpeechTranscriber',
-        name: 'StartTranscription',
-      },
-      payload: {
-        format: 'pcm',
-        sample_rate: targetSampleRate,
-        enable_intermediate_result: true,
-        enable_punctuation_prediction: true,
-        enable_inverse_text_normalization: true,
-        ...(descriptor.vocabularyId ? { vocabulary_id: descriptor.vocabularyId } : {}),
-      },
-    })
-  );
-
   await startedPromise;
 
   for (let offset = 0; offset < pcmBytes.length; offset += chunkByteLength) {
     const chunk = pcmBytes.subarray(offset, Math.min(offset + chunkByteLength, pcmBytes.length));
     socket.send(chunk);
-    await sleep(defaultChunkDurationMS);
+    await sleep(packetDurationMS);
   }
 
-  socket.send(
-    JSON.stringify({
-      header: {
-        appkey: descriptor.appKey,
-        message_id: makeMessageID(),
-        task_id: taskID,
-        namespace: 'SpeechTranscriber',
-        name: 'StopTranscription',
-      },
-    })
-  );
+  socket.send(JSON.stringify({ type: 'stop' }));
 
   await Promise.race([completedPromise, sleep(5000)]);
   socket.close();

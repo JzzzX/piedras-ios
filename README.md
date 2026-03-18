@@ -19,7 +19,7 @@ afconvert -f WAVE -d LEI16 tmp-asr-sample.aiff tmp-asr-sample.wav
 node scripts/asr_smoke_test.mjs tmp-asr-sample.wav
 ```
 
-脚本会自动请求 `/api/asr/session`、连阿里云 WebSocket、发送 PCM，并打印 partial/final 结果。
+脚本会自动请求 `/api/asr/session`、连接本地豆包 ASR 代理、按 200ms 发送 PCM，并打印 `partial` / `final` 结果。
 
 ## 提交信息规范
 

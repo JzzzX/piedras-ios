@@ -23,10 +23,14 @@ struct RemoteLLMStatus: Decodable {
 
 struct RemoteASRSession: Decodable {
     let wsUrl: String
-    let token: String
+    let token: String?
     let tokenExpireTime: Int?
-    let appKey: String
+    let appKey: String?
     let vocabularyId: String?
+    let sampleRate: Int?
+    let channels: Int?
+    let codec: String?
+    let packetDurationMs: Int?
 }
 
 struct RemoteASRSessionResponse: Decodable {
