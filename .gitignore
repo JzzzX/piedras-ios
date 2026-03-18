@@ -19,6 +19,12 @@ Package.resolved
 # macOS
 .DS_Store
 
+# Node / cloud
+cloud/**/node_modules/
+cloud/**/.next/
+cloud/**/.vercel/
+cloud/**/storage/
+
 # Local verification artifacts
 tmp-*/
 tmp-*.png

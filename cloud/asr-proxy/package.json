@@ -1,0 +1,11 @@
+{
+  "name": "piedras-asr-proxy",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "node server.cjs"
+  },
+  "dependencies": {
+    "ws": "^8.19.0"
+  }
+}

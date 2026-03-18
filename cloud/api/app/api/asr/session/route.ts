@@ -1,0 +1,127 @@
+import crypto from 'node:crypto';
+import { NextRequest, NextResponse } from 'next/server';
+import { getAsrRuntimeStatus, getAsrStatus, resolveAsrProxyPublicBaseURL } from '@/lib/asr';
+
+interface AsrSessionRequest {
+  sampleRate?: number;
+  channels?: number;
+  workspaceId?: string;
+}
+
+const DOUBAO_PACKET_DURATION_MS = 200;
+const DOUBAO_SESSION_LIFETIME_MS = 10 * 60 * 1000;
+
+function toBase64URL(value: Buffer | string) {
+  return Buffer.from(value)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function createProxySessionToken(payload: Record<string, unknown>) {
+  const secret = process.env.ASR_PROXY_SESSION_SECRET;
+
+  if (!secret) {
+    throw new Error('ASR_PROXY_SESSION_SECRET 未配置');
+  }
+
+  const encodedPayload = toBase64URL(JSON.stringify(payload));
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(encodedPayload)
+    .digest();
+
+  return `${encodedPayload}.${toBase64URL(signature)}`;
+}
+
+function resolveProxyWSURL(req: NextRequest, sessionToken: string) {
+  const explicitBaseURL = resolveAsrProxyPublicBaseURL(
+    new URL(req.url).protocol === 'https:' ? 'https' : 'http'
+  );
+  const baseURL = explicitBaseURL ?? new URL(req.url);
+  const wsProtocol = baseURL.protocol === 'https:' ? 'wss:' : 'ws:';
+  const origin = `${wsProtocol}//${baseURL.host}`;
+  return `${origin}/ws/asr?session_token=${encodeURIComponent(sessionToken)}`;
+}
+
+function buildDoubaoSession(
+  req: NextRequest,
+  payload: AsrSessionRequest,
+  status: Awaited<ReturnType<typeof getAsrRuntimeStatus>>
+) {
+  const now = Date.now();
+  const sessionToken = createProxySessionToken({
+    provider: 'doubao-proxy',
+    sampleRate: payload.sampleRate ?? 16_000,
+    channels: payload.channels ?? 1,
+    workspaceId: payload.workspaceId ?? null,
+    issuedAt: now,
+    expiresAt: now + DOUBAO_SESSION_LIFETIME_MS,
+  });
+
+  return {
+    provider: 'doubao-proxy',
+    status,
+    request: {
+      sampleRate: payload.sampleRate ?? 16_000,
+      channels: payload.channels ?? 1,
+      includeSystemAudio: false,
+    },
+    session: {
+      wsUrl: resolveProxyWSURL(req, sessionToken),
+      sampleRate: payload.sampleRate ?? 16_000,
+      channels: payload.channels ?? 1,
+      codec: 'pcm_s16le',
+      packetDurationMs: DOUBAO_PACKET_DURATION_MS,
+    },
+    message: '豆包 ASR 代理会话已创建',
+  };
+}
+
+export async function POST(req: NextRequest) {
+  const configuredStatus = getAsrStatus();
+  const payload = (await req.json()) as AsrSessionRequest;
+
+  if (!configuredStatus.configured) {
+    return NextResponse.json(
+      {
+        error: `${configuredStatus.provider} 配置不完整`,
+        status: configuredStatus,
+      },
+      { status: 400 }
+    );
+  }
+
+  if (configuredStatus.mode !== 'doubao') {
+    return NextResponse.json(
+      {
+        error: 'cloud/api 固定走豆包 ASR，请将 ASR_MODE 设置为 doubao',
+        status: configuredStatus,
+      },
+      { status: 400 }
+    );
+  }
+
+  try {
+    const runtimeStatus = await getAsrRuntimeStatus();
+    if (!runtimeStatus.ready) {
+      return NextResponse.json(
+        {
+          error: runtimeStatus.message,
+          status: runtimeStatus,
+        },
+        { status: 503 }
+      );
+    }
+
+    return NextResponse.json(buildDoubaoSession(req, payload, runtimeStatus));
+  } catch (error) {
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : '创建豆包 ASR 会话失败',
+      },
+      { status: 500 }
+    );
+  }
+}
