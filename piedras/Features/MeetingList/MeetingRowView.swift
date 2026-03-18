@@ -6,56 +6,64 @@ struct MeetingRowView: View {
     let onOpen: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            leadingIcon
+        Button(action: onOpen) {
+            HStack(alignment: .center, spacing: 12) {
+                leadingIcon
 
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(meeting.displayTitle)
-                        .font(.system(size: 18, weight: .regular, design: .serif))
-                        .foregroundStyle(AppTheme.ink)
-                        .lineLimit(2)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text(meeting.displayTitle)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(AppTheme.ink)
+                            .lineLimit(2)
 
-                    Spacer(minLength: 0)
+                        Spacer(minLength: 0)
+                    }
 
-                    syncBadge
-                }
+                    HStack(spacing: 8) {
+                        metadataPill(systemName: "clock", label: meeting.durationLabel)
+                        metadataPill(systemName: recordingModeIconName, label: "")
+                        metadataPill(systemName: "calendar", label: meeting.compactTimestampLabel)
 
-                HStack(spacing: 8) {
-                    metadataPill(systemName: "clock", label: meeting.durationLabel)
-                    metadataPill(systemName: "waveform", label: meeting.transcriptCountLabel)
-                    metadataPill(systemName: "calendar", label: meeting.compactTimestampLabel)
-
-                    if isRecording {
-                        metadataPill(systemName: "record.circle.fill", label: "")
-                            .foregroundStyle(AppTheme.highlight)
+                        if isRecording {
+                            metadataPill(systemName: "record.circle.fill", label: "")
+                                .foregroundStyle(AppTheme.highlight)
+                        } else if meeting.syncState == .failed {
+                            metadataPill(systemName: "exclamationmark.circle.fill", label: "")
+                                .foregroundStyle(AppTheme.danger)
+                        }
                     }
                 }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                PaperSurface(
+                    cornerRadius: 24,
+                    fill: isRecording ? AppTheme.documentPaper : AppTheme.homeCard,
+                    border: AppTheme.homeCardBorder,
+                    shadowOpacity: isRecording ? 0.10 : 0.08
+                )
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 13)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            AppGlassSurface(
-                cornerRadius: 24,
-                style: isRecording ? .regular : .clear,
-                borderOpacity: isRecording ? 0.30 : 0.22,
-                shadowOpacity: 0.08
-            )
-        }
-        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .buttonStyle(.plain)
         .accessibilityIdentifier("MeetingRow")
-        .onTapGesture(perform: onOpen)
     }
 
     private var leadingIcon: some View {
         ZStack(alignment: .topTrailing) {
-            AppGlassSurface(cornerRadius: 18, style: .regular, shadowOpacity: 0.04)
+            PaperSurface(
+                cornerRadius: 18,
+                fill: AppTheme.backgroundSecondary,
+                border: AppTheme.homeCardBorder,
+                shadowOpacity: 0.04
+            )
                 .frame(width: 44, height: 44)
                 .overlay {
                     Image(systemName: "doc.text")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(AppTheme.ink)
                 }
 
@@ -86,33 +94,21 @@ struct MeetingRowView: View {
         .padding(.horizontal, 7)
         .padding(.vertical, 5)
         .background {
-            AppGlassSurface(cornerRadius: 12, style: .clear, shadowOpacity: 0.02)
+            PaperSurface(
+                cornerRadius: 12,
+                fill: AppTheme.backgroundSecondary.opacity(0.88),
+                border: AppTheme.homeCardBorder,
+                shadowOpacity: 0.02
+            )
         }
     }
 
-    private var syncBadge: some View {
-        Image(systemName: meeting.syncStateIconName)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(syncForeground)
-            .frame(width: 24, height: 24)
-            .background {
-                AppGlassSurface(cornerRadius: 12, style: .clear, shadowOpacity: 0.02)
-            }
-            .accessibilityLabel(meeting.syncStateLabel)
-    }
-
-    private var syncForeground: Color {
-        switch meeting.syncState {
-        case .pending:
-            return AppTheme.highlight
-        case .syncing:
-            return AppTheme.accent
-        case .synced:
-            return AppTheme.success
-        case .failed:
-            return AppTheme.danger
-        case .deleted:
-            return AppTheme.subtleInk
+    private var recordingModeIconName: String {
+        switch meeting.recordingMode {
+        case .microphone:
+            return "mic.fill"
+        case .fileMix:
+            return "waveform.and.mic"
         }
     }
 }

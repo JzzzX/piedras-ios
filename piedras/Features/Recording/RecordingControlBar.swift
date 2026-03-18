@@ -8,7 +8,13 @@ struct RecordingControlBar: View {
     var onRequestStartRecording: (() -> Void)? = nil
 
     var body: some View {
-        AppGlassCard(cornerRadius: 30, style: .regular, padding: 16, shadowOpacity: 0.14) {
+        PaperCard(
+            cornerRadius: 30,
+            fill: AppTheme.documentPaper,
+            border: AppTheme.documentHairline,
+            padding: 16,
+            shadowOpacity: 0.12
+        ) {
             VStack(spacing: 14) {
                 if isActiveMeeting {
                     activeControls
@@ -61,7 +67,12 @@ struct RecordingControlBar: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
                         .background {
-                            AppGlassSurface(cornerRadius: 22, style: .clear, shadowOpacity: 0.05)
+                            PaperSurface(
+                                cornerRadius: 22,
+                                fill: AppTheme.documentPaperSecondary,
+                                border: AppTheme.documentHairline,
+                                shadowOpacity: 0.04
+                            )
                         }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(recordingSessionStore.phase == .paused ? "继续录音" : "暂停录音")
@@ -101,8 +112,6 @@ struct RecordingControlBar: View {
             if showsSourcePlaybackStrip {
                 sourcePlaybackStrip
             }
-
-            diagnosticsStrip
         }
     }
 
@@ -123,7 +132,12 @@ struct RecordingControlBar: View {
     private var idleControls: some View {
         HStack(spacing: 14) {
             ZStack {
-                AppGlassSurface(cornerRadius: 22, style: .clear, shadowOpacity: 0.04)
+                PaperSurface(
+                    cornerRadius: 22,
+                    fill: AppTheme.documentPaperSecondary,
+                    border: AppTheme.documentHairline,
+                    shadowOpacity: 0.03
+                )
                     .frame(width: 52, height: 52)
 
                 Image(systemName: "doc.text")
@@ -183,7 +197,12 @@ struct RecordingControlBar: View {
     private var sourcePlaybackStrip: some View {
         HStack(spacing: 10) {
             ZStack {
-                AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.02)
+                PaperSurface(
+                    cornerRadius: 16,
+                    fill: AppTheme.documentPaperSecondary,
+                    border: AppTheme.documentHairline,
+                    shadowOpacity: 0.02
+                )
                     .frame(width: 34, height: 34)
 
                 Image(systemName: "music.note")
@@ -212,43 +231,16 @@ struct RecordingControlBar: View {
                     .foregroundStyle(AppTheme.ink)
                     .frame(width: 34, height: 34)
                     .background {
-                        AppGlassSurface(cornerRadius: 17, style: .clear, shadowOpacity: 0.03)
+                        PaperSurface(
+                            cornerRadius: 17,
+                            fill: AppTheme.documentPaperSecondary,
+                            border: AppTheme.documentHairline,
+                            shadowOpacity: 0.02
+                        )
                     }
             }
             .buttonStyle(.plain)
             .disabled(recordingSessionStore.phase != .recording)
-        }
-    }
-
-    private var diagnosticsStrip: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                diagnosticPill(systemName: "mic.fill", label: recordingSessionStore.inputMode.label)
-                diagnosticPill(systemName: "waveform", label: "\(recordingSessionStore.capturedPCMChunks)")
-                diagnosticPill(systemName: "dot.radiowaves.left.and.right", label: "\(recordingSessionStore.sentPCMChunks)")
-            }
-
-            Text("\(recordingSessionStore.audioCaptureState) · \(recordingSessionStore.lastASRTransportMessage)")
-                .font(.caption2)
-                .foregroundStyle(AppTheme.subtleInk)
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func diagnosticPill(systemName: String, label: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: systemName)
-                .font(.system(size: 10, weight: .semibold))
-
-            Text(label)
-                .font(.caption2.monospacedDigit().weight(.semibold))
-        }
-        .foregroundStyle(AppTheme.mutedInk)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background {
-            AppGlassSurface(cornerRadius: 14, style: .clear, shadowOpacity: 0.02)
         }
     }
 

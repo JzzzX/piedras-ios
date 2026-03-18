@@ -12,22 +12,43 @@ struct AppGlassBackdrop: View {
             AppTheme.pageGradient
 
             Circle()
-                .fill(AppTheme.ambientBlue.opacity(0.42))
-                .frame(width: 360, height: 360)
-                .blur(radius: 42)
-                .offset(x: 130, y: -250)
-
-            Circle()
-                .fill(AppTheme.ambientMint.opacity(0.28))
-                .frame(width: 280, height: 280)
-                .blur(radius: 30)
-                .offset(x: -130, y: -170)
-
-            Circle()
-                .fill(AppTheme.ambientSand.opacity(0.30))
+                .fill(AppTheme.ambientBlue.opacity(0.34))
                 .frame(width: 320, height: 320)
-                .blur(radius: 38)
-                .offset(x: -70, y: 310)
+                .blur(radius: 46)
+                .offset(x: 132, y: -248)
+
+            Circle()
+                .fill(AppTheme.ambientMint.opacity(0.22))
+                .frame(width: 250, height: 250)
+                .blur(radius: 34)
+                .offset(x: -120, y: -150)
+
+            Circle()
+                .fill(AppTheme.ambientSand.opacity(0.32))
+                .frame(width: 280, height: 280)
+                .blur(radius: 42)
+                .offset(x: -90, y: 290)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct DocumentBackdrop: View {
+    var body: some View {
+        ZStack {
+            AppTheme.documentGradient
+
+            Circle()
+                .fill(AppTheme.ambientSand.opacity(0.20))
+                .frame(width: 320, height: 320)
+                .blur(radius: 52)
+                .offset(x: -110, y: -250)
+
+            Circle()
+                .fill(AppTheme.ambientBlue.opacity(0.16))
+                .frame(width: 260, height: 260)
+                .blur(radius: 48)
+                .offset(x: 140, y: -300)
         }
         .ignoresSafeArea()
     }
@@ -82,6 +103,46 @@ struct AppGlassCard<Content: View>: View {
     }
 }
 
+struct PaperSurface: View {
+    var cornerRadius: CGFloat = 28
+    var fill: Color = AppTheme.documentPaper
+    var border: Color = AppTheme.documentHairline
+    var shadowOpacity: Double = 0.08
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            .fill(fill)
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(border.opacity(0.55), lineWidth: 1)
+            }
+            .shadow(color: AppTheme.documentShadow.opacity(shadowOpacity / 0.08), radius: 24, x: 0, y: 12)
+    }
+}
+
+struct PaperCard<Content: View>: View {
+    var cornerRadius: CGFloat = 28
+    var fill: Color = AppTheme.documentPaper
+    var border: Color = AppTheme.documentHairline
+    var padding: CGFloat = 18
+    var shadowOpacity: Double = 0.08
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background {
+                PaperSurface(
+                    cornerRadius: cornerRadius,
+                    fill: fill,
+                    border: border,
+                    shadowOpacity: shadowOpacity
+                )
+            }
+    }
+}
+
 struct AppGlassDivider: View {
     var inset: CGFloat = 0
 
@@ -91,6 +152,17 @@ struct AppGlassDivider: View {
             .frame(height: 1)
             .padding(.leading, inset)
             .opacity(0.7)
+    }
+}
+
+struct PaperDivider: View {
+    var inset: CGFloat = 0
+
+    var body: some View {
+        Rectangle()
+            .fill(AppTheme.documentHairline.opacity(0.75))
+            .frame(height: 1)
+            .padding(.leading, inset)
     }
 }
 

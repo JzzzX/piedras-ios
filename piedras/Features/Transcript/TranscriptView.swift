@@ -1,95 +1,150 @@
 import SwiftUI
 
+private struct TranscriptParagraph: Identifiable {
+    let id: String
+    let speaker: String
+    let startTime: Double
+    let text: String
+}
+
 struct TranscriptView: View {
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
 
     let meeting: Meeting
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            if showsLiveStrip {
-                liveStrip
-            }
-
-            if meeting.orderedSegments.isEmpty {
+        LazyVStack(alignment: .leading, spacing: 26) {
+            if paragraphs.isEmpty && !showsLiveParagraph {
                 emptyState
             } else {
-                VStack(spacing: 16) {
-                    ForEach(Array(meeting.orderedSegments.enumerated()), id: \.element.id) { index, segment in
-                        transcriptRow(for: segment)
+                ForEach(paragraphs) { paragraph in
+                    paragraphRow(
+                        timeLabel: timeLabel(for: paragraph.startTime),
+                        speaker: paragraph.speaker,
+                        text: paragraph.text,
+                        isLive: false
+                    )
+                }
 
-                        if index < meeting.orderedSegments.count - 1 {
-                            AppGlassDivider(inset: 60)
-                        }
-                    }
+                if showsLiveParagraph {
+                    paragraphRow(
+                        timeLabel: recordingSessionStore.durationSeconds.mmss,
+                        speaker: liveSpeakerName,
+                        text: recordingSessionStore.currentPartial,
+                        isLive: true
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
         }
-    }
-
-    private var liveStrip: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "waveform")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppTheme.highlight)
-                .padding(.top, 2)
-
-            Text(recordingSessionStore.currentPartial)
-                .font(.subheadline)
-                .foregroundStyle(AppTheme.ink)
-                .lineLimit(3)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            AppGlassSurface(cornerRadius: 20, style: .clear, shadowOpacity: 0.03)
-        }
+        .animation(.easeOut(duration: 0.22), value: recordingSessionStore.currentPartial)
+        .animation(.easeOut(duration: 0.22), value: meeting.orderedSegments.count)
+        .textSelection(.enabled)
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: "waveform")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(AppTheme.subtleInk)
+        VStack(alignment: .leading, spacing: 16) {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(AppTheme.documentHairline.opacity(0.32))
+                .frame(width: 140, height: 10)
 
-            Text("No transcript")
-                .font(.headline)
-                .foregroundStyle(AppTheme.ink)
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(AppTheme.documentHairline.opacity(0.22))
+                .frame(height: 11)
 
-            if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
-                Text("Listening...")
-                    .font(.subheadline)
-                    .foregroundStyle(AppTheme.subtleInk)
-            }
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(AppTheme.documentHairline.opacity(0.18))
+                .frame(height: 11)
+
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(AppTheme.documentHairline.opacity(0.14))
+                .frame(width: 210, height: 11)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 12)
+        .padding(.top, 6)
     }
 
-    private func transcriptRow(for segment: TranscriptSegment) -> some View {
-        HStack(alignment: .top, spacing: 14) {
+    private func paragraphRow(
+        timeLabel: String,
+        speaker: String,
+        text: String,
+        isLive: Bool
+    ) -> some View {
+        HStack(alignment: .top, spacing: 18) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(segment.timeRangeLabel(relativeTo: baseTime))
+                Text(timeLabel)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(AppTheme.subtleInk)
 
-                Text(segment.speaker)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.subtleInk)
-                    .textCase(.uppercase)
+                if isLive {
+                    Text("LIVE")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(AppTheme.highlight)
+                }
             }
-            .frame(width: 46, alignment: .leading)
+            .frame(width: 48, alignment: .leading)
 
-            Text(segment.text)
-                .font(.body)
-                .foregroundStyle(AppTheme.ink)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 0) {
+                (Text("\(displaySpeakerName(speaker)): ")
+                    .fontWeight(.semibold)
+                 + Text(text))
+                    .font(.body)
+                    .lineSpacing(8)
+                    .foregroundStyle(isLive ? AppTheme.mutedInk : AppTheme.ink)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.vertical, isLive ? 2 : 0)
     }
 
-    private var showsLiveStrip: Bool {
+    private var paragraphs: [TranscriptParagraph] {
+        var grouped: [TranscriptParagraph] = []
+
+        for segment in meeting.orderedSegments {
+            let trimmedText = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedText.isEmpty else { continue }
+
+            if let last = grouped.last,
+               last.speaker == segment.speaker {
+                let mergedText = [last.text, trimmedText]
+                    .filter { !$0.isEmpty }
+                    .joined(separator: "\n")
+                grouped[grouped.count - 1] = TranscriptParagraph(
+                    id: last.id + "-" + segment.id,
+                    speaker: last.speaker,
+                    startTime: last.startTime,
+                    text: mergedText
+                )
+            } else {
+                grouped.append(
+                    TranscriptParagraph(
+                        id: segment.id,
+                        speaker: segment.speaker,
+                        startTime: segment.startTime,
+                        text: trimmedText
+                    )
+                )
+            }
+        }
+
+        return grouped
+    }
+
+    private var showsLiveParagraph: Bool {
         recordingSessionStore.meetingID == meeting.id && !recordingSessionStore.currentPartial.isEmpty
+    }
+
+    private var liveSpeakerName: String {
+        meeting.recordingMode == .fileMix ? "混合音频" : "麦克风"
+    }
+
+    private func timeLabel(for startTime: Double) -> String {
+        let normalizedMilliseconds = max(0, (startTime - baseTime) / 1000)
+        return TimeInterval(normalizedMilliseconds).mmss
+    }
+
+    private func displaySpeakerName(_ speaker: String) -> String {
+        let trimmed = speaker.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "Speaker" : trimmed
     }
 
     private var baseTime: Double {

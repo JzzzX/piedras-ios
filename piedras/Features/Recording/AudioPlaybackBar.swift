@@ -89,38 +89,80 @@ struct AudioPlaybackBar: View {
     var body: some View {
         let fileURL = URL(fileURLWithPath: filePath)
 
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
+        VStack(alignment: .leading, spacing: 14) {
+            PlaybackWaveformStrip(progress: playbackProgress)
+                .frame(height: 22)
+
+            HStack(spacing: 12) {
                 Button {
                     playbackController.togglePlayback(fileURL: fileURL)
                 } label: {
-                    Label(
-                        playbackController.isPlaying ? "暂停回放" : "播放录音",
-                        systemImage: playbackController.isPlaying ? "pause.fill" : "play.fill"
-                    )
+                    Image(systemName: playbackController.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                        .frame(width: 40, height: 40)
+                        .background(
+                            Circle().fill(AppTheme.documentPaperSecondary)
+                        )
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.plain)
 
-                Spacer()
+                Slider(
+                    value: Binding(
+                        get: { playbackController.currentTime },
+                        set: { playbackController.seek(to: $0) }
+                    ),
+                    in: 0...max(playbackController.duration, 1)
+                )
+                .tint(AppTheme.documentOlive)
 
                 Text("\(playbackController.currentTime.mmss) / \(playbackController.duration.mmss)")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(AppTheme.subtleInk)
             }
-
-            Slider(
-                value: Binding(
-                    get: { playbackController.currentTime },
-                    set: { playbackController.seek(to: $0) }
-                ),
-                in: 0...max(playbackController.duration, 1)
-            )
 
             if let error = playbackController.errorMessage {
                 Text(error)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(AppTheme.danger)
             }
+        }
+        .padding(16)
+        .background {
+            PaperSurface(
+                cornerRadius: 24,
+                fill: AppTheme.documentPaper,
+                border: AppTheme.documentHairline,
+                shadowOpacity: 0.08
+            )
+        }
+    }
+
+    private var playbackProgress: Double {
+        guard playbackController.duration > 0 else { return 0 }
+        return min(max(playbackController.currentTime / playbackController.duration, 0), 1)
+    }
+}
+
+private struct PlaybackWaveformStrip: View {
+    let progress: Double
+
+    private let barHeights: [CGFloat] = [5, 9, 12, 7, 15, 10, 6, 13, 18, 10, 7, 14, 9, 5, 11, 16, 8, 6, 12, 17, 8, 5, 10, 14, 7, 6, 12, 9, 5, 8]
+
+    var body: some View {
+        GeometryReader { proxy in
+            let count = barHeights.count
+            let step = proxy.size.width / CGFloat(max(count, 1))
+            let activeCount = Int((Double(count) * progress).rounded(.down))
+
+            HStack(alignment: .center, spacing: max(2, step * 0.22)) {
+                ForEach(Array(barHeights.enumerated()), id: \.offset) { index, height in
+                    Capsule()
+                        .fill(index < activeCount ? AppTheme.documentOlive : AppTheme.documentHairline.opacity(0.55))
+                        .frame(width: max(2, step * 0.36), height: height)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
     }
 }

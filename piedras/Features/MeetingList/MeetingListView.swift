@@ -67,7 +67,6 @@ struct MeetingListView: View {
                 Text(Date.now.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(AppTheme.subtleInk)
-                    .textCase(.uppercase)
 
                 Text("Notes")
                     .font(.system(size: 34, weight: .regular, design: .serif))
@@ -145,11 +144,22 @@ struct MeetingListView: View {
         Button {
             router.showMeeting(id: meeting.id)
         } label: {
-            AppGlassCard(cornerRadius: 26, style: .regular, padding: 14, shadowOpacity: 0.08) {
+            PaperCard(
+                cornerRadius: 26,
+                fill: AppTheme.homeCard,
+                border: AppTheme.homeCardBorder,
+                padding: 14,
+                shadowOpacity: 0.08
+            ) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
                         ZStack {
-                            AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.03)
+                            PaperSurface(
+                                cornerRadius: 16,
+                                fill: AppTheme.backgroundSecondary,
+                                border: AppTheme.homeCardBorder,
+                                shadowOpacity: 0.03
+                            )
                                 .frame(width: 38, height: 38)
 
                             Image(systemName: "doc.text")
@@ -187,10 +197,21 @@ struct MeetingListView: View {
     }
 
     private var emptyState: some View {
-        AppGlassCard(cornerRadius: 28, style: .regular, padding: 18, shadowOpacity: 0.06) {
+        PaperCard(
+            cornerRadius: 28,
+            fill: AppTheme.homeCard,
+            border: AppTheme.homeCardBorder,
+            padding: 18,
+            shadowOpacity: 0.06
+        ) {
             VStack(alignment: .leading, spacing: 12) {
                 ZStack {
-                    AppGlassSurface(cornerRadius: 18, style: .clear, shadowOpacity: 0.02)
+                    PaperSurface(
+                        cornerRadius: 18,
+                        fill: AppTheme.backgroundSecondary,
+                        border: AppTheme.homeCardBorder,
+                        shadowOpacity: 0.02
+                    )
                         .frame(width: 48, height: 48)
 
                     Image(systemName: "doc.text")
@@ -214,7 +235,7 @@ struct MeetingListView: View {
     private var bottomDock: some View {
         HStack(spacing: 10) {
             HStack(spacing: 8) {
-                Image(systemName: "sparkles")
+                Image(systemName: "star")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.subtleInk)
 
@@ -241,11 +262,16 @@ struct MeetingListView: View {
             .padding(.horizontal, 14)
             .frame(height: 52)
             .background {
-                AppGlassSurface(cornerRadius: 24, style: .regular, borderOpacity: 0.28, shadowOpacity: 0.08)
+                PaperSurface(
+                    cornerRadius: 24,
+                    fill: AppTheme.homeCard.opacity(0.96),
+                    border: AppTheme.homeCardBorder,
+                    shadowOpacity: 0.08
+                )
             }
 
             Button {
-                    if recordingSessionStore.phase == .idle {
+                if recordingSessionStore.phase == .idle {
                     showsRecordingModeDialog = true
                 } else {
                     Task {
@@ -255,7 +281,12 @@ struct MeetingListView: View {
             } label: {
                 ZStack {
                     if recordingSessionStore.phase == .idle {
-                        AppGlassSurface(cornerRadius: 28, style: .regular, borderOpacity: 0.28, shadowOpacity: 0.10)
+                        PaperSurface(
+                            cornerRadius: 28,
+                            fill: AppTheme.homeCard,
+                            border: AppTheme.homeCardBorder,
+                            shadowOpacity: 0.10
+                        )
                     } else {
                         Circle()
                             .fill(AppTheme.highlight)

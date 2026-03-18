@@ -3,18 +3,9 @@ import UniformTypeIdentifiers
 
 private enum MeetingDetailMode: String, CaseIterable, Identifiable {
     case transcript = "Transcript"
-    case summary = "AI"
+    case summary = "AI Notes"
 
     var id: String { rawValue }
-
-    var systemName: String {
-        switch self {
-        case .transcript:
-            return "text.alignleft"
-        case .summary:
-            return "sparkles"
-        }
-    }
 }
 
 struct MeetingDetailView: View {
@@ -28,59 +19,13 @@ struct MeetingDetailView: View {
     @State private var noteSaveTask: Task<Void, Never>?
     @State private var showsRecordingModeDialog = false
     @State private var isImportingSourceAudio = false
+    @State private var showsRawNotesSheet = false
+    @State private var showsMeetingChatSheet = false
 
     var body: some View {
         Group {
             if let meeting = meetingStore.meeting(withID: meetingID) {
-                ZStack {
-                    AppGlassBackdrop()
-
-                    ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 20) {
-                            header
-                            titleBlock(meeting: meeting)
-                            workspace(meeting: meeting)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-                        .padding(.bottom, 156)
-                    }
-                }
-                .toolbar(.hidden, for: .navigationBar)
-                .safeAreaInset(edge: .bottom) {
-                    RecordingControlBar(
-                        meeting: meeting,
-                        onRequestStartRecording: {
-                            showsRecordingModeDialog = true
-                        }
-                    )
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                        .padding(.bottom, 12)
-                        .background(Color.clear)
-                }
-                .confirmationDialog("选择录音方式", isPresented: $showsRecordingModeDialog, titleVisibility: .visible) {
-                    Button("仅麦克风") {
-                        Task {
-                            await meetingStore.startRecording(meetingID: meeting.id)
-                        }
-                    }
-
-                    Button("音频文件 + 麦克风") {
-                        isImportingSourceAudio = true
-                    }
-
-                    Button("取消", role: .cancel) {}
-                } message: {
-                    Text("选择这次会议的录音输入。")
-                }
-                .fileImporter(
-                    isPresented: $isImportingSourceAudio,
-                    allowedContentTypes: [.audio],
-                    allowsMultipleSelection: false
-                ) { result in
-                    handleSourceAudioSelection(result, meetingID: meeting.id)
-                }
+                detailScene(meeting: meeting)
             } else {
                 ContentUnavailableView(
                     "会议不存在",
@@ -94,8 +39,58 @@ struct MeetingDetailView: View {
         }
     }
 
-    private var header: some View {
-        HStack(alignment: .center, spacing: 14) {
+    private func detailScene(meeting: Meeting) -> some View {
+        ZStack {
+            DocumentBackdrop()
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 22) {
+                    topBar
+                    titleBlock(meeting: meeting)
+                    modePicker
+                    contentPanel(meeting: meeting)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+                .padding(.bottom, contentBottomPadding(for: meeting))
+            }
+        }
+        .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .bottom) {
+            bottomDock(for: meeting)
+        }
+        .confirmationDialog("选择录音方式", isPresented: $showsRecordingModeDialog, titleVisibility: .visible) {
+            Button("仅麦克风") {
+                Task {
+                    await meetingStore.startRecording(meetingID: meeting.id)
+                }
+            }
+
+            Button("音频文件 + 麦克风") {
+                isImportingSourceAudio = true
+            }
+
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("选择这次会议的录音输入。")
+        }
+        .fileImporter(
+            isPresented: $isImportingSourceAudio,
+            allowedContentTypes: [.audio],
+            allowsMultipleSelection: false
+        ) { result in
+            handleSourceAudioSelection(result, meetingID: meeting.id)
+        }
+        .sheet(isPresented: $showsRawNotesSheet) {
+            rawNotesSheet
+        }
+        .sheet(isPresented: $showsMeetingChatSheet) {
+            meetingChatSheet
+        }
+    }
+
+    private var topBar: some View {
+        HStack {
             AppGlassCircleButton(systemName: "chevron.left", accessibilityLabel: "返回") {
                 dismiss()
             }
@@ -103,120 +98,217 @@ struct MeetingDetailView: View {
 
             Spacer()
 
-            modeSwitcher
+            Menu {
+                Button("编辑原始笔记", systemImage: "square.and.pencil") {
+                    showsRawNotesSheet = true
+                }
+
+                Button("Chat with note", systemImage: "bubble.left.and.sparkles") {
+                    showsMeetingChatSheet = true
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .frame(width: 40, height: 40)
+                    .background {
+                        PaperSurface(
+                            cornerRadius: 20,
+                            fill: AppTheme.documentPaperSecondary,
+                            border: AppTheme.documentHairline,
+                            shadowOpacity: 0.04
+                        )
+                    }
+            }
+            .buttonStyle(.plain)
+        }
+        .overlay {
+            Text("Piedras AI")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(AppTheme.ink)
         }
     }
 
     private func titleBlock(meeting: Meeting) -> some View {
-        HStack(alignment: .top, spacing: 14) {
-            ZStack {
-                AppGlassSurface(cornerRadius: 24, style: .regular, shadowOpacity: 0.05)
-                    .frame(width: 60, height: 60)
-
-                Image(systemName: "doc.text")
-                    .font(.system(size: 24, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                TextField(
-                    "Untitled note",
-                    text: Binding(
-                        get: { meeting.title },
-                        set: { meetingStore.updateTitle($0, for: meeting) }
-                    )
+        VStack(alignment: .leading, spacing: 10) {
+            TextField(
+                "Untitled note",
+                text: Binding(
+                    get: { meeting.title },
+                    set: { meetingStore.updateTitle($0, for: meeting) }
                 )
-                .font(.system(size: 38, weight: .regular, design: .serif))
-                .foregroundStyle(AppTheme.ink)
-                .textFieldStyle(.plain)
+            )
+            .font(.system(size: 38, weight: .bold))
+            .foregroundStyle(AppTheme.ink)
+            .textFieldStyle(.plain)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        metadataPill(systemName: "calendar", label: meeting.detailTimestampLabel)
-                        metadataPill(systemName: "clock", label: meeting.durationLabel)
-                        metadataPill(systemName: meeting.statusIconName, label: meeting.statusLabel)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(metaLine(for: meeting))
+                    .font(.subheadline)
+                    .foregroundStyle(AppTheme.subtleInk)
 
-                        if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
-                            metadataPill(systemName: "waveform", label: recordingSessionStore.asrState.displayLabel)
-                        }
-                    }
+                if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
+                    Text(recordingSessionStore.asrState == .connected ? "Live transcription connected" : "Live transcription reconnecting")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.documentOlive : AppTheme.highlight)
                 }
             }
         }
     }
 
-    private func workspace(meeting: Meeting) -> some View {
-        AppGlassCard(cornerRadius: 38, style: .regular, padding: 22, shadowOpacity: 0.10) {
+    private var modePicker: some View {
+        Picker("View", selection: $selectedMode) {
+            ForEach(MeetingDetailMode.allCases) { mode in
+                Text(mode.rawValue)
+                    .tag(mode)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
+
+    private func contentPanel(meeting: Meeting) -> some View {
+        PaperCard(
+            cornerRadius: 34,
+            fill: AppTheme.documentPaper,
+            border: AppTheme.documentHairline,
+            padding: 22,
+            shadowOpacity: 0.06
+        ) {
             Group {
                 if selectedMode == .transcript {
                     TranscriptView(meeting: meeting)
                 } else {
-                    VStack(alignment: .leading, spacing: 24) {
-                        NoteEditorView(meeting: meeting) { newValue in
-                            noteSaveTask?.cancel()
-                            noteSaveTask = Task { @MainActor in
-                                try? await Task.sleep(for: .seconds(1.5))
-                                guard !Task.isCancelled else { return }
-                                meetingStore.updateNotes(newValue, for: meeting)
+                    EnhancedNotesView(meeting: meeting)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func bottomDock(for meeting: Meeting) -> some View {
+        if recordingSessionStore.phase != .idle {
+            RecordingControlBar(
+                meeting: meeting,
+                onRequestStartRecording: {
+                    showsRecordingModeDialog = true
+                }
+            )
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+        } else if selectedMode == .transcript, let filePath = meeting.audioLocalPath {
+            AudioPlaybackBar(filePath: filePath)
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+        } else if selectedMode == .summary {
+            Button {
+                showsMeetingChatSheet = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "bubble.left.and.sparkles")
+                        .font(.system(size: 14, weight: .semibold))
+
+                    Text("Chat with note")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.46, green: 0.62, blue: 0.92),
+                            Color(red: 0.55, green: 0.71, blue: 0.96),
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    in: Capsule()
+                )
+                .shadow(color: Color.black.opacity(0.14), radius: 18, x: 0, y: 10)
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
+        }
+    }
+
+    private var rawNotesSheet: some View {
+        NavigationStack {
+            if let meeting = meetingStore.meeting(withID: meetingID) {
+                ZStack {
+                    DocumentBackdrop()
+
+                    ScrollView(showsIndicators: false) {
+                        NoteEditorView(meeting: meeting, showsHeader: false) { newValue in
+                            scheduleNoteSave(newValue, for: meeting)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, 20)
+                        .padding(.bottom, 40)
+                    }
+                }
+                .navigationTitle("Raw Notes")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button("Done") {
+                            showsRawNotesSheet = false
+                        }
+                    }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private var meetingChatSheet: some View {
+        NavigationStack {
+            if let meeting = meetingStore.meeting(withID: meetingID) {
+                ChatView(meeting: meeting)
+                    .navigationTitle("Chat with note")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") {
+                                showsMeetingChatSheet = false
                             }
                         }
-
-                        AppGlassDivider()
-
-                        EnhancedNotesView(meeting: meeting)
                     }
-                }
             }
+        }
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+
+    private func scheduleNoteSave(_ newValue: String, for meeting: Meeting) {
+        noteSaveTask?.cancel()
+        noteSaveTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.5))
+            guard !Task.isCancelled else { return }
+            meetingStore.updateNotes(newValue, for: meeting)
         }
     }
 
-    private var modeSwitcher: some View {
-        HStack(spacing: 4) {
-            ForEach(MeetingDetailMode.allCases) { mode in
-                Button {
-                    withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
-                        selectedMode = mode
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: mode.systemName)
-                            .font(.system(size: 12, weight: .semibold))
-                        Text(mode.rawValue)
-                            .font(.subheadline.weight(.semibold))
-                    }
-                    .foregroundStyle(selectedMode == mode ? Color.white : AppTheme.ink)
-                    .padding(.horizontal, 14)
-                    .frame(height: 40)
-                    .background {
-                        if selectedMode == mode {
-                            Capsule().fill(AppTheme.ink)
-                        } else {
-                            Capsule().fill(Color.clear)
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .background {
-            AppGlassSurface(cornerRadius: 24, style: .regular, shadowOpacity: 0.06)
-                .clipShape(Capsule())
-        }
+    private func metaLine(for meeting: Meeting) -> String {
+        let date = meeting.date.formatted(.dateTime.month(.wide).day().year())
+        let duration = meeting.durationSeconds > 0 ? "\(meeting.durationLabel) recording" : "Not recorded yet"
+        return "\(date) · \(duration)"
     }
 
-    private func metadataPill(systemName: String, label: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemName)
-                .font(.system(size: 11, weight: .semibold))
-            Text(label)
-                .font(.caption.weight(.semibold))
+    private func contentBottomPadding(for meeting: Meeting) -> CGFloat {
+        if recordingSessionStore.phase != .idle {
+            return 190
         }
-        .foregroundStyle(AppTheme.mutedInk)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background {
-            AppGlassSurface(cornerRadius: 16, style: .clear, shadowOpacity: 0.03)
+
+        switch selectedMode {
+        case .transcript:
+            return meeting.audioLocalPath == nil ? 56 : 170
+        case .summary:
+            return 140
         }
     }
 
