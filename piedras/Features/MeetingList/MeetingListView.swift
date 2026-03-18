@@ -15,6 +15,7 @@ struct MeetingListView: View {
     @State private var homeChatInput = ""
     @State private var showsRecordingModeDialog = false
     @State private var isImportingSourceAudio = false
+    @FocusState private var isHomeChatFocused: Bool
 
     var body: some View {
         ZStack {
@@ -28,6 +29,7 @@ struct MeetingListView: View {
                 feedList
             }
         }
+        .dismissKeyboardOnTap(isFocused: $isHomeChatFocused)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
             bottomDock
@@ -135,6 +137,7 @@ struct MeetingListView: View {
             }
         }
         .listStyle(.plain)
+        .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
         .contentMargins(.horizontal, 16, for: .scrollContent)
@@ -153,19 +156,7 @@ struct MeetingListView: View {
             ) {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(spacing: 10) {
-                        ZStack {
-                            PaperSurface(
-                                cornerRadius: 16,
-                                fill: AppTheme.backgroundSecondary,
-                                border: AppTheme.homeCardBorder,
-                                shadowOpacity: 0.03
-                            )
-                                .frame(width: 38, height: 38)
-
-                            Image(systemName: "doc.text")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(AppTheme.ink)
-                        }
+                        GlassIconBadge(systemName: "doc.text", size: 38, symbolSize: 14, shape: .rounded(14))
 
                         VStack(alignment: .leading, spacing: 2) {
                             HStack(spacing: 8) {
@@ -205,19 +196,7 @@ struct MeetingListView: View {
             shadowOpacity: 0.06
         ) {
             VStack(alignment: .leading, spacing: 12) {
-                ZStack {
-                    PaperSurface(
-                        cornerRadius: 18,
-                        fill: AppTheme.backgroundSecondary,
-                        border: AppTheme.homeCardBorder,
-                        shadowOpacity: 0.02
-                    )
-                        .frame(width: 48, height: 48)
-
-                    Image(systemName: "doc.text")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppTheme.ink)
-                }
+                GlassIconBadge(systemName: "doc.text", size: 48, symbolSize: 17, shape: .rounded(18))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text("No notes")
@@ -243,6 +222,7 @@ struct MeetingListView: View {
                     .textFieldStyle(.plain)
                     .font(.subheadline)
                     .foregroundStyle(AppTheme.ink)
+                    .focused($isHomeChatFocused)
                     .submitLabel(.send)
                     .onSubmit(sendHomeQuestion)
                     .accessibilityIdentifier("HomeGlobalChatField")
@@ -262,15 +242,12 @@ struct MeetingListView: View {
             .padding(.horizontal, 14)
             .frame(height: 52)
             .background {
-                PaperSurface(
-                    cornerRadius: 24,
-                    fill: AppTheme.homeCard.opacity(0.96),
-                    border: AppTheme.homeCardBorder,
-                    shadowOpacity: 0.08
-                )
+                AppGlassSurface(cornerRadius: 24, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.08)
+                    .clipShape(Capsule())
             }
 
             Button {
+                hideKeyboard()
                 if recordingSessionStore.phase == .idle {
                     showsRecordingModeDialog = true
                 } else {
@@ -281,21 +258,16 @@ struct MeetingListView: View {
             } label: {
                 ZStack {
                     if recordingSessionStore.phase == .idle {
-                        PaperSurface(
-                            cornerRadius: 28,
-                            fill: AppTheme.homeCard,
-                            border: AppTheme.homeCardBorder,
-                            shadowOpacity: 0.10
-                        )
+                        GlassIconBadge(systemName: "mic.fill", size: 58, symbolSize: 21, shape: .circle)
                     } else {
                         Circle()
                             .fill(AppTheme.highlight)
                             .shadow(color: AppTheme.highlight.opacity(0.30), radius: 20, x: 0, y: 10)
-                    }
 
-                    Image(systemName: recordingSessionStore.phase == .idle ? "mic.fill" : "stop.fill")
-                        .font(.system(size: 20, weight: .semibold))
-                        .foregroundStyle(recordingSessionStore.phase == .idle ? AppTheme.ink : .white)
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
                 }
                 .frame(width: 58, height: 58)
                 .contentShape(Circle())
@@ -365,11 +337,15 @@ struct MeetingListView: View {
         let question = trimmedHomeChatInput
         guard !question.isEmpty else { return }
 
+        isHomeChatFocused = false
+        hideKeyboard()
         homeChatInput = ""
         router.showGlobalChat(initialQuestion: question)
     }
 
     private func startMicrophoneRecording() {
+        isHomeChatFocused = false
+        hideKeyboard()
         guard let meeting = meetingStore.createMeeting() else { return }
         router.showMeeting(id: meeting.id)
         Task {
@@ -380,6 +356,8 @@ struct MeetingListView: View {
     private func handleSourceAudioSelection(_ result: Result<[URL], Error>) {
         switch result {
         case let .success(urls):
+            isHomeChatFocused = false
+            hideKeyboard()
             guard let sourceURL = urls.first else { return }
             guard let meeting = meetingStore.createMeeting() else { return }
             router.showMeeting(id: meeting.id)

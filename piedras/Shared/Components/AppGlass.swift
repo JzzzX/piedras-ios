@@ -6,6 +6,11 @@ enum AppGlassStyle {
     case clear
 }
 
+enum GlassIconShape {
+    case circle
+    case rounded(CGFloat)
+}
+
 struct AppGlassBackdrop: View {
     var body: some View {
         ZStack {
@@ -75,9 +80,26 @@ struct AppGlassSurface: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(Color.white.opacity(borderOpacity), lineWidth: 0.9)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            AppTheme.glassHighlight.opacity(style == .clear ? 0.52 : 0.68),
+                            AppTheme.glassTint.opacity(0.08),
+                            .clear,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .mask(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                )
         }
-        .shadow(color: Color.black.opacity(shadowOpacity), radius: 28, x: 0, y: 16)
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(AppTheme.glassStroke.opacity(borderOpacity / 0.24), lineWidth: 0.9)
+        }
+        .shadow(color: AppTheme.glassShadow.opacity(shadowOpacity / 0.12), radius: 28, x: 0, y: 16)
     }
 }
 
@@ -148,7 +170,7 @@ struct AppGlassDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.55))
+            .fill(AppTheme.glassStroke.opacity(0.72))
             .frame(height: 1)
             .padding(.leading, inset)
             .opacity(0.7)
@@ -196,20 +218,120 @@ struct AppGlassCircleButton: View {
             }
         } else {
             Button(action: action) {
-                Image(systemName: systemName)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(prominent ? .white : AppTheme.ink)
-                    .frame(width: size, height: size)
-                    .background {
-                        if prominent {
+                if prominent {
+                    Image(systemName: systemName)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: size, height: size)
+                        .background {
                             Circle().fill(AppTheme.ink)
-                        } else {
-                            AppGlassSurface(cornerRadius: size / 2, style: .regular, shadowOpacity: 0.08)
                         }
-                    }
+                } else {
+                    GlassIconBadge(
+                        systemName: systemName,
+                        size: size,
+                        shape: .circle
+                    )
+                }
             }
             .buttonStyle(.plain)
             .accessibilityLabel(accessibilityLabel)
+        }
+    }
+}
+
+struct GlassIconBadge: View {
+    let systemName: String
+    var size: CGFloat = 44
+    var symbolSize: CGFloat? = nil
+    var shape: GlassIconShape = .rounded(16)
+
+    var body: some View {
+        ZStack {
+            backgroundShape
+                .shadow(color: AppTheme.homeCardShadow.opacity(0.72), radius: 14, x: 0, y: 8)
+
+            overlayShape
+            strokeShape
+
+            Image(systemName: systemName)
+                .font(.system(size: symbolSize ?? size * 0.38, weight: .semibold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [AppTheme.ink, AppTheme.mutedInk],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .shadow(color: AppTheme.glassHighlight.opacity(0.40), radius: 2, x: 0, y: 1)
+        }
+        .frame(width: size, height: size)
+    }
+
+    @ViewBuilder
+    private var backgroundShape: some View {
+        switch shape {
+        case .circle:
+            AppGlassSurface(cornerRadius: size / 2, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.10)
+                .clipShape(Circle())
+        case let .rounded(cornerRadius):
+            AppGlassSurface(cornerRadius: cornerRadius, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.10)
+                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        }
+    }
+
+    @ViewBuilder
+    private var overlayShape: some View {
+        switch shape {
+        case .circle:
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            AppTheme.glassHighlight.opacity(0.82),
+                            AppTheme.glassTint.opacity(0.20),
+                            .clear,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .padding(strokeInset)
+        case let .rounded(cornerRadius):
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            AppTheme.glassHighlight.opacity(0.82),
+                            AppTheme.glassTint.opacity(0.20),
+                            .clear,
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .padding(strokeInset)
+        }
+    }
+
+    @ViewBuilder
+    private var strokeShape: some View {
+        switch shape {
+        case .circle:
+            Circle()
+                .stroke(AppTheme.glassStroke.opacity(0.64), lineWidth: 0.9)
+        case let .rounded(cornerRadius):
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(AppTheme.glassStroke.opacity(0.64), lineWidth: 0.9)
+        }
+    }
+
+    private var strokeInset: CGFloat {
+        switch shape {
+        case .circle:
+            return 2
+        case .rounded:
+            return 2
         }
     }
 }

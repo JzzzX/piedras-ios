@@ -113,13 +113,7 @@ struct SettingsView: View {
 
     private func settingsRow(systemName: String, title: String, value: String) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: systemName)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(AppTheme.ink)
-                .frame(width: 26, height: 26)
-                .background {
-                    AppGlassSurface(cornerRadius: 13, style: .clear, shadowOpacity: 0.02)
-                }
+            GlassIconBadge(systemName: systemName, size: 28, symbolSize: 11, shape: .rounded(12))
 
             Text(title)
                 .font(.subheadline.weight(.semibold))

@@ -6,6 +6,7 @@ struct MeetingSearchView: View {
     @Environment(MeetingStore.self) private var meetingStore
 
     @State private var query = ""
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         ZStack {
@@ -36,7 +37,9 @@ struct MeetingSearchView: View {
                 .padding(.top, 20)
                 .padding(.bottom, 40)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
+        .dismissKeyboardOnTap(isFocused: $isSearchFocused)
         .toolbar(.hidden, for: .navigationBar)
     }
 
@@ -68,9 +71,12 @@ struct MeetingSearchView: View {
             TextField("Search notes and transcript", text: $query)
                 .textFieldStyle(.plain)
                 .foregroundStyle(AppTheme.ink)
+                .focused($isSearchFocused)
 
             if !query.isEmpty {
                 Button {
+                    isSearchFocused = false
+                    hideKeyboard()
                     query = ""
                 } label: {
                     Image(systemName: "xmark.circle.fill")
@@ -82,7 +88,7 @@ struct MeetingSearchView: View {
         .padding(.horizontal, 16)
         .frame(height: 54)
         .background {
-            AppGlassSurface(cornerRadius: 22, style: .regular, shadowOpacity: 0.05)
+            AppGlassSurface(cornerRadius: 22, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.06)
         }
     }
 
@@ -109,6 +115,8 @@ struct MeetingSearchView: View {
     }
 
     private func openMeeting(_ meetingID: String) {
+        isSearchFocused = false
+        hideKeyboard()
         dismiss()
 
         Task { @MainActor in

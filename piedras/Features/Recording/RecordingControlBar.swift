@@ -131,19 +131,7 @@ struct RecordingControlBar: View {
 
     private var idleControls: some View {
         HStack(spacing: 14) {
-            ZStack {
-                PaperSurface(
-                    cornerRadius: 22,
-                    fill: AppTheme.documentPaperSecondary,
-                    border: AppTheme.documentHairline,
-                    shadowOpacity: 0.03
-                )
-                    .frame(width: 52, height: 52)
-
-                Image(systemName: "doc.text")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
-            }
+            GlassIconBadge(systemName: "doc.text", size: 52, symbolSize: 19, shape: .rounded(20))
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(meeting.audioLocalPath == nil ? "Ready" : "Resume")
@@ -166,11 +154,7 @@ struct RecordingControlBar: View {
                     }
                 }
             } label: {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                    .background(AppTheme.ink, in: Circle())
+                GlassIconBadge(systemName: "mic.fill", size: 52, symbolSize: 18, shape: .circle)
                     .accessibilityElement(children: .ignore)
                     .accessibilityLabel(meeting.audioLocalPath == nil ? "开始录音" : "继续录音")
                     .accessibilityIdentifier("StartRecordingButton")
@@ -196,19 +180,7 @@ struct RecordingControlBar: View {
 
     private var sourcePlaybackStrip: some View {
         HStack(spacing: 10) {
-            ZStack {
-                PaperSurface(
-                    cornerRadius: 16,
-                    fill: AppTheme.documentPaperSecondary,
-                    border: AppTheme.documentHairline,
-                    shadowOpacity: 0.02
-                )
-                    .frame(width: 34, height: 34)
-
-                Image(systemName: "music.note")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
-            }
+            GlassIconBadge(systemName: "music.note", size: 34, symbolSize: 12, shape: .rounded(14))
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(recordingSessionStore.sourceAudioDisplayName ?? "Source")
@@ -226,18 +198,12 @@ struct RecordingControlBar: View {
             Button {
                 meetingStore.toggleSourceAudioPlayback()
             } label: {
-                Image(systemName: recordingSessionStore.isSourceAudioPlaying ? "pause.fill" : "play.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
-                    .frame(width: 34, height: 34)
-                    .background {
-                        PaperSurface(
-                            cornerRadius: 17,
-                            fill: AppTheme.documentPaperSecondary,
-                            border: AppTheme.documentHairline,
-                            shadowOpacity: 0.02
-                        )
-                    }
+                GlassIconBadge(
+                    systemName: recordingSessionStore.isSourceAudioPlaying ? "pause.fill" : "play.fill",
+                    size: 34,
+                    symbolSize: 12,
+                    shape: .rounded(14)
+                )
             }
             .buttonStyle(.plain)
             .disabled(recordingSessionStore.phase != .recording)

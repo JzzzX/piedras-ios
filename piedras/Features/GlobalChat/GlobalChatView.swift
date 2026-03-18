@@ -11,6 +11,7 @@ struct GlobalChatView: View {
 
     @State private var input = ""
     @State private var didSendInitialQuestion = false
+    @FocusState private var isInputFocused: Bool
 
     init(initialQuestion: String? = nil) {
         self.initialQuestion = initialQuestion
@@ -52,8 +53,10 @@ struct GlobalChatView: View {
                         }
                     }
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
         }
+        .dismissKeyboardOnTap(isFocused: $isInputFocused)
         .safeAreaInset(edge: .bottom) {
             composer
         }
@@ -195,6 +198,7 @@ struct GlobalChatView: View {
                 TextField("Ask across your meetings", text: $input)
                     .textFieldStyle(.plain)
                     .foregroundStyle(AppTheme.ink)
+                    .focused($isInputFocused)
                     .submitLabel(.send)
                     .onSubmit(sendCurrentInput)
                     .accessibilityIdentifier("GlobalChatInputField")
@@ -203,7 +207,8 @@ struct GlobalChatView: View {
             .padding(.horizontal, 16)
             .frame(height: 54)
             .background {
-                AppGlassSurface(cornerRadius: 22, style: .regular, shadowOpacity: 0.05)
+                AppGlassSurface(cornerRadius: 22, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.06)
+                    .clipShape(Capsule())
             }
 
             Button(action: sendCurrentInput) {
@@ -273,6 +278,8 @@ struct GlobalChatView: View {
         let question = trimmedInput
         guard !question.isEmpty else { return }
 
+        isInputFocused = false
+        hideKeyboard()
         Task {
             guard await prepareAIRequest() else { return }
             let sent = await globalChatStore.sendMessage(question)

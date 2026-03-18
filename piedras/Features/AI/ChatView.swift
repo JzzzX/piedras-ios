@@ -6,6 +6,7 @@ struct ChatView: View {
     let meeting: Meeting
 
     @State private var input = ""
+    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         ScrollViewReader { proxy in
@@ -22,14 +23,16 @@ struct ChatView: View {
                 .padding(.top, 22)
                 .padding(.bottom, 120)
             }
-            .onChange(of: meeting.orderedChatMessages.count, initial: false) { _, _ in
-                if let lastID = meeting.orderedChatMessages.last?.id {
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        proxy.scrollTo(lastID, anchor: .bottom)
+                .onChange(of: meeting.orderedChatMessages.count, initial: false) { _, _ in
+                    if let lastID = meeting.orderedChatMessages.last?.id {
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            proxy.scrollTo(lastID, anchor: .bottom)
+                        }
                     }
                 }
-            }
+                .scrollDismissesKeyboard(.interactively)
         }
+        .dismissKeyboardOnTap(isFocused: $isInputFocused)
         .safeAreaInset(edge: .bottom) {
             composer
         }
@@ -88,6 +91,7 @@ struct ChatView: View {
                 TextField("Ask about this note", text: $input)
                     .textFieldStyle(.plain)
                     .foregroundStyle(AppTheme.ink)
+                    .focused($isInputFocused)
                     .submitLabel(.send)
                     .onSubmit(sendCurrentInput)
                     .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
@@ -123,6 +127,8 @@ struct ChatView: View {
         let question = trimmedInput
         guard !question.isEmpty else { return }
 
+        isInputFocused = false
+        hideKeyboard()
         Task {
             let didSend = await meetingStore.sendChatMessage(question: question, for: meeting.id)
             if didSend {

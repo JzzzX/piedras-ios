@@ -54,18 +54,7 @@ struct MeetingRowView: View {
 
     private var leadingIcon: some View {
         ZStack(alignment: .topTrailing) {
-            PaperSurface(
-                cornerRadius: 18,
-                fill: AppTheme.backgroundSecondary,
-                border: AppTheme.homeCardBorder,
-                shadowOpacity: 0.04
-            )
-                .frame(width: 44, height: 44)
-                .overlay {
-                    Image(systemName: "doc.text")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppTheme.ink)
-                }
+            GlassIconBadge(systemName: "doc.text", size: 44, symbolSize: 16, shape: .rounded(18))
 
             if isRecording {
                 Circle()
@@ -73,7 +62,7 @@ struct MeetingRowView: View {
                     .frame(width: 10, height: 10)
                     .overlay {
                         Circle()
-                            .stroke(Color.white.opacity(0.85), lineWidth: 2)
+                            .stroke(AppTheme.documentPaper.opacity(0.92), lineWidth: 2)
                     }
                     .offset(x: 3, y: -3)
             }

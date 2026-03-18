@@ -42,6 +42,7 @@ struct MeetingDetailView: View {
     @State private var titleDraft = ""
     @State private var enhancedNotesDraft = ""
     @State private var toastMessage: String?
+    @FocusState private var isTitleEditorFocused: Bool
 
     private let topAnchorID = "MeetingDetailTopAnchor"
 
@@ -313,6 +314,8 @@ struct MeetingDetailView: View {
             switch sheet {
             case .titleEditor:
                 DocumentSheetScaffold(title: "Edit title", onDone: {
+                    isTitleEditorFocused = false
+                    hideKeyboard()
                     meetingStore.updateTitle(titleDraft, for: meeting)
                     activeSheet = nil
                 }) {
@@ -321,6 +324,7 @@ struct MeetingDetailView: View {
                             .textFieldStyle(.plain)
                             .font(.system(size: 34, weight: .semibold, design: .serif))
                             .foregroundStyle(AppTheme.ink)
+                            .focused($isTitleEditorFocused)
                             .lineLimit(3, reservesSpace: false)
 
                         PaperDivider()
@@ -330,6 +334,7 @@ struct MeetingDetailView: View {
                             .font(.footnote)
                             .foregroundStyle(AppTheme.subtleInk)
                     }
+                    .dismissKeyboardOnTap(isFocused: $isTitleEditorFocused)
                 }
 
             case .summaryEditor:
@@ -610,6 +615,7 @@ private struct DocumentSheetScaffold<Content: View>: View {
                         .padding(.top, 12)
                         .padding(.bottom, 40)
                 }
+                .scrollDismissesKeyboard(.interactively)
             }
         }
         .presentationBackground(.clear)
@@ -624,7 +630,7 @@ private struct SheetHeaderBar: View {
     var body: some View {
         VStack(spacing: 8) {
             Capsule()
-                .fill(Color.black.opacity(0.12))
+                .fill(AppTheme.subtleInk.opacity(0.28))
                 .frame(width: 42, height: 5)
                 .padding(.top, 10)
 

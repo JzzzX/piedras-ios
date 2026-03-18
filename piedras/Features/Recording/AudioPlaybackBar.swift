@@ -97,13 +97,12 @@ struct AudioPlaybackBar: View {
                 Button {
                     playbackController.togglePlayback(fileURL: fileURL)
                 } label: {
-                    Image(systemName: playbackController.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(AppTheme.ink)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            Circle().fill(AppTheme.documentPaperSecondary)
-                        )
+                    GlassIconBadge(
+                        systemName: playbackController.isPlaying ? "pause.fill" : "play.fill",
+                        size: 40,
+                        symbolSize: 15,
+                        shape: .circle
+                    )
                 }
                 .buttonStyle(.plain)
 
