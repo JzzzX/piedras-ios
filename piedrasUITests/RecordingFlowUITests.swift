@@ -102,17 +102,27 @@ final class RecordingFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts.matching(identifier: "TranscriptTimestamp").firstMatch.waitForExistence(timeout: 3), "Transcript 缺少时间戳。")
 
         app.buttons["MeetingModeSummaryTab"].tap()
-        XCTAssertTrue(app.buttons["MeetingAskButton"].waitForExistence(timeout: 3), "AI Notes 页缺少 Ask 入口。")
-        XCTAssertTrue(app.textViews["EnhancedNotesEditor"].waitForExistence(timeout: 3), "AI Notes 应为整页可编辑文稿。")
+        XCTAssertTrue(app.buttons["MeetingAskButton"].waitForExistence(timeout: 3), "AI Notes 页缺少 Chat with note 入口。")
+        XCTAssertTrue(app.otherElements["EnhancedNotesRenderedView"].waitForExistence(timeout: 3), "AI Notes 应默认展示渲染后的文稿。")
+        XCTAssertFalse(app.staticTexts["## 会议摘要"].exists, "AI Notes 默认页不应暴露原始 markdown 标记。")
 
         let moreButton = app.buttons["MeetingDetailMoreButton"]
         XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "详情页更多按钮未出现。")
         moreButton.tap()
 
         XCTAssertTrue(app.buttons["Edit title"].waitForExistence(timeout: 2), "缺少 Edit title 动作。")
+        XCTAssertTrue(app.buttons["Edit AI notes"].exists, "缺少 Edit AI notes 动作。")
         XCTAssertTrue(app.buttons["Show my notes"].exists, "缺少 Show my notes 动作。")
         XCTAssertTrue(app.buttons["Copy notes"].exists, "缺少 Copy notes 动作。")
-        XCTAssertFalse(app.buttons["Edit AI summary"].exists, "AI Notes 已改为整页直编，不应再出现单独编辑动作。")
+        XCTAssertFalse(app.buttons["View transcript"].exists, "AI Notes 菜单不应再出现 View transcript。")
+
+        app.buttons["Edit AI notes"].tap()
+        XCTAssertTrue(app.textViews["EnhancedNotesMarkdownEditor"].waitForExistence(timeout: 3), "应能进入原始 markdown 编辑界面。")
+        XCTAssertTrue(app.buttons["EnhancedNotesEditorCancelButton"].exists, "缺少 Cancel 操作。")
+        XCTAssertTrue(app.buttons["EnhancedNotesEditorSaveButton"].exists, "缺少 Save 操作。")
+
+        app.buttons["EnhancedNotesEditorCancelButton"].tap()
+        XCTAssertTrue(app.otherElements["EnhancedNotesRenderedView"].waitForExistence(timeout: 3), "取消后应返回渲染态 AI Notes。")
     }
 
     private func launchApp() -> XCUIApplication {

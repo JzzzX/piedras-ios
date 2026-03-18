@@ -3,18 +3,16 @@ import SwiftUI
 struct EnhancedNotesView: View {
     @Environment(MeetingStore.self) private var meetingStore
 
-    @Binding var text: String
+    let text: String
 
     let meetingID: String
 
     var body: some View {
-        EditorialDocumentEditor(
-            text: $text,
-            placeholder: meetingStore.isEnhancing(meetingID: meetingID) ? "Generating notes..." : "Write here.",
+        MarkdownDocumentView(
+            markdown: text,
+            placeholder: meetingStore.isEnhancing(meetingID: meetingID) ? "Generating notes..." : "No AI notes yet.",
             minHeight: 420,
-            fontSize: 17,
-            lineSpacing: AppTheme.editorialBodyLineSpacing,
-            accessibilityIdentifier: "EnhancedNotesEditor"
+            accessibilityIdentifier: "EnhancedNotesRenderedView"
         )
         .frame(maxWidth: .infinity, alignment: .leading)
     }

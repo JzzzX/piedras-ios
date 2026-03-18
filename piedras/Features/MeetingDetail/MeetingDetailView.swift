@@ -12,6 +12,7 @@ private enum MeetingDetailMode: String, CaseIterable, Identifiable {
 private enum MeetingDetailSheet: String, Identifiable {
     case titleEditor
     case rawNotes
+    case enhancedNotesEditor
     case chat
 
     var id: String { rawValue }
@@ -39,6 +40,7 @@ struct MeetingDetailView: View {
     @State private var activeSheet: MeetingDetailSheet?
     @State private var showsActionMenu = false
     @State private var titleDraft = ""
+    @State private var enhancedNotesDraft = ""
     @State private var toastMessage: String?
     @FocusState private var isTitleEditorFocused: Bool
 
@@ -76,7 +78,7 @@ struct MeetingDetailView: View {
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: selectedMode == .transcript ? 12 : 18) {
                         Color.clear
                             .frame(height: 0)
                             .id(topAnchorID)
@@ -86,7 +88,9 @@ struct MeetingDetailView: View {
 
                         modePicker
 
-                        titleBlock(meeting: meeting)
+                        if selectedMode == .summary {
+                            titleBlock(meeting: meeting)
+                        }
 
                         documentPage(meeting: meeting)
                     }
@@ -230,20 +234,22 @@ struct MeetingDetailView: View {
 
     private func documentPage(meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            PaperDivider()
-                .opacity(0.62)
+            if selectedMode == .summary {
+                PaperDivider()
+                    .opacity(0.62)
+            }
 
             Group {
                 if selectedMode == .transcript {
                     TranscriptView(meeting: meeting)
                 } else {
                     EnhancedNotesView(
-                        text: enhancedNotesBinding(for: meeting),
+                        text: meeting.enhancedNotes,
                         meetingID: meeting.id
                     )
                 }
             }
-            .padding(.top, 20)
+            .padding(.top, selectedMode == .summary ? 20 : 0)
             .padding(.bottom, 34)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -301,7 +307,7 @@ struct MeetingDetailView: View {
                     Image(systemName: "bubble.left.and.sparkles")
                         .font(.system(size: 13, weight: .semibold))
 
-                    Text("Ask")
+                    Text("Chat with note")
                         .font(.subheadline.weight(.semibold))
                 }
                 .foregroundStyle(AppTheme.ink)
@@ -359,12 +365,34 @@ struct MeetingDetailView: View {
                     )
                 }
 
+            case .enhancedNotesEditor:
+                MarkdownEditorSheetScaffold(
+                    onCancel: {
+                        activeSheet = nil
+                    },
+                    onSave: {
+                        saveEnhancedNotesDraft(for: meeting)
+                    }
+                ) {
+                    EditorialDocumentEditor(
+                        text: $enhancedNotesDraft,
+                        placeholder: "Write markdown here.",
+                        minHeight: 520,
+                        fontSize: 16,
+                        lineSpacing: 6,
+                        autocapitalization: .none,
+                        usesSmartDashes: false,
+                        usesSmartQuotes: false,
+                        accessibilityIdentifier: "EnhancedNotesMarkdownEditor"
+                    )
+                }
+
             case .chat:
                 ZStack {
                     DocumentBackdrop()
 
                     VStack(spacing: 0) {
-                        SheetHeaderBar(title: "Ask") {
+                        SheetHeaderBar(title: "Chat with note") {
                             activeSheet = nil
                         }
 
@@ -418,7 +446,7 @@ struct MeetingDetailView: View {
             AppGlassSurface(cornerRadius: 24, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.12)
                 .overlay {
                     RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(AppTheme.documentPaper.opacity(0.82))
+                        .fill(AppTheme.documentPaper.opacity(0.90))
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         }
@@ -431,9 +459,9 @@ struct MeetingDetailView: View {
                 MeetingActionItem(title: "Edit title", systemName: "pencil") {
                     openTitleEditor(for: meeting)
                 },
-                MeetingActionItem(title: "View transcript", systemName: "doc.text") {
+                MeetingActionItem(title: "Edit AI notes", systemName: "square.and.pencil") {
                     closeActionMenu()
-                    selectedMode = .transcript
+                    openEnhancedNotesEditor(for: meeting)
                 },
                 MeetingActionItem(title: "Show my notes", systemName: "square.and.pencil") {
                     closeActionMenu()
@@ -474,6 +502,12 @@ struct MeetingDetailView: View {
         activeSheet = .titleEditor
     }
 
+    private func openEnhancedNotesEditor(for meeting: Meeting) {
+        enhancedNotesDraft = meeting.enhancedNotes
+        closeActionMenu()
+        activeSheet = .enhancedNotesEditor
+    }
+
     private func sharePayload(for meeting: Meeting) -> String {
         let body: String
 
@@ -481,7 +515,8 @@ struct MeetingDetailView: View {
         case .transcript:
             body = meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
         case .summary:
-            body = meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+            body = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
         }
 
         if body.isEmpty {
@@ -500,7 +535,7 @@ struct MeetingDetailView: View {
             content = meeting.transcriptText
             toast = "Copied transcript"
         case .summary:
-            content = meeting.enhancedNotes
+            content = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
             toast = "Copied notes"
         }
 
@@ -539,21 +574,13 @@ struct MeetingDetailView: View {
         }
     }
 
-    private func scheduleEnhancedNotesSave(_ newValue: String, for meeting: Meeting) {
-        noteSaveTask?.cancel()
-        meeting.enhancedNotes = newValue
-        noteSaveTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.5))
-            guard !Task.isCancelled else { return }
-            meetingStore.updateEnhancedNotes(newValue, for: meeting)
-        }
-    }
+    private func saveEnhancedNotesDraft(for meeting: Meeting) {
+        let normalized = enhancedNotesDraft
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
-    private func enhancedNotesBinding(for meeting: Meeting) -> Binding<String> {
-        Binding(
-            get: { meeting.enhancedNotes },
-            set: { scheduleEnhancedNotesSave($0, for: meeting) }
-        )
+        meetingStore.updateEnhancedNotes(normalized, for: meeting)
+        activeSheet = nil
     }
 
     private func canRefreshSummary(for meeting: Meeting) -> Bool {
@@ -647,6 +674,42 @@ private struct DocumentSheetScaffold<Content: View>: View {
     }
 }
 
+private struct MarkdownEditorSheetScaffold<Content: View>: View {
+    let onCancel: () -> Void
+    let onSave: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ZStack {
+            DocumentBackdrop()
+
+            VStack(spacing: 0) {
+                SheetActionHeaderBar(onCancel: onCancel, onSave: onSave)
+
+                ScrollView(showsIndicators: false) {
+                    content()
+                        .padding(24)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background {
+                            PaperSurface(
+                                cornerRadius: 34,
+                                fill: AppTheme.documentPaper,
+                                border: AppTheme.documentHairline,
+                                shadowOpacity: 0.05
+                            )
+                        }
+                        .padding(.horizontal, 18)
+                        .padding(.top, 12)
+                        .padding(.bottom, 40)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+        }
+        .presentationBackground(.clear)
+        .presentationDragIndicator(.hidden)
+    }
+}
+
 private struct SheetHeaderBar: View {
     let title: String
     let onDone: () -> Void
@@ -682,6 +745,45 @@ private struct SheetHeaderBar: View {
                         .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 18)
+        }
+    }
+}
+
+private struct SheetActionHeaderBar: View {
+    let onCancel: () -> Void
+    let onSave: () -> Void
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Capsule()
+                .fill(AppTheme.subtleInk.opacity(0.28))
+                .frame(width: 42, height: 5)
+                .padding(.top, 10)
+
+            HStack {
+                Button("Cancel") {
+                    onCancel()
+                }
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(Color.red)
+                .accessibilityIdentifier("EnhancedNotesEditorCancelButton")
+
+                Spacer()
+
+                Button("Save") {
+                    onSave()
+                }
+                .font(.title3.weight(.bold))
+                .foregroundStyle(AppTheme.ink)
+                .accessibilityIdentifier("EnhancedNotesEditorSaveButton")
+            }
+            .padding(.horizontal, 28)
+            .frame(height: 58)
+            .background {
+                AppGlassSurface(cornerRadius: 29, style: .clear, borderOpacity: 0.22, shadowOpacity: 0.10)
+                    .clipShape(Capsule())
             }
             .padding(.horizontal, 18)
         }

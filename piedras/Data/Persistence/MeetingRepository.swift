@@ -102,7 +102,21 @@ final class MeetingRepository {
             status: .ended,
             durationSeconds: 1_542,
             userNotesPlainText: "核心范围：录音、转写、笔记、AI 总结。",
-            enhancedNotes: "总结：先做一个极简可上线版本，复杂工作流全部后置。",
+            enhancedNotes: """
+            ## 会议摘要
+            先做一个极简可上线的 iOS 录音笔记版本，复杂工作流全部后置。
+
+            ## 关键讨论点
+            - 聚焦录音、转写、笔记与 AI 总结
+            - 工作区、知识库和导出能力暂不进入 MVP
+
+            ## 决策事项
+            - 当前阶段优先做单会议闭环
+
+            ## 行动项
+            - [ ] 完成 ASR 真实联调
+            - [ ] 收紧详情页信息层级
+            """,
             hiddenWorkspaceId: workspaceID,
             syncState: preferLocalOnly ? .pending : .synced,
             lastSyncedAt: preferLocalOnly ? nil : .now.addingTimeInterval(-3_600),

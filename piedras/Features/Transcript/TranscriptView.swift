@@ -13,7 +13,7 @@ struct TranscriptView: View {
     let meeting: Meeting
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 18) {
+        LazyVStack(alignment: .leading, spacing: 14) {
             if sentences.isEmpty {
                 emptyState
             } else {
@@ -43,7 +43,7 @@ struct TranscriptView: View {
     }
 
     private func sentenceRow(_ sentence: TranscriptSentence) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Text(sentence.timeLabel)
                     .font(.caption2.monospacedDigit().weight(.semibold))

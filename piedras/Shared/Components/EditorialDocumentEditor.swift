@@ -8,6 +8,9 @@ struct EditorialDocumentEditor: View {
     var minHeight: CGFloat = 320
     var fontSize: CGFloat = 17
     var lineSpacing: CGFloat = AppTheme.editorialBodyLineSpacing
+    var autocapitalization: UITextAutocapitalizationType = .sentences
+    var usesSmartDashes = true
+    var usesSmartQuotes = true
     var accessibilityIdentifier: String? = nil
 
     var body: some View {
@@ -26,6 +29,9 @@ struct EditorialDocumentEditor: View {
                 textColor: UIColor(AppTheme.ink),
                 tintColor: UIColor(AppTheme.accent),
                 lineSpacing: lineSpacing,
+                autocapitalization: autocapitalization,
+                usesSmartDashes: usesSmartDashes,
+                usesSmartQuotes: usesSmartQuotes,
                 accessibilityIdentifier: accessibilityIdentifier
             )
         }
@@ -40,6 +46,9 @@ private struct EditorialTextView: UIViewRepresentable {
     let textColor: UIColor
     let tintColor: UIColor
     let lineSpacing: CGFloat
+    let autocapitalization: UITextAutocapitalizationType
+    let usesSmartDashes: Bool
+    let usesSmartQuotes: Bool
     let accessibilityIdentifier: String?
 
     func makeCoordinator() -> Coordinator {
@@ -58,9 +67,9 @@ private struct EditorialTextView: UIViewRepresentable {
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.keyboardDismissMode = .interactive
         textView.adjustsFontForContentSizeCategory = false
-        textView.autocapitalizationType = .sentences
-        textView.smartDashesType = .yes
-        textView.smartQuotesType = .yes
+        textView.autocapitalizationType = autocapitalization
+        textView.smartDashesType = usesSmartDashes ? .yes : .no
+        textView.smartQuotesType = usesSmartQuotes ? .yes : .no
         textView.tintColor = tintColor
         textView.accessibilityIdentifier = accessibilityIdentifier
         applyStyle(to: textView, text: text)
@@ -69,6 +78,9 @@ private struct EditorialTextView: UIViewRepresentable {
 
     func updateUIView(_ textView: UITextView, context: Context) {
         textView.tintColor = tintColor
+        textView.autocapitalizationType = autocapitalization
+        textView.smartDashesType = usesSmartDashes ? .yes : .no
+        textView.smartQuotesType = usesSmartQuotes ? .yes : .no
         textView.accessibilityIdentifier = accessibilityIdentifier
 
         guard textView.text != text || textView.font != font else {

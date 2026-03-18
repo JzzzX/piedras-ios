@@ -71,20 +71,24 @@ struct AppGlassSurface: View {
                 NativeGlassBackground(cornerRadius: cornerRadius, style: style)
             } else {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(style == .clear ? .thinMaterial : .ultraThinMaterial)
+                    .fill(style == .clear ? .regularMaterial : .thickMaterial)
                     .overlay {
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(AppTheme.surfaceElevated.opacity(style == .clear ? 0.10 : 0.22))
+                            .fill(AppTheme.surfaceElevated.opacity(style == .clear ? 0.18 : 0.28))
                     }
             }
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(AppTheme.documentPaper.opacity(style == .clear ? 0.18 : 0.12))
         }
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            AppTheme.glassHighlight.opacity(style == .clear ? 0.52 : 0.68),
-                            AppTheme.glassTint.opacity(0.08),
+                            AppTheme.glassHighlight.opacity(style == .clear ? 0.58 : 0.72),
+                            AppTheme.glassTint.opacity(0.12),
                             .clear,
                         ],
                         startPoint: .topLeading,
@@ -97,9 +101,9 @@ struct AppGlassSurface: View {
         }
         .overlay {
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(AppTheme.glassStroke.opacity(borderOpacity / 0.24), lineWidth: 0.9)
+                .stroke(AppTheme.glassStroke.opacity(borderOpacity / 0.24), lineWidth: 1)
         }
-        .shadow(color: AppTheme.glassShadow.opacity(shadowOpacity / 0.12), radius: 28, x: 0, y: 16)
+        .shadow(color: AppTheme.glassShadow.opacity(shadowOpacity / 0.12), radius: 30, x: 0, y: 18)
     }
 }
 

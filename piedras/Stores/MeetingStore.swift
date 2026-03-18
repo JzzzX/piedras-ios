@@ -896,50 +896,27 @@ final class MeetingStore {
             .map { rawLine in
                 let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
 
-                if let title = trimmed.dropMarkdownTitlePrefix() {
-                    return title
+                if let unchecked = trimmed.dropPrefix("□ ") {
+                    return "- [ ] \(unchecked)"
                 }
 
-                if let checklist = trimmed.dropChecklistPrefix(isChecked: false) {
-                    return "□ \(checklist)"
+                if let checked = trimmed.dropPrefix("☑ ") {
+                    return "- [x] \(checked)"
                 }
 
-                if let checklist = trimmed.dropChecklistPrefix(isChecked: true) {
-                    return "☑ \(checklist)"
-                }
-
-                if let bullet = trimmed.dropBulletPrefix() {
-                    return "• \(bullet)"
+                if let bullet = trimmed.dropPrefix("• ") {
+                    return "- \(bullet)"
                 }
 
                 return trimmed
             }
             .joined(separator: "\n")
-            .replacingOccurrences(of: "\n\n\n", with: "\n\n")
+            .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
 private extension String {
-    func dropMarkdownTitlePrefix() -> String? {
-        dropPrefix("# ") ?? dropPrefix("## ") ?? dropPrefix("### ")
-    }
-
-    func dropChecklistPrefix(isChecked: Bool) -> String? {
-        if isChecked {
-            return dropPrefix("- [x] ")
-                ?? dropPrefix("- [X] ")
-                ?? dropPrefix("[x] ")
-                ?? dropPrefix("[X] ")
-        }
-
-        return dropPrefix("- [ ] ") ?? dropPrefix("[ ] ")
-    }
-
-    func dropBulletPrefix() -> String? {
-        dropPrefix("- ") ?? dropPrefix("* ") ?? dropPrefix("• ")
-    }
-
     func dropPrefix(_ prefix: String) -> String? {
         guard hasPrefix(prefix) else { return nil }
         return String(dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)

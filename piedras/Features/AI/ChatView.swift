@@ -78,7 +78,7 @@ struct ChatView: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.subtleInk)
 
-                TextField("Ask about this note", text: $input)
+                TextField("Chat with note", text: $input)
                     .textFieldStyle(.plain)
                     .font(AppTheme.editorialFont(size: 16))
                     .foregroundStyle(AppTheme.ink)
