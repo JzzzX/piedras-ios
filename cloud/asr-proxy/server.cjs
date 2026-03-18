@@ -151,16 +151,31 @@ function decodeServerFrame(raw) {
   let offset = headerSize;
   let sequence = null;
   let errorCode = null;
+  let payloadSize = null;
 
   if (messageType === 0x09 && (messageFlags === 0x01 || messageFlags === 0x03)) {
     sequence = buffer.readInt32BE(offset);
     offset += 4;
+  } else if (messageType === 0x09 && messageFlags === 0x04) {
+    // 豆包部分结束/控制帧会额外携带 trace id，格式为:
+    // [sequence:int32][traceIdLength:uint32][traceId:utf8][payloadLength:uint32][payload]
+    sequence = buffer.readInt32BE(offset);
+    offset += 4;
+
+    const traceIdLength = buffer.readUInt32BE(offset);
+    offset += 4;
+
+    if (traceIdLength > 0 && traceIdLength <= buffer.length - offset - 4) {
+      offset += traceIdLength;
+    } else {
+      throw new Error(`豆包响应 trace id 长度异常: ${traceIdLength}`);
+    }
   } else if (messageType === 0x0f) {
     errorCode = buffer.readInt32BE(offset);
     offset += 4;
   }
 
-  const payloadSize = buffer.readUInt32BE(offset);
+  payloadSize = buffer.readUInt32BE(offset);
   offset += 4;
   const payloadBuffer = buffer.subarray(offset, offset + payloadSize);
 
