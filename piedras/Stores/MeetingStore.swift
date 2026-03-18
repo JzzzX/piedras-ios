@@ -325,6 +325,11 @@ final class MeetingStore {
     }
 
     func checkBackendHealth(force: Bool = true) async {
+        guard settingsStore.hasConfiguredBackendURL else {
+            settingsStore.markBackendUnconfigured()
+            return
+        }
+
         if !force,
            let lastHealthCheckAt = settingsStore.lastHealthCheckAt,
            Date().timeIntervalSince(lastHealthCheckAt) < 60 {
@@ -340,9 +345,8 @@ final class MeetingStore {
 
         do {
             let asrStatus = try await apiClient.fetchASRStatus()
-            settingsStore.apiReachable = true
+            settingsStore.markBackendReachable()
             settingsStore.asrReady = asrStatus.ready
-            settingsStore.backendStatusMessage = "后端在线"
             settingsStore.asrStatusMessage = asrStatus.message
 
             do {
@@ -359,19 +363,8 @@ final class MeetingStore {
                 settingsStore.llmModel = nil
                 settingsStore.llmPreset = nil
             }
-
-            settingsStore.lastHealthCheckAt = .now
         } catch {
-            settingsStore.apiReachable = false
-            settingsStore.asrReady = false
-            settingsStore.llmReady = false
-            settingsStore.backendStatusMessage = error.localizedDescription
-            settingsStore.asrStatusMessage = "检查失败"
-            settingsStore.llmStatusMessage = "检查失败"
-            settingsStore.llmProvider = "none"
-            settingsStore.llmModel = nil
-            settingsStore.llmPreset = nil
-            settingsStore.lastHealthCheckAt = .now
+            settingsStore.markBackendUnreachable(message: error.localizedDescription)
         }
     }
 
@@ -404,7 +397,7 @@ final class MeetingStore {
             defer { settingsStore.isSyncing = false }
 
             guard await ensureBackendReachable(force: true) else {
-                settingsStore.syncStatusMessage = "后端不可达，未执行同步。"
+                settingsStore.syncStatusMessage = settingsStore.blockingMessage(for: .sync) ?? "Backend unavailable."
                 return
             }
 
@@ -429,7 +422,10 @@ final class MeetingStore {
     func generateEnhancedNotes(for meetingID: String) async {
         guard let meeting = meeting(withID: meetingID) else { return }
         guard !enhancingMeetingIDs.contains(meetingID) else { return }
-        guard await ensureBackendReachable(force: false) else { return }
+        guard await ensureAIReady(force: false) else {
+            lastErrorMessage = settingsStore.blockingMessage(for: .ai) ?? "AI unavailable."
+            return
+        }
 
         enhancingMeetingIDs.insert(meetingID)
         defer { enhancingMeetingIDs.remove(meetingID) }
@@ -451,7 +447,10 @@ final class MeetingStore {
         guard !trimmedQuestion.isEmpty else { return false }
         guard let meeting = meeting(withID: meetingID) else { return false }
         guard !streamingChatMeetingIDs.contains(meetingID) else { return false }
-        guard await ensureBackendReachable(force: false) else { return false }
+        guard await ensureAIReady(force: false) else {
+            lastErrorMessage = settingsStore.blockingMessage(for: .ai) ?? "AI unavailable."
+            return false
+        }
 
         let payload = MeetingPayloadMapper.makeChatPayload(from: meeting, question: trimmedQuestion)
         let userOrder = meeting.orderedChatMessages.count
@@ -572,11 +571,32 @@ final class MeetingStore {
     }
 
     private func ensureBackendReachable(force: Bool) async -> Bool {
+        guard settingsStore.hasConfiguredBackendURL else {
+            settingsStore.markBackendUnconfigured()
+            return false
+        }
+
         let shouldCheck = force || settingsStore.lastHealthCheckAt == nil || Date().timeIntervalSince(settingsStore.lastHealthCheckAt ?? .distantPast) > 60
         if shouldCheck {
             await checkBackendHealth(force: true)
         }
         return settingsStore.apiReachable
+    }
+
+    private func ensureAIReady(force: Bool) async -> Bool {
+        guard await ensureBackendReachable(force: force) else {
+            return false
+        }
+
+        return settingsStore.llmReady
+    }
+
+    private func ensureASRReady(force: Bool) async -> Bool {
+        guard await ensureBackendReachable(force: force) else {
+            return false
+        }
+
+        return settingsStore.asrReady
     }
 
     private func scheduleMeetingSync(meetingID: String, delay: Duration) {
@@ -611,7 +631,7 @@ final class MeetingStore {
 
         if meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            !transcript.isEmpty,
-           await ensureBackendReachable(force: false) {
+           await ensureAIReady(force: false) {
             do {
                 let titleResponse = try await apiClient.generateMeetingTitle(
                     transcript: transcript
@@ -629,7 +649,7 @@ final class MeetingStore {
 
         if meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            !transcript.isEmpty,
-           await ensureBackendReachable(force: false) {
+           await ensureAIReady(force: false) {
             do {
                 let response = try await apiClient.enhanceNotes(MeetingPayloadMapper.makeEnhancePayload(from: meeting))
                 let content = response.content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -649,6 +669,13 @@ final class MeetingStore {
     private func startASRIfPossible(for meetingID: String) async {
         guard recordingSessionStore.meetingID == meetingID,
               recordingSessionStore.phase == .recording else { return }
+
+        guard await ensureASRReady(force: true) else {
+            guard recordingSessionStore.meetingID == meetingID else { return }
+            recordingSessionStore.asrState = settingsStore.hasConfiguredBackendURL ? .degraded : .idle
+            recordingSessionStore.infoBanner = settingsStore.blockingMessage(for: .asr)
+            return
+        }
 
         let existingWorkspaceID = meeting(withID: meetingID)?.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
         let workspaceID: String?
@@ -676,7 +703,7 @@ final class MeetingStore {
 
             if meeting.lastSyncedAt != nil || meeting.syncState == .synced || meeting.audioRemotePath != nil {
                 guard await ensureBackendReachable(force: true) else {
-                    lastErrorMessage = "后端不可达，已同步会议暂未删除。"
+                    lastErrorMessage = settingsStore.blockingMessage(for: .backend) ?? "Backend unavailable."
                     return
                 }
 

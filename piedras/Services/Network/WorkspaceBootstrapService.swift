@@ -23,7 +23,7 @@ final class WorkspaceBootstrapService {
         settingsStore.workspaceStatusMessage = "正在检查工作区..."
 
         let workspaces = try await apiClient.listWorkspaces()
-        settingsStore.apiReachable = true
+        settingsStore.markBackendReachable()
 
         if let currentID = settingsStore.hiddenWorkspaceID,
            workspaces.contains(where: { $0.id == currentID }) {

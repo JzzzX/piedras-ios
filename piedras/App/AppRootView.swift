@@ -3,6 +3,7 @@ import SwiftUI
 struct AppRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppRouter.self) private var router
+    @Environment(SettingsStore.self) private var settingsStore
     @Environment(MeetingStore.self) private var meetingStore
 
     var body: some View {
@@ -19,6 +20,7 @@ struct AppRootView: View {
                 .task {
                     meetingStore.loadIfNeeded()
                     meetingStore.handleScenePhaseChange(scenePhase)
+                    presentSettingsIfNeeded()
                 }
         }
         .sheet(item: $router.sheet) { sheet in
@@ -37,10 +39,20 @@ struct AppRootView: View {
                 }
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                .interactiveDismissDisabled(settingsStore.requiresInitialBackendSetup)
             }
         }
         .onChange(of: scenePhase, initial: true) { _, newPhase in
             meetingStore.handleScenePhaseChange(newPhase)
         }
+        .onChange(of: settingsStore.requiresInitialBackendSetup, initial: true) { _, requiresSetup in
+            guard requiresSetup else { return }
+            presentSettingsIfNeeded()
+        }
+    }
+
+    private func presentSettingsIfNeeded() {
+        guard settingsStore.requiresInitialBackendSetup else { return }
+        router.showSettings()
     }
 }

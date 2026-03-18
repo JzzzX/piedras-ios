@@ -33,6 +33,9 @@ final class AppRouter {
     }
 
     func showSettings() {
+        if sheet == .settings {
+            return
+        }
         sheet = .settings
     }
 

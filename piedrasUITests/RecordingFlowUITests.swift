@@ -40,20 +40,32 @@ final class RecordingFlowUITests: XCTestCase {
     }
 
     @MainActor
+    func testInitialLaunchPromptsForBackendSetupWhenServerMissing() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append("UITEST_ISOLATED_DEFAULTS")
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Connect your Mac backend first."].waitForExistence(timeout: 5), "首次启动未展示后端配置引导。")
+        XCTAssertTrue(app.textFields["BackendURLField"].waitForExistence(timeout: 5), "后端地址输入框未出现。")
+    }
+
+    @MainActor
     func testHomeAIComposerOpensGlobalChat() throws {
         let app = launchApp()
+        let question = "Summarize roadmap"
 
         let field = app.textFields["HomeGlobalChatField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.tap()
-        field.typeText("Summarize roadmap")
+        field.typeText(question)
 
         let sendButton = app.buttons["HomeGlobalChatSendButton"]
         XCTAssertTrue(sendButton.waitForExistence(timeout: 2))
         sendButton.tap()
 
-        XCTAssertTrue(app.staticTexts["Summarize roadmap"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.textFields["GlobalChatInputField"].waitForExistence(timeout: 5))
+        let globalField = app.textFields["GlobalChatInputField"]
+        XCTAssertTrue(globalField.waitForExistence(timeout: 5))
+        XCTAssertEqual(globalField.value as? String, question)
     }
 
     @MainActor

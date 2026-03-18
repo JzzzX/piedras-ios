@@ -19,6 +19,18 @@ final class AppContainer {
     let globalChatStore: GlobalChatStore
 
     init(inMemory: Bool = false) {
+        let processArguments = ProcessInfo.processInfo.arguments
+        let shouldUseIsolatedDefaults = inMemory || processArguments.contains("UITEST_ISOLATED_DEFAULTS")
+        let shouldDefaultToSimulatorBackend = inMemory || processArguments.contains("UITEST_USE_SIMULATOR_BACKEND")
+        let settingsDefaults: UserDefaults
+        if shouldUseIsolatedDefaults,
+           let ephemeralDefaults = UserDefaults(suiteName: "piedras.ui-tests.in-memory") {
+            ephemeralDefaults.removePersistentDomain(forName: "piedras.ui-tests.in-memory")
+            settingsDefaults = ephemeralDefaults
+        } else {
+            settingsDefaults = .standard
+        }
+
         do {
             modelContainer = try ModelContainerFactory.makeContainer(inMemory: inMemory)
         } catch {
@@ -26,7 +38,10 @@ final class AppContainer {
         }
 
         router = AppRouter()
-        settingsStore = SettingsStore()
+        settingsStore = SettingsStore(
+            defaults: settingsDefaults,
+            defaultBackendBaseURLString: shouldDefaultToSimulatorBackend ? SettingsStore.simulatorLoopbackBaseURLString : ""
+        )
         recordingSessionStore = RecordingSessionStore()
         appActivityCoordinator = AppActivityCoordinator()
         audioSessionCoordinator = AudioSessionCoordinator()

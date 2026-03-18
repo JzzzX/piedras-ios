@@ -46,6 +46,11 @@ final class GlobalChatStore {
         guard !trimmedQuestion.isEmpty else { return false }
         guard !isStreaming else { return false }
 
+        if let blockingMessage = settingsStore.blockingMessage(for: .ai) {
+            lastErrorMessage = blockingMessage
+            return false
+        }
+
         lastErrorMessage = nil
         isStreaming = true
 

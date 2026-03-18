@@ -53,8 +53,8 @@ struct EnhancedNotesView: View {
                             .foregroundStyle(AppTheme.subtleInk)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                } else if isLLMUnavailable && meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("AI unavailable.")
+                } else if let blockingMessage, meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(blockingMessage)
                         .font(.body)
                         .foregroundStyle(AppTheme.subtleInk)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,7 +86,11 @@ struct EnhancedNotesView: View {
     }
 
     private var isLLMUnavailable: Bool {
-        settingsStore.lastHealthCheckAt != nil && (!settingsStore.apiReachable || !settingsStore.llmReady)
+        settingsStore.blockingMessage(for: .ai) != nil
+    }
+
+    private var blockingMessage: String? {
+        settingsStore.blockingMessage(for: .ai)
     }
 
     private var actionTitle: String {

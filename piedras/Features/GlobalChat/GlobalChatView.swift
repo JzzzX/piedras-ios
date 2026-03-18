@@ -2,6 +2,8 @@ import SwiftUI
 
 struct GlobalChatView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppRouter.self) private var router
+    @Environment(MeetingStore.self) private var meetingStore
     @Environment(GlobalChatStore.self) private var globalChatStore
     @Environment(SettingsStore.self) private var settingsStore
 
@@ -54,13 +56,20 @@ struct GlobalChatView: View {
             composer
         }
         .toolbar(.hidden, for: .navigationBar)
+        .task {
+            await meetingStore.checkBackendHealth(force: false)
+        }
         .task(id: initialQuestion) {
             guard !didSendInitialQuestion else { return }
             let question = initialQuestion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !question.isEmpty else { return }
             didSendInitialQuestion = true
-            input = ""
-            _ = await globalChatStore.sendMessage(question)
+
+            if await prepareAIRequest() {
+                _ = await globalChatStore.sendMessage(question)
+            } else {
+                input = question
+            }
         }
         .onDisappear {
             globalChatStore.resetConversation()
@@ -171,6 +180,7 @@ struct GlobalChatView: View {
                 }
         }
         .buttonStyle(.plain)
+        .disabled(isComposerBlocked)
     }
 
     private var composer: some View {
@@ -186,6 +196,7 @@ struct GlobalChatView: View {
                     .submitLabel(.send)
                     .onSubmit(sendCurrentInput)
                     .accessibilityIdentifier("GlobalChatInputField")
+                    .disabled(isComposerBlocked)
             }
             .padding(.horizontal, 16)
             .frame(height: 54)
@@ -201,7 +212,7 @@ struct GlobalChatView: View {
                     .background(AppTheme.ink, in: Circle())
             }
             .buttonStyle(.plain)
-            .disabled(trimmedInput.isEmpty || globalChatStore.isStreaming)
+            .disabled(trimmedInput.isEmpty || globalChatStore.isStreaming || isComposerBlocked)
         }
         .padding(.horizontal, 20)
         .padding(.top, 10)
@@ -210,7 +221,7 @@ struct GlobalChatView: View {
     }
 
     private func statusBanner(_ message: String) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 12) {
             Image(systemName: "info.circle")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(AppTheme.subtleInk)
@@ -219,6 +230,13 @@ struct GlobalChatView: View {
                 .font(.footnote)
                 .foregroundStyle(AppTheme.mutedInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button("Settings") {
+                router.showSettings()
+            }
+            .buttonStyle(.plain)
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(AppTheme.ink)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
@@ -238,19 +256,11 @@ struct GlobalChatView: View {
     }
 
     private var availabilityMessage: String? {
-        guard settingsStore.lastHealthCheckAt != nil else {
-            return nil
-        }
+        settingsStore.blockingMessage(for: .ai)
+    }
 
-        if !settingsStore.apiReachable {
-            return "Backend offline. Start ai_notepad or check Developer settings."
-        }
-
-        if !settingsStore.llmReady {
-            return "AI unavailable. Check the LLM status in Developer settings."
-        }
-
-        return nil
+    private var isComposerBlocked: Bool {
+        availabilityMessage != nil
     }
 
     private var trimmedInput: String {
@@ -262,10 +272,21 @@ struct GlobalChatView: View {
         guard !question.isEmpty else { return }
 
         Task {
+            guard await prepareAIRequest() else { return }
             let sent = await globalChatStore.sendMessage(question)
             if sent {
                 input = ""
             }
         }
+    }
+
+    private func prepareAIRequest() async -> Bool {
+        await meetingStore.checkBackendHealth(force: false)
+
+        if settingsStore.requiresInitialBackendSetup {
+            router.showSettings()
+        }
+
+        return settingsStore.blockingMessage(for: .ai) == nil
     }
 }
