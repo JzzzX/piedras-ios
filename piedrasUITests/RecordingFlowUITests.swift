@@ -88,6 +88,23 @@ final class RecordingFlowUITests: XCTestCase {
         waitForExpectations(timeout: 5)
     }
 
+    @MainActor
+    func testMeetingDetailMenuShowsImmersiveActions() throws {
+        let app = launchApp()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        let moreButton = app.buttons["MeetingDetailMoreButton"]
+        XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "详情页更多按钮未出现。")
+        moreButton.tap()
+
+        XCTAssertTrue(app.buttons["Edit title"].waitForExistence(timeout: 2), "缺少 Edit title 动作。")
+        XCTAssertTrue(app.buttons["Show my notes"].exists, "缺少 Show my notes 动作。")
+        XCTAssertTrue(app.buttons["Copy transcript"].exists, "缺少 Copy transcript 动作。")
+    }
+
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append("UITEST_IN_MEMORY")

@@ -174,6 +174,13 @@ final class MeetingStore {
         scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1.5))
     }
 
+    func updateEnhancedNotes(_ notes: String, for meeting: Meeting) {
+        meeting.enhancedNotes = notes
+        meeting.markPending()
+        persistChanges()
+        scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1.5))
+    }
+
     func persistChanges() {
         do {
             try repository.save()

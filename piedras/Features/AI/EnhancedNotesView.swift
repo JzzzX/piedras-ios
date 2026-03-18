@@ -25,30 +25,31 @@ struct EnhancedNotesView: View {
     let meeting: Meeting
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 26) {
             header
 
             if meetingStore.isEnhancing(meetingID: meeting.id) && trimmedContent.isEmpty {
                 documentSkeleton
-            } else if trimmedContent.isEmpty {
+            } else if displayBlocks.isEmpty {
                 emptyDocument
             } else {
                 documentBody
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .textSelection(.enabled)
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            HStack(spacing: 8) {
+        HStack(spacing: 10) {
+            HStack(spacing: 7) {
                 Image(systemName: "sparkles")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(AppTheme.documentOlive)
 
-                Text("AI Summary")
-                    .font(.headline)
-                    .foregroundStyle(AppTheme.ink)
+                Text("AI Notes")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.subtleInk)
             }
 
             Spacer()
@@ -58,39 +59,26 @@ struct EnhancedNotesView: View {
                     await meetingStore.generateEnhancedNotes(for: meeting.id)
                 }
             } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: meetingStore.isEnhancing(meetingID: meeting.id) ? "hourglass" : "arrow.clockwise")
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(actionTitle)
-                        .font(.caption.weight(.semibold))
-                }
-                .foregroundStyle(canGenerate ? AppTheme.ink : AppTheme.subtleInk)
-                .padding(.horizontal, 12)
-                .frame(height: 34)
-                .background {
-                    PaperSurface(
-                        cornerRadius: 17,
-                        fill: AppTheme.documentPaperSecondary,
-                        border: AppTheme.documentHairline,
-                        shadowOpacity: 0.03
-                    )
-                }
+                Image(systemName: meetingStore.isEnhancing(meetingID: meeting.id) ? "hourglass" : "arrow.clockwise")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(canGenerate ? AppTheme.ink : AppTheme.subtleInk)
+                    .frame(width: 30, height: 30)
+                    .background {
+                        Circle()
+                            .fill(AppTheme.documentPaperSecondary)
+                    }
             }
             .buttonStyle(.plain)
             .disabled(meetingStore.isEnhancing(meetingID: meeting.id) || !canGenerate)
+            .accessibilityLabel(actionAccessibilityLabel)
         }
     }
 
     private var documentBody: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(blocks.enumerated()), id: \.element.id) { index, block in
+            ForEach(Array(displayBlocks.enumerated()), id: \.element.id) { index, block in
                 render(block)
-                    .padding(.bottom, blockSpacing(after: block.kind))
-
-                if showsDivider(after: block.kind, nextIndex: index) {
-                    PaperDivider()
-                        .padding(.vertical, 4)
-                }
+                    .padding(.bottom, blockSpacing(after: block.kind, index: index))
             }
         }
     }
@@ -100,32 +88,35 @@ struct EnhancedNotesView: View {
         switch block.kind {
         case let .title(title):
             Text(title)
-                .font(.system(size: 30, weight: .bold))
+                .font(.system(size: 26, weight: .semibold, design: .serif))
                 .foregroundStyle(AppTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
 
         case let .section(title):
             Text(title)
-                .font(.title3.weight(.bold))
+                .font(.system(size: 21, weight: .semibold, design: .serif))
                 .foregroundStyle(AppTheme.ink)
-                .padding(.top, 6)
+                .fixedSize(horizontal: false, vertical: true)
 
         case let .paragraph(text):
             Text(text)
                 .font(.body)
-                .lineSpacing(8)
+                .lineSpacing(10)
                 .foregroundStyle(AppTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
 
         case let .bullets(items):
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
                 ForEach(items, id: \.self) { item in
                     HStack(alignment: .top, spacing: 10) {
-                        Text("•")
-                            .font(.body.weight(.bold))
-                            .foregroundStyle(AppTheme.ink)
+                        Circle()
+                            .fill(AppTheme.ink.opacity(0.82))
+                            .frame(width: 5, height: 5)
+                            .padding(.top, 10)
 
                         Text(item)
                             .font(.body)
-                            .lineSpacing(7)
+                            .lineSpacing(9)
                             .foregroundStyle(AppTheme.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -133,17 +124,17 @@ struct EnhancedNotesView: View {
             }
 
         case let .checklist(items):
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 14) {
                 ForEach(items) { item in
                     HStack(alignment: .top, spacing: 10) {
-                        Image(systemName: item.isDone ? "checkmark.square.fill" : "square")
-                            .font(.system(size: 16, weight: .regular))
+                        Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
+                            .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(item.isDone ? AppTheme.documentOlive : AppTheme.subtleInk)
-                            .padding(.top, 2)
+                            .padding(.top, 4)
 
                         Text(item.text)
                             .font(.body)
-                            .lineSpacing(7)
+                            .lineSpacing(9)
                             .foregroundStyle(AppTheme.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -153,29 +144,31 @@ struct EnhancedNotesView: View {
     }
 
     private var documentSkeleton: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            skeletonLine(width: 180, height: 24, opacity: 0.28)
-            skeletonLine(width: 110, height: 12, opacity: 0.22)
-            skeletonLine(width: nil, height: 12, opacity: 0.20)
+        VStack(alignment: .leading, spacing: 18) {
+            skeletonLine(width: 130, height: 12, opacity: 0.20)
+            skeletonLine(width: 220, height: 24, opacity: 0.28)
+            skeletonLine(width: nil, height: 12, opacity: 0.18)
             skeletonLine(width: nil, height: 12, opacity: 0.16)
-            skeletonLine(width: 230, height: 12, opacity: 0.14)
+            skeletonLine(width: 280, height: 12, opacity: 0.14)
 
-            skeletonLine(width: 120, height: 18, opacity: 0.24)
-                .padding(.top, 8)
-            skeletonLine(width: nil, height: 12, opacity: 0.20)
+            skeletonLine(width: 110, height: 18, opacity: 0.24)
+                .padding(.top, 10)
+            skeletonLine(width: nil, height: 12, opacity: 0.18)
             skeletonLine(width: nil, height: 12, opacity: 0.16)
-            skeletonLine(width: 260, height: 12, opacity: 0.14)
+            skeletonLine(width: 240, height: 12, opacity: 0.14)
         }
         .redacted(reason: .placeholder)
     }
 
     private var emptyDocument: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            skeletonLine(width: 180, height: 22, opacity: 0.18)
-            skeletonLine(width: nil, height: 11, opacity: 0.16)
+        VStack(alignment: .leading, spacing: 18) {
+            skeletonLine(width: 120, height: 12, opacity: 0.18)
+            skeletonLine(width: 210, height: 22, opacity: 0.16)
+            skeletonLine(width: nil, height: 11, opacity: 0.14)
             skeletonLine(width: nil, height: 11, opacity: 0.12)
-            skeletonLine(width: 210, height: 11, opacity: 0.10)
+            skeletonLine(width: 240, height: 11, opacity: 0.10)
         }
+        .padding(.top, 4)
     }
 
     private func skeletonLine(width: CGFloat?, height: CGFloat, opacity: Double) -> some View {
@@ -188,8 +181,20 @@ struct EnhancedNotesView: View {
         meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var blocks: [EnhancedNoteBlock] {
+    private var parsedBlocks: [EnhancedNoteBlock] {
         parseBlocks(from: trimmedContent)
+    }
+
+    private var displayBlocks: [EnhancedNoteBlock] {
+        var blocks = parsedBlocks
+
+        if let first = blocks.first,
+           case let .title(title) = first.kind,
+           normalized(title) == normalized(meeting.displayTitle) {
+            blocks.removeFirst()
+        }
+
+        return blocks
     }
 
     private var canGenerate: Bool {
@@ -197,32 +202,24 @@ struct EnhancedNotesView: View {
             !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var actionTitle: String {
+    private var actionAccessibilityLabel: String {
         if meetingStore.isEnhancing(meetingID: meeting.id) {
-            return "Working"
+            return "Generating notes"
         }
 
-        return trimmedContent.isEmpty ? "Generate" : "Refresh"
+        return trimmedContent.isEmpty ? "Generate notes" : "Refresh notes"
     }
 
-    private func blockSpacing(after kind: EnhancedNoteBlockKind) -> CGFloat {
+    private func blockSpacing(after kind: EnhancedNoteBlockKind, index: Int) -> CGFloat {
+        let isLast = index == displayBlocks.count - 1
+
         switch kind {
         case .title:
-            return 16
+            return isLast ? 0 : 18
         case .section:
-            return 12
+            return isLast ? 0 : 14
         case .paragraph, .bullets, .checklist:
-            return 20
-        }
-    }
-
-    private func showsDivider(after kind: EnhancedNoteBlockKind, nextIndex: Int) -> Bool {
-        guard nextIndex < blocks.count - 1 else { return false }
-        switch kind {
-        case .paragraph, .bullets, .checklist:
-            return false
-        case .title, .section:
-            return false
+            return isLast ? 0 : 24
         }
     }
 
@@ -335,6 +332,14 @@ struct EnhancedNotesView: View {
             .replacingOccurrences(of: "[x] ", with: "")
             .replacingOccurrences(of: "[X] ", with: "")
         return EnhancedNoteChecklistItem(text: text, isDone: isDone)
+    }
+
+    private func normalized(_ value: String) -> String {
+        value
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "　", with: "")
     }
 }
 

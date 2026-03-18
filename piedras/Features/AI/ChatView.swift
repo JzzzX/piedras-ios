@@ -8,27 +8,24 @@ struct ChatView: View {
     @State private var input = ""
 
     var body: some View {
-        ZStack {
-            DocumentBackdrop()
-
-            ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: 18) {
-                        if meeting.orderedChatMessages.isEmpty {
-                            emptyState
-                        } else {
-                            messageList
-                        }
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 26) {
+                    if meeting.orderedChatMessages.isEmpty {
+                        Color.clear
+                            .frame(height: 8)
+                    } else {
+                        messageList
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 24)
-                    .padding(.bottom, 120)
                 }
-                .onChange(of: meeting.orderedChatMessages.count, initial: false) { _, _ in
-                    if let lastID = meeting.orderedChatMessages.last?.id {
-                        withAnimation(.easeOut(duration: 0.22)) {
-                            proxy.scrollTo(lastID, anchor: .bottom)
-                        }
+                .padding(.horizontal, 22)
+                .padding(.top, 22)
+                .padding(.bottom, 120)
+            }
+            .onChange(of: meeting.orderedChatMessages.count, initial: false) { _, _ in
+                if let lastID = meeting.orderedChatMessages.last?.id {
+                    withAnimation(.easeOut(duration: 0.22)) {
+                        proxy.scrollTo(lastID, anchor: .bottom)
                     }
                 }
             }
@@ -38,73 +35,47 @@ struct ChatView: View {
         }
     }
 
-    private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Ask about this note")
-                .font(.system(size: 28, weight: .bold))
-                .foregroundStyle(AppTheme.ink)
-
-            Text("Transcript, notes and AI summary stay in context.")
-                .font(.body)
-                .foregroundStyle(AppTheme.subtleInk)
-
-            HStack(spacing: 10) {
-                suggestion("Summarize decisions")
-                suggestion("List next steps")
-            }
-        }
-    }
-
     private var messageList: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 22) {
             ForEach(meeting.orderedChatMessages) { message in
-                HStack {
-                    if message.role == "assistant" {
-                        messageBubble(message, isUser: false)
-                        Spacer(minLength: 46)
-                    } else {
-                        Spacer(minLength: 46)
-                        messageBubble(message, isUser: true)
-                    }
-                }
-                .id(message.id)
+                messageRow(message)
+                    .id(message.id)
             }
         }
     }
 
-    private func messageBubble(_ message: ChatMessage, isUser: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func messageRow(_ message: ChatMessage) -> some View {
+        let isUser = message.role == "user"
+
+        return VStack(alignment: isUser ? .trailing : .leading, spacing: 8) {
             Text(isUser ? "You" : "Piedras")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(isUser ? Color.white.opacity(0.74) : AppTheme.subtleInk)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(AppTheme.subtleInk)
 
             if message.content.isEmpty, !isUser, meetingStore.isStreamingChat(meetingID: meeting.id) {
                 ProgressView()
                     .tint(AppTheme.documentOlive)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 Text(message.content)
                     .font(.body)
-                    .lineSpacing(5)
-                    .foregroundStyle(isUser ? .white : AppTheme.ink)
+                    .lineSpacing(10)
+                    .foregroundStyle(AppTheme.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
+                    .padding(.horizontal, isUser ? 16 : 0)
+                    .padding(.vertical, isUser ? 14 : 0)
+                    .background {
+                        if isUser {
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .fill(AppTheme.documentPaperSecondary)
+                        }
+                    }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            if isUser {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(AppTheme.ink)
-            } else {
-                PaperSurface(
-                    cornerRadius: 22,
-                    fill: AppTheme.documentPaper,
-                    border: AppTheme.documentHairline,
-                    shadowOpacity: 0.04
-                )
-            }
-        }
+        .frame(maxWidth: .infinity, alignment: isUser ? .trailing : .leading)
+        .padding(.leading, isUser ? 56 : 0)
+        .padding(.trailing, isUser ? 0 : 56)
     }
 
     private var composer: some View {
@@ -124,49 +95,24 @@ struct ChatView: View {
             .padding(.horizontal, 16)
             .frame(height: 54)
             .background {
-                PaperSurface(
-                    cornerRadius: 24,
-                    fill: AppTheme.documentPaper,
-                    border: AppTheme.documentHairline,
-                    shadowOpacity: 0.06
-                )
+                AppGlassSurface(cornerRadius: 27, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.08)
+                    .clipShape(Capsule())
             }
 
             Button(action: sendCurrentInput) {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
+                    .frame(width: 50, height: 50)
                     .background(AppTheme.ink, in: Circle())
             }
             .buttonStyle(.plain)
             .disabled(trimmedInput.isEmpty || meetingStore.isStreamingChat(meetingID: meeting.id))
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 10)
-        .padding(.bottom, 14)
-    }
-
-    private func suggestion(_ text: String) -> some View {
-        Button {
-            input = text
-        } label: {
-            Text(text)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(AppTheme.ink)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background {
-                    PaperSurface(
-                        cornerRadius: 18,
-                        fill: AppTheme.documentPaperSecondary,
-                        border: AppTheme.documentHairline,
-                        shadowOpacity: 0.03
-                    )
-                }
-        }
-        .buttonStyle(.plain)
-        .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
+        .padding(.horizontal, 18)
+        .padding(.top, 8)
+        .padding(.bottom, 12)
+        .background(Color.clear)
     }
 
     private var trimmedInput: String {

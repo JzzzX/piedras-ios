@@ -13,7 +13,7 @@ struct TranscriptView: View {
     let meeting: Meeting
 
     var body: some View {
-        LazyVStack(alignment: .leading, spacing: 26) {
+        LazyVStack(alignment: .leading, spacing: 30) {
             if paragraphs.isEmpty && !showsLiveParagraph {
                 emptyState
             } else {
@@ -37,30 +37,32 @@ struct TranscriptView: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .animation(.easeOut(duration: 0.22), value: recordingSessionStore.currentPartial)
         .animation(.easeOut(duration: 0.22), value: meeting.orderedSegments.count)
         .textSelection(.enabled)
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(AppTheme.documentHairline.opacity(0.32))
-                .frame(width: 140, height: 10)
+        VStack(alignment: .leading, spacing: 18) {
+            skeletonLine(width: 46, height: 9, opacity: 0.26)
+            skeletonLine(width: nil, height: 14, opacity: 0.18)
+            skeletonLine(width: nil, height: 14, opacity: 0.16)
+            skeletonLine(width: 260, height: 14, opacity: 0.14)
 
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(AppTheme.documentHairline.opacity(0.22))
-                .frame(height: 11)
-
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(AppTheme.documentHairline.opacity(0.18))
-                .frame(height: 11)
-
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(AppTheme.documentHairline.opacity(0.14))
-                .frame(width: 210, height: 11)
+            skeletonLine(width: 46, height: 9, opacity: 0.22)
+                .padding(.top, 4)
+            skeletonLine(width: nil, height: 14, opacity: 0.16)
+            skeletonLine(width: nil, height: 14, opacity: 0.14)
+            skeletonLine(width: 210, height: 14, opacity: 0.12)
         }
-        .padding(.top, 6)
+        .padding(.top, 2)
+    }
+
+    private func skeletonLine(width: CGFloat?, height: CGFloat, opacity: Double) -> some View {
+        RoundedRectangle(cornerRadius: 4, style: .continuous)
+            .fill(AppTheme.documentHairline.opacity(opacity))
+            .frame(width: width, height: height)
     }
 
     private func paragraphRow(
@@ -69,31 +71,34 @@ struct TranscriptView: View {
         text: String,
         isLive: Bool
     ) -> some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
                 Text(timeLabel)
-                    .font(.caption.monospacedDigit())
+                    .font(.caption2.monospacedDigit())
                     .foregroundStyle(AppTheme.subtleInk)
 
                 if isLive {
+                    Circle()
+                        .fill(AppTheme.highlight)
+                        .frame(width: 5, height: 5)
+
                     Text("LIVE")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(AppTheme.highlight)
+                } else if let speakerLabel = speakerLabel(for: speaker) {
+                    Text(speakerLabel)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(AppTheme.mutedInk)
+                        .lineLimit(1)
                 }
             }
-            .frame(width: 48, alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 0) {
-                (Text("\(displaySpeakerName(speaker)): ")
-                    .fontWeight(.semibold)
-                 + Text(text))
-                    .font(.body)
-                    .lineSpacing(8)
-                    .foregroundStyle(isLive ? AppTheme.mutedInk : AppTheme.ink)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Text(text)
+                .font(.body)
+                .lineSpacing(11)
+                .foregroundStyle(isLive ? AppTheme.mutedInk : AppTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, isLive ? 2 : 0)
     }
 
     private var paragraphs: [TranscriptParagraph] {
@@ -107,7 +112,7 @@ struct TranscriptView: View {
                last.speaker == segment.speaker {
                 let mergedText = [last.text, trimmedText]
                     .filter { !$0.isEmpty }
-                    .joined(separator: "\n")
+                    .joined(separator: "\n\n")
                 grouped[grouped.count - 1] = TranscriptParagraph(
                     id: last.id + "-" + segment.id,
                     speaker: last.speaker,
@@ -134,7 +139,12 @@ struct TranscriptView: View {
     }
 
     private var liveSpeakerName: String {
-        meeting.recordingMode == .fileMix ? "混合音频" : "麦克风"
+        switch meeting.recordingMode {
+        case .microphone:
+            return ""
+        case .fileMix:
+            return "Mixed audio"
+        }
     }
 
     private func timeLabel(for startTime: Double) -> String {
@@ -142,9 +152,16 @@ struct TranscriptView: View {
         return TimeInterval(normalizedMilliseconds).mmss
     }
 
-    private func displaySpeakerName(_ speaker: String) -> String {
+    private func speakerLabel(for speaker: String) -> String? {
         let trimmed = speaker.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "Speaker" : trimmed
+        guard !trimmed.isEmpty else { return nil }
+
+        let lowered = trimmed.lowercased()
+        if lowered == "speaker" || lowered == "mic" || lowered == "microphone" || trimmed == "麦克风" {
+            return nil
+        }
+
+        return trimmed
     }
 
     private var baseTime: Double {

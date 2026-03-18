@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct NoteEditorView: View {
-    let meeting: Meeting
+    @Binding var text: String
     var showsHeader = true
-    let onNotesChange: (String) -> Void
+    var title = "Notes"
+    var placeholder = "Write here."
+    var minHeight: CGFloat = 260
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -13,7 +15,7 @@ struct NoteEditorView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(AppTheme.mutedInk)
 
-                    Text("Notes")
+                    Text(title)
                         .font(.headline)
                         .foregroundStyle(AppTheme.ink)
 
@@ -22,35 +24,22 @@ struct NoteEditorView: View {
             }
 
             ZStack(alignment: .topLeading) {
-                if meeting.userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("Write anything worth keeping.")
+                if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text(placeholder)
                         .font(.body)
                         .foregroundStyle(AppTheme.subtleInk)
-                        .padding(.horizontal, 18)
-                        .padding(.vertical, 16)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 10)
                         .allowsHitTesting(false)
                 }
 
-                TextEditor(
-                    text: Binding(
-                        get: { meeting.userNotesPlainText },
-                        set: { onNotesChange($0) }
-                    )
-                )
-                .font(.body)
-                .foregroundStyle(AppTheme.ink)
-                .scrollContentBackground(.hidden)
-                .frame(minHeight: 220)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-            }
-            .background {
-                PaperSurface(
-                    cornerRadius: 24,
-                    fill: AppTheme.documentPaper,
-                    border: AppTheme.documentHairline,
-                    shadowOpacity: 0.04
-                )
+                TextEditor(text: $text)
+                    .font(.body)
+                    .foregroundStyle(AppTheme.ink)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: minHeight)
+                    .padding(.horizontal, -5)
+                    .padding(.vertical, -8)
             }
         }
     }
