@@ -1,12 +1,5 @@
 import SwiftUI
 
-private struct TranscriptSentence: Identifiable {
-    let id: String
-    let timeLabel: String
-    let text: String
-    let isLive: Bool
-}
-
 struct TranscriptView: View {
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
 
@@ -46,23 +39,23 @@ struct TranscriptView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Text(sentence.timeLabel)
-                    .font(.caption2.monospacedDigit().weight(.semibold))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.subtleInk)
                     .accessibilityIdentifier("TranscriptTimestamp")
 
                 if sentence.isLive {
-                    Circle()
+                    Rectangle()
                         .fill(AppTheme.highlight)
                         .frame(width: 4, height: 4)
 
                     Text("LIVE")
-                        .font(.caption2.weight(.bold))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
                         .foregroundStyle(AppTheme.highlight)
                 }
             }
 
             Text(sentence.text)
-                .font(AppTheme.editorialFont(size: 17))
+                .font(.system(size: 16, weight: .regular, design: .monospaced))
                 .lineSpacing(AppTheme.editorialBodyLineSpacing)
                 .foregroundStyle(AppTheme.ink.opacity(sentence.isLive ? 0.84 : 1))
                 .fixedSize(horizontal: false, vertical: true)
@@ -70,8 +63,8 @@ struct TranscriptView: View {
     }
 
     private func skeletonLine(width: CGFloat?, height: CGFloat, opacity: Double) -> some View {
-        RoundedRectangle(cornerRadius: 4, style: .continuous)
-            .fill(AppTheme.documentHairline.opacity(opacity))
+        Rectangle()
+            .fill(AppTheme.border.opacity(opacity))
             .frame(width: width, height: height)
     }
 
@@ -123,4 +116,11 @@ struct TranscriptView: View {
 
         return 0
     }
+}
+
+private struct TranscriptSentence: Identifiable {
+    let id: String
+    let timeLabel: String
+    let text: String
+    let isLive: Bool
 }

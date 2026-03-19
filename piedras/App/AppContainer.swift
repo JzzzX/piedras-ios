@@ -75,6 +75,8 @@ final class AppContainer {
             workspaceBootstrapService: workspaceBootstrapService
         )
 
+        AppStrings.syncLanguage(settingsStore.appLanguage)
+
         if inMemory {
             meetingRepository.seedPreviewDataIfNeeded(
                 workspaceID: settingsStore.hiddenWorkspaceID,

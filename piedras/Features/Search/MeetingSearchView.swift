@@ -4,6 +4,7 @@ struct MeetingSearchView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AppRouter.self) private var router
     @Environment(MeetingStore.self) private var meetingStore
+    @Environment(SettingsStore.self) private var settingsStore
 
     @State private var query = ""
     @FocusState private var isSearchFocused: Bool
@@ -41,23 +42,24 @@ struct MeetingSearchView: View {
         }
         .dismissKeyboardOnTap(isFocused: $isSearchFocused)
         .toolbar(.hidden, for: .navigationBar)
+        .id(settingsStore.appLanguage)
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Search")
-                    .font(.system(size: 34, weight: .regular, design: .serif))
+                Text(AppStrings.current.search)
+                    .font(.system(size: 28, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.ink)
 
-                Text("Notes")
-                    .font(.subheadline)
+                Text(AppStrings.current.notes)
+                    .font(.system(size: 14, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
             Spacer()
 
-            AppGlassCircleButton(systemName: "xmark", accessibilityLabel: "关闭") {
+            AppGlassCircleButton(systemName: "xmark", accessibilityLabel: AppStrings.current.close) {
                 dismiss()
             }
         }
@@ -68,8 +70,9 @@ struct MeetingSearchView: View {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(AppTheme.subtleInk)
 
-            TextField("Search notes and transcript", text: $query)
+            TextField(AppStrings.current.searchNotesAndTranscript, text: $query)
                 .textFieldStyle(.plain)
+                .font(.system(size: 15, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.ink)
                 .focused($isSearchFocused)
 
@@ -79,31 +82,46 @@ struct MeetingSearchView: View {
                     hideKeyboard()
                     query = ""
                 } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(AppTheme.subtleInk)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(AppTheme.ink)
+                        .frame(width: 24, height: 24)
+                        .background(AppTheme.surface)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, 16)
         .frame(height: 54)
-        .background {
-            AppGlassSurface(cornerRadius: 22, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.06)
-        }
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
     }
 
     private var emptyState: some View {
-        AppGlassCard(cornerRadius: 30, style: .regular, padding: 20, shadowOpacity: 0.06) {
-            HStack(spacing: 10) {
-                Image(systemName: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "magnifyingglass" : "doc.text.magnifyingglass")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(AppTheme.subtleInk)
+        HStack(spacing: 10) {
+            Image(systemName: query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "magnifyingglass" : "doc.text.magnifyingglass")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(AppTheme.subtleInk)
 
-                Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Start typing." : "No match.")
-                    .font(.body)
-                    .foregroundStyle(AppTheme.mutedInk)
-            }
+            Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AppStrings.current.startTyping : AppStrings.current.noMatch)
+                .font(.system(size: 15, weight: .regular, design: .monospaced))
+                .foregroundStyle(AppTheme.mutedInk)
         }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+        .retroHardShadow()
     }
 
     private var searchResults: [Meeting] {

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ChatView: View {
     @Environment(MeetingStore.self) private var meetingStore
+    @Environment(SettingsStore.self) private var settingsStore
 
     let meeting: Meeting
 
@@ -36,6 +37,7 @@ struct ChatView: View {
         .safeAreaInset(edge: .bottom) {
             composer
         }
+        .id(settingsStore.appLanguage)
     }
 
     private var messageList: some View {
@@ -51,17 +53,21 @@ struct ChatView: View {
         let isUser = message.role == "user"
 
         return VStack(alignment: .leading, spacing: 10) {
-            Text(isUser ? "You" : "AI")
-                .font(.caption2.weight(.semibold))
+            Text(isUser ? "YOU>" : "AI>")
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(AppTheme.subtleInk)
 
             if message.content.isEmpty, !isUser, meetingStore.isStreamingChat(meetingID: meeting.id) {
-                ProgressView()
-                    .tint(AppTheme.documentOlive)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 4) {
+                    RetroBlinkingCursor()
+                    Text(AppStrings.current.processing)
+                        .font(.system(size: 14, weight: .regular, design: .monospaced))
+                        .foregroundStyle(AppTheme.subtleInk)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 Text(message.content)
-                    .font(AppTheme.editorialFont(size: 17))
+                    .font(.system(size: 16, weight: .regular, design: .monospaced))
                     .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,13 +80,13 @@ struct ChatView: View {
     private var composer: some View {
         HStack(spacing: 12) {
             HStack(spacing: 10) {
-                Image(systemName: "bubble.left.and.sparkles")
-                    .font(.system(size: 13, weight: .semibold))
+                Text(">")
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.subtleInk)
 
-                TextField("Chat with note", text: $input)
+                TextField(AppStrings.current.chatWithNote, text: $input)
                     .textFieldStyle(.plain)
-                    .font(AppTheme.editorialFont(size: 16))
+                    .font(.system(size: 15, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.ink)
                     .focused($isInputFocused)
                     .submitLabel(.send)
@@ -89,20 +95,22 @@ struct ChatView: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 54)
-            .background {
-                AppGlassSurface(cornerRadius: 27, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.08)
-                    .clipShape(Capsule())
-            }
+            .background(AppTheme.surface)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+            )
 
             Button(action: sendCurrentInput) {
                 Image(systemName: "arrow.up")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(AppTheme.surface)
                     .frame(width: 50, height: 50)
-                    .background {
-                        AppGlassSurface(cornerRadius: 25, style: .clear, borderOpacity: 0.18, shadowOpacity: 0.08)
-                            .clipShape(Circle())
-                    }
+                    .background(AppTheme.ink)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                    )
             }
             .buttonStyle(.plain)
             .disabled(trimmedInput.isEmpty || meetingStore.isStreamingChat(meetingID: meeting.id))

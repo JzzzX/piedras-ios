@@ -124,7 +124,7 @@ final class Meeting {
 
     var displayTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "未命名会议" : trimmed
+        return trimmed.isEmpty ? AppStrings.current.untitledMeeting : trimmed
     }
 
     var orderedSegments: [TranscriptSegment] {

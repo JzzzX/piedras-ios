@@ -4,6 +4,12 @@ private struct APIErrorPayload: Decodable {
     let error: String?
 }
 
+private struct MeetingTitleRequestPayload: Encodable {
+    let transcript: String
+    let durationSeconds: Int
+    let meetingDate: String
+}
+
 enum APIClientError: LocalizedError {
     case missingBaseURL
     case invalidResponse
@@ -143,11 +149,19 @@ final class APIClient {
         try await sendJSONRequest(path: "/api/enhance", method: "POST", body: payload)
     }
 
-    func generateMeetingTitle(transcript: String) async throws -> RemoteMeetingTitleResponse {
+    func generateMeetingTitle(
+        transcript: String,
+        durationSeconds: Int,
+        meetingDate: Date
+    ) async throws -> RemoteMeetingTitleResponse {
         try await sendJSONRequest(
             path: "/api/meetings/title",
             method: "POST",
-            body: ["transcript": transcript]
+            body: MeetingTitleRequestPayload(
+                transcript: transcript,
+                durationSeconds: durationSeconds,
+                meetingDate: Self.iso8601WithFractionalSeconds.string(from: meetingDate)
+            )
         )
     }
 

@@ -1,141 +1,490 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Retro Macintosh + Paper Texture Theme
+
 enum AppTheme {
-    static var background: Color { color(light: 0xF6F5F2, dark: 0x14100D) }
-    static var backgroundSecondary: Color { color(light: 0xFBFAF7, dark: 0x1A1511) }
-    static var surface: Color { rgba(light: (0xFF, 0xFF, 0xFD, 0.82), dark: (0x28, 0x22, 0x1C, 0.72)) }
-    static var surfaceElevated: Color { rgba(light: (0xFF, 0xFF, 0xFF, 0.92), dark: (0x34, 0x2C, 0x25, 0.84)) }
-    static var border: Color { rgba(light: (0xFF, 0xFF, 0xFF, 0.80), dark: (0xFF, 0xFF, 0xFF, 0.10)) }
-    static var ink: Color { color(light: 0x2E2721, dark: 0xF2E7DA) }
-    static var mutedInk: Color { color(light: 0x58514A, dark: 0xD2C0AF) }
-    static var subtleInk: Color { color(light: 0x89817A, dark: 0xA28F7C) }
-    static var accent: Color { color(light: 0x69625A, dark: 0xD3BEA3) }
-    static var accentSoft: Color { color(light: 0xEEEAE3, dark: 0x352D26) }
-    static var highlight: Color { color(light: 0x9A7759, dark: 0xD08A5D) }
-    static var highlightSoft: Color { color(light: 0xF5EEE6, dark: 0x443126) }
-    static var danger: Color { color(light: 0xB84E35, dark: 0xDE8A6C) }
-    static var success: Color { color(light: 0x5F824D, dark: 0x89AA73) }
-    static var ambientBlue: Color { color(light: 0xECEAE4, dark: 0x3A322C) }
-    static var ambientMint: Color { color(light: 0xF1F0EB, dark: 0x2E2924) }
-    static var ambientSand: Color { color(light: 0xF7F5EF, dark: 0x463C32) }
+    // ── Core Palette ──────────────────────────────────────────────
+    /// Manila paper background
+    static var background: Color { Color(hex: 0xEAE3D2) }
+    /// Slightly darker paper for secondary areas
+    static var backgroundSecondary: Color { Color(hex: 0xE2DBCA) }
+    /// Bleached paper surface (cards/windows)
+    static var surface: Color { Color(hex: 0xF4F0E6) }
+    /// Elevated surface (same as surface in retro: no transparency)
+    static var surfaceElevated: Color { Color(hex: 0xF4F0E6) }
+    /// Hard ink-black border
+    static var border: Color { Color(hex: 0x111111) }
+    /// Ink black for text
+    static var ink: Color { Color(hex: 0x111111) }
+    /// Faded ink for secondary text
+    static var mutedInk: Color { Color(hex: 0x6A6358) }
+    /// Faded ink for tertiary text
+    static var subtleInk: Color { Color(hex: 0x8A8578) }
+    /// Muted accent (same as ink in retro)
+    static var accent: Color { Color(hex: 0x111111) }
+    /// Soft accent background
+    static var accentSoft: Color { Color(hex: 0xE2DBCA) }
+    /// Rubber stamp red – primary highlight
+    static var highlight: Color { Color(hex: 0xD9423E) }
+    /// Soft highlight background
+    static var highlightSoft: Color { Color(hex: 0xF4E6E5) }
+    /// Danger – same red
+    static var danger: Color { Color(hex: 0xD9423E) }
+    /// Success – typewriter green
+    static var success: Color { Color(hex: 0x5F824D) }
+    /// Ballpoint pen blue
+    static var penBlue: Color { Color(hex: 0x2B4C7E) }
 
-    static var homeCard: Color { color(light: 0xFFFDFC, dark: 0x1E1814) }
-    static var homeCardBorder: Color { rgba(light: (0xFF, 0xFF, 0xFF, 0.92), dark: (0xFF, 0xFF, 0xFF, 0.08)) }
-    static var homeCardShadow: Color { rgba(light: (0x29, 0x24, 0x1F, 0.09), dark: (0x00, 0x00, 0x00, 0.26)) }
+    /// Dock / toolbar surface – slightly darker than cards for visual separation
+    static var dockSurface: Color { Color(hex: 0xE8E1D0) }
 
-    static var documentBackground: Color { color(light: 0xF7F6F2, dark: 0x17120F) }
-    static var documentPaper: Color { color(light: 0xFFFEFC, dark: 0x221B16) }
-    static var documentPaperSecondary: Color { color(light: 0xFAF8F4, dark: 0x2B241D) }
-    static var documentHairline: Color { color(light: 0xD8D3CA, dark: 0x4A3F35) }
-    static var documentOlive: Color { color(light: 0x59634F, dark: 0xB9C2A7) }
-    static var documentShadow: Color { rgba(light: (0x00, 0x00, 0x00, 0.05), dark: (0x00, 0x00, 0x00, 0.28)) }
+    // Ambient colors (no gradient blobs in retro – flat)
+    static var ambientBlue: Color { Color(hex: 0xEAE3D2) }
+    static var ambientMint: Color { Color(hex: 0xEAE3D2) }
+    static var ambientSand: Color { Color(hex: 0xEAE3D2) }
 
-    static var glassStroke: Color { rgba(light: (0xFF, 0xFF, 0xFF, 0.58), dark: (0xFF, 0xFF, 0xFF, 0.14)) }
-    static var glassHighlight: Color { rgba(light: (0xFF, 0xFF, 0xFF, 0.52), dark: (0xFF, 0xFF, 0xFF, 0.09)) }
-    static var glassTint: Color { rgba(light: (0xFF, 0xFF, 0xFC, 0.20), dark: (0x4C, 0x3F, 0x34, 0.22)) }
-    static var glassShadow: Color { rgba(light: (0x00, 0x00, 0x00, 0.10), dark: (0x00, 0x00, 0x00, 0.22)) }
-    static var glassIconStart: Color { color(light: 0xFFFEFA, dark: 0x3A3028) }
-    static var glassIconEnd: Color { color(light: 0xF2EEE7, dark: 0x26201B) }
+    // Card colors
+    static var homeCard: Color { Color(hex: 0xF4F0E6) }
+    static var homeCardBorder: Color { Color(hex: 0x111111) }
+    static var homeCardShadow: Color { Color(hex: 0x111111) }
 
+    // Document colors
+    static var documentBackground: Color { Color(hex: 0xEAE3D2) }
+    static var documentPaper: Color { Color(hex: 0xF4F0E6) }
+    static var documentPaperSecondary: Color { Color(hex: 0xEAE3D2) }
+    static var documentHairline: Color { Color(hex: 0x111111) }
+    static var documentOlive: Color { Color(hex: 0x5F824D) }
+    static var documentShadow: Color { Color(hex: 0x111111) }
+
+    // Glass → Retro (no transparency, hard edges)
+    static var glassStroke: Color { Color(hex: 0x111111) }
+    static var glassHighlight: Color { Color(hex: 0xF4F0E6) }
+    static var glassTint: Color { Color(hex: 0xF4F0E6) }
+    static var glassShadow: Color { Color(hex: 0x111111) }
+    static var glassIconStart: Color { Color(hex: 0xF4F0E6) }
+    static var glassIconEnd: Color { Color(hex: 0xEAE3D2) }
+
+    // ── Flat Gradients (no gradient in retro) ─────────────────────
     static var pageGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                color(light: 0xFBFAF7, dark: 0x17120F),
-                color(light: 0xF7F6F2, dark: 0x1B1511),
-                color(light: 0xF2F1ED, dark: 0x201915),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
+        LinearGradient(colors: [background], startPoint: .top, endPoint: .bottom)
     }
 
     static var documentGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                color(light: 0xFBFAF7, dark: 0x191310),
-                color(light: 0xF7F5F1, dark: 0x1C1612),
-                color(light: 0xF2F0EB, dark: 0x231C17),
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+        LinearGradient(colors: [background], startPoint: .top, endPoint: .bottom)
     }
 
     static var heroGradient: LinearGradient {
         LinearGradient(
-            colors: [
-                color(light: 0x665240, dark: 0x7B6653),
-                color(light: 0x3B3026, dark: 0x41372E),
-            ],
+            colors: [Color(hex: 0x111111), Color(hex: 0x222222)],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
     }
 
-    static var cardShadow: Color { rgba(light: (0x00, 0x00, 0x00, 0.08), dark: (0x00, 0x00, 0x00, 0.26)) }
-    static let editorialBodyLineSpacing: CGFloat = 8
+    static var cardShadow: Color { Color(hex: 0x111111) }
+
+    // ── Typography ────────────────────────────────────────────────
+    static let editorialBodyLineSpacing: CGFloat = 6
     static let editorialSectionSpacing: CGFloat = 18
     static let editorialParagraphSpacing: CGFloat = 16
 
+    /// Monospace body font (replaces Songti editorial font)
     static func editorialFont(size: CGFloat) -> Font {
-        Font(editorialUIFont(size: size, weight: .regular))
+        .system(size: size, weight: .regular, design: .monospaced)
     }
 
+    /// Monospace emphasis font
     static func editorialEmphasisFont(size: CGFloat) -> Font {
-        Font(editorialUIFont(size: size, weight: .semibold))
+        .system(size: size, weight: .bold, design: .monospaced)
     }
 
-    private static func color(light: UInt32, dark: UInt32) -> Color {
-        Color(
-            uiColor: UIColor { traits in
-                UIColor(hex: traits.userInterfaceStyle == .dark ? dark : light)
-            }
-        )
-    }
-
-    private static func rgba(light: (Int, Int, Int, Double), dark: (Int, Int, Int, Double)) -> Color {
-        Color(
-            uiColor: UIColor { traits in
-                let value = traits.userInterfaceStyle == .dark ? dark : light
-                return UIColor(
-                    red: CGFloat(value.0) / 255,
-                    green: CGFloat(value.1) / 255,
-                    blue: CGFloat(value.2) / 255,
-                    alpha: value.3
-                )
-            }
-        )
-    }
-
+    /// UIFont equivalent for UIKit bridging
     static func editorialUIFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
-        let candidateNames: [String]
+        UIFont.monospacedSystemFont(ofSize: size, weight: weight)
+    }
 
-        if weight.rawValue >= UIFont.Weight.semibold.rawValue {
-            candidateNames = ["Songti SC Bold", "Songti SC Semibold", "Songti SC"]
-        } else if weight.rawValue <= UIFont.Weight.light.rawValue {
-            candidateNames = ["Songti SC Light", "Songti SC", "STSongti-SC-Light"]
-        } else {
-            candidateNames = ["Songti SC", "Songti SC Regular", "STSongti-SC-Regular"]
-        }
+    // ── Retro Dimensions ──────────────────────────────────────────
+    static let retroBorderWidth: CGFloat = 2
+    static let retroCornerRadius: CGFloat = 0
+    static let retroShadowOffset: CGFloat = 4
+    static let retroTitleBarHeight: CGFloat = 24
+}
 
-        for name in candidateNames {
-            if let font = UIFont(name: name, size: size) {
-                return font
-            }
-        }
+// MARK: - Color Hex Initializer
 
-        return UIFont.systemFont(ofSize: size, weight: weight)
+extension Color {
+    init(hex: UInt32) {
+        self.init(
+            red: Double((hex >> 16) & 0xFF) / 255,
+            green: Double((hex >> 8) & 0xFF) / 255,
+            blue: Double(hex & 0xFF) / 255
+        )
     }
 }
 
-private extension UIColor {
-    convenience init(hex: UInt32) {
-        self.init(
-            red: CGFloat((hex >> 16) & 0xFF) / 255,
-            green: CGFloat((hex >> 8) & 0xFF) / 255,
-            blue: CGFloat(hex & 0xFF) / 255,
-            alpha: 1
+// MARK: - Retro Window ViewModifier
+
+/// Mac OS 9 style window with hard border, zero radius, hard drop shadow
+struct RetroWindowModifier: ViewModifier {
+    var hasTitleBar: Bool = false
+    var titleBarLabel: String = ""
+
+    func body(content: Content) -> some View {
+        VStack(spacing: 0) {
+            if hasTitleBar {
+                RetroTitleBar(label: titleBarLabel)
+            }
+            content
+        }
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
         )
+        .retroHardShadow()
+    }
+}
+
+extension View {
+    func retroWindow(titleBar: String? = nil) -> some View {
+        modifier(RetroWindowModifier(
+            hasTitleBar: titleBar != nil,
+            titleBarLabel: titleBar ?? ""
+        ))
+    }
+
+    /// Hard pixel-perfect drop shadow that does NOT ghost text.
+    /// Uses a background offset rectangle instead of `.shadow()`.
+    func retroHardShadow(
+        x: CGFloat = AppTheme.retroShadowOffset,
+        y: CGFloat = AppTheme.retroShadowOffset,
+        color: Color = AppTheme.border
+    ) -> some View {
+        self.background(alignment: .topLeading) {
+            Rectangle()
+                .fill(color)
+                .offset(x: x, y: y)
+        }
+    }
+}
+
+// MARK: - Retro Title Bar
+
+/// Mac OS 9 striped title bar with close box
+struct RetroTitleBar: View {
+    let label: String
+    var showCloseBox: Bool = false
+    var onClose: (() -> Void)? = nil
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if showCloseBox {
+                RetroCloseBox(action: onClose ?? {})
+            }
+
+            Spacer()
+
+            Text(label)
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .foregroundStyle(AppTheme.ink)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 1)
+                .background(AppTheme.surface)
+
+            Spacer()
+
+            // Balance the close box
+            if showCloseBox {
+                Color.clear.frame(width: 14, height: 14)
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(height: AppTheme.retroTitleBarHeight)
+        .background(
+            RetroStripePattern()
+        )
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(AppTheme.border)
+                .frame(height: AppTheme.retroBorderWidth)
+        }
+    }
+}
+
+// MARK: - Stripe Pattern for Title Bar
+
+struct RetroStripePattern: View {
+    var body: some View {
+        GeometryReader { proxy in
+            Canvas { context, size in
+                let stripeWidth: CGFloat = 2
+                var x: CGFloat = 0
+                var isBlack = true
+                while x < size.width {
+                    let rect = CGRect(x: x, y: 0, width: stripeWidth, height: size.height)
+                    context.fill(
+                        Path(rect),
+                        with: .color(isBlack ? AppTheme.ink : AppTheme.surface)
+                    )
+                    x += stripeWidth
+                    isBlack.toggle()
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Retro Close Box
+
+struct RetroCloseBox: View {
+    let action: () -> Void
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            Rectangle()
+                .fill(isHovered ? AppTheme.ink : AppTheme.surface)
+                .frame(width: 14, height: 14)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.ink, lineWidth: AppTheme.retroBorderWidth)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+// MARK: - Retro Button Style
+
+struct RetroButtonStyle: ButtonStyle {
+    var isPrimary: Bool = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 15, weight: .bold, design: .monospaced))
+            .foregroundStyle(isPrimary ? AppTheme.surface : AppTheme.ink)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(isPrimary ? AppTheme.ink : AppTheme.surface)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.ink, lineWidth: AppTheme.retroBorderWidth)
+            )
+            .retroHardShadow(
+                x: configuration.isPressed ? 0 : AppTheme.retroShadowOffset,
+                y: configuration.isPressed ? 0 : AppTheme.retroShadowOffset
+            )
+            .offset(
+                x: configuration.isPressed ? AppTheme.retroShadowOffset : 0,
+                y: configuration.isPressed ? AppTheme.retroShadowOffset : 0
+            )
+    }
+}
+
+extension ButtonStyle where Self == RetroButtonStyle {
+    static var retro: RetroButtonStyle { RetroButtonStyle() }
+    static var retroPrimary: RetroButtonStyle { RetroButtonStyle(isPrimary: true) }
+}
+
+// MARK: - Retro Stamp Label
+
+struct RetroStampLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text.uppercased())
+            .font(.system(size: 13, weight: .bold, design: .monospaced))
+            .foregroundStyle(AppTheme.highlight)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.highlight, lineWidth: AppTheme.retroBorderWidth)
+            )
+            .rotationEffect(.degrees(-5))
+    }
+}
+
+// MARK: - Retro Checkerboard Progress Bar
+
+struct RetroCheckerboardProgress: View {
+    var progress: Double = 1.0
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                // Track
+                Rectangle()
+                    .fill(AppTheme.surface)
+
+                // Fill with checkerboard
+                Canvas { context, size in
+                    let cellSize: CGFloat = 8
+                    let fillWidth = size.width * min(max(progress, 0), 1)
+
+                    for row in 0..<Int(ceil(size.height / cellSize)) {
+                        for col in 0..<Int(ceil(fillWidth / cellSize)) {
+                            let isBlack = (row + col) % 2 == 0
+                            let rect = CGRect(
+                                x: CGFloat(col) * cellSize,
+                                y: CGFloat(row) * cellSize,
+                                width: cellSize,
+                                height: cellSize
+                            )
+                            context.fill(
+                                Path(rect),
+                                with: .color(isBlack ? AppTheme.ink : AppTheme.surface)
+                            )
+                        }
+                    }
+                }
+                .frame(width: proxy.size.width * min(max(progress, 0), 1))
+            }
+        }
+        .frame(height: 16)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.ink, lineWidth: AppTheme.retroBorderWidth)
+        )
+    }
+}
+
+// MARK: - Retro Blinking Cursor
+
+struct RetroBlinkingCursor: View {
+    @State private var isVisible = true
+
+    var body: some View {
+        Text("█")
+            .font(.system(size: 16, weight: .bold, design: .monospaced))
+            .foregroundStyle(AppTheme.ink)
+            .opacity(isVisible ? 1 : 0)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 0).repeatForever(autoreverses: true).speed(0.8)) {
+                    isVisible.toggle()
+                }
+            }
+    }
+}
+
+// MARK: - Retro Divider
+
+struct RetroDivider: View {
+    var inset: CGFloat = 0
+
+    var body: some View {
+        Rectangle()
+            .fill(AppTheme.border)
+            .frame(height: AppTheme.retroBorderWidth)
+            .padding(.leading, inset)
+    }
+}
+
+// MARK: - Retro Card (replaces PaperCard / AppGlassCard)
+
+struct RetroCard<Content: View>: View {
+    var titleBar: String? = nil
+    var padding: CGFloat = 16
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .retroWindow(titleBar: titleBar)
+    }
+}
+
+// MARK: - Retro Icon Badge (replaces GlassIconBadge)
+
+struct RetroIconBadge: View {
+    let systemName: String
+    var size: CGFloat = 44
+    var symbolSize: CGFloat? = nil
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                )
+
+            Image(systemName: systemName)
+                .font(.system(size: symbolSize ?? size * 0.38, weight: .bold))
+                .foregroundStyle(AppTheme.ink)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Retro Square Button (replaces AppGlassCircleButton)
+
+struct RetroSquareButton: View {
+    let systemName: String
+    let accessibilityLabel: String
+    var size: CGFloat = 44
+    var prominent: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Rectangle()
+                    .fill(prominent ? AppTheme.ink : AppTheme.surface)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                    )
+
+                Image(systemName: systemName)
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(prominent ? AppTheme.surface : AppTheme.ink)
+            }
+            .frame(width: size, height: size)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+// MARK: - Retro Noise Overlay
+
+struct RetroNoiseOverlay: View {
+    var body: some View {
+        Canvas { context, size in
+            // Simple grain effect
+            for _ in 0..<Int(size.width * size.height * 0.003) {
+                let x = CGFloat.random(in: 0..<size.width)
+                let y = CGFloat.random(in: 0..<size.height)
+                let dotSize: CGFloat = 1
+                let rect = CGRect(x: x, y: y, width: dotSize, height: dotSize)
+                context.fill(
+                    Path(rect),
+                    with: .color(.black.opacity(Double.random(in: 0.02...0.06)))
+                )
+            }
+        }
+        .allowsHitTesting(false)
+        .ignoresSafeArea()
+    }
+}
+
+// MARK: - Retro Raised Edge (Mac OS 9 bevel)
+
+/// Classic Mac OS 9 raised bevel: 1px white highlight on top, 2px black divider below.
+/// Place at the top of a toolbar to visually separate it from content above.
+struct RetroRaisedEdge: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            Rectangle()
+                .fill(Color.white)
+                .frame(height: 1)
+            Rectangle()
+                .fill(AppTheme.border)
+                .frame(height: AppTheme.retroBorderWidth)
+        }
     }
 }

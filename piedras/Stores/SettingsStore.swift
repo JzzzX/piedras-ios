@@ -27,12 +27,20 @@ enum RemoteCapabilityKind {
 final class SettingsStore {
     private enum Key {
         static let hiddenWorkspaceID = "piedras.settings.hiddenWorkspaceID"
+        static let appLanguage = "piedras.settings.appLanguage"
 #if DEBUG
         static let debugBackendBaseURLString = "piedras.settings.debugBackendBaseURLString"
 #endif
     }
 
     private let defaults: UserDefaults
+
+    var appLanguage: AppLanguage {
+        didSet {
+            defaults.set(appLanguage.rawValue, forKey: Key.appLanguage)
+            AppStrings.syncLanguage(appLanguage)
+        }
+    }
 
 #if DEBUG
     var debugBackendBaseURLString: String {
@@ -77,6 +85,8 @@ final class SettingsStore {
 
     init(defaults: UserDefaults = .standard, debugDefaultBackendBaseURLString: String? = nil) {
         self.defaults = defaults
+        self.appLanguage = defaults.string(forKey: Key.appLanguage)
+            .flatMap { AppLanguage(rawValue: $0) } ?? .chinese
         hiddenWorkspaceID = defaults.string(forKey: Key.hiddenWorkspaceID)
 #if DEBUG
         debugBackendBaseURLString = defaults.string(forKey: Key.debugBackendBaseURLString)

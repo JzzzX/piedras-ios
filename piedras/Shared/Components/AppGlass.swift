@@ -1,6 +1,8 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Retro Glass Style (kept for API compatibility)
+
 enum AppGlassStyle {
     case regular
     case clear
@@ -11,173 +13,169 @@ enum GlassIconShape {
     case rounded(CGFloat)
 }
 
+// MARK: - Retro Backdrop (replaces gradient blobs with flat paper)
+
 struct AppGlassBackdrop: View {
     var body: some View {
         ZStack {
-            AppTheme.pageGradient
+            AppTheme.background
+                .ignoresSafeArea()
 
-            Circle()
-                .fill(AppTheme.ambientBlue.opacity(0.34))
-                .frame(width: 320, height: 320)
-                .blur(radius: 46)
-                .offset(x: 132, y: -248)
-
-            Circle()
-                .fill(AppTheme.ambientMint.opacity(0.22))
-                .frame(width: 250, height: 250)
-                .blur(radius: 34)
-                .offset(x: -120, y: -150)
-
-            Circle()
-                .fill(AppTheme.ambientSand.opacity(0.32))
-                .frame(width: 280, height: 280)
-                .blur(radius: 42)
-                .offset(x: -90, y: 290)
+            RetroNoiseOverlay()
         }
-        .ignoresSafeArea()
     }
 }
 
 struct DocumentBackdrop: View {
     var body: some View {
         ZStack {
-            AppTheme.documentGradient
+            AppTheme.background
+                .ignoresSafeArea()
 
-            Circle()
-                .fill(AppTheme.ambientSand.opacity(0.20))
-                .frame(width: 320, height: 320)
-                .blur(radius: 52)
-                .offset(x: -110, y: -250)
-
-            Circle()
-                .fill(AppTheme.ambientBlue.opacity(0.16))
-                .frame(width: 260, height: 260)
-                .blur(radius: 48)
-                .offset(x: 140, y: -300)
+            RetroNoiseOverlay()
         }
-        .ignoresSafeArea()
     }
 }
 
+// MARK: - Retro Surface (replaces frosted glass)
+// NOTE: AppGlassSurface is used as a .background {} shape, so shadow is fine here
+// since it only shadows the shape, not text content.
+
 struct AppGlassSurface: View {
-    var cornerRadius: CGFloat = 28
+    var cornerRadius: CGFloat = 0
     var style: AppGlassStyle = .regular
-    var borderOpacity: Double = 0.24
-    var shadowOpacity: Double = 0.12
+    var borderOpacity: Double = 1.0
+    var shadowOpacity: Double = 1.0
 
     var body: some View {
         ZStack {
-            if #available(iOS 26.0, *) {
-                NativeGlassBackground(cornerRadius: cornerRadius, style: style)
-            } else {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(style == .clear ? .regularMaterial : .thickMaterial)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .fill(AppTheme.surfaceElevated.opacity(style == .clear ? 0.18 : 0.28))
-                    }
+            // Hard shadow layer (behind)
+            if shadowOpacity > 0.05 {
+                Rectangle()
+                    .fill(AppTheme.border)
+                    .offset(x: AppTheme.retroShadowOffset, y: AppTheme.retroShadowOffset)
             }
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(AppTheme.documentPaper.opacity(style == .clear ? 0.18 : 0.12))
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            AppTheme.glassHighlight.opacity(style == .clear ? 0.58 : 0.72),
-                            AppTheme.glassTint.opacity(0.12),
-                            .clear,
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .mask(
-                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+
+            // Main surface
+            Rectangle()
+                .fill(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
                 )
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(AppTheme.glassStroke.opacity(borderOpacity / 0.24), lineWidth: 1)
-        }
-        .shadow(color: AppTheme.glassShadow.opacity(shadowOpacity / 0.12), radius: 30, x: 0, y: 18)
     }
 }
+
+// MARK: - Retro Card (replaces AppGlassCard)
 
 struct AppGlassCard<Content: View>: View {
-    var cornerRadius: CGFloat = 32
+    var cornerRadius: CGFloat = 0
     var style: AppGlassStyle = .regular
     var padding: CGFloat = 20
-    var shadowOpacity: Double = 0.12
+    var shadowOpacity: Double = 1.0
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         content()
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                AppGlassSurface(
-                    cornerRadius: cornerRadius,
-                    style: style,
-                    borderOpacity: 0.28,
-                    shadowOpacity: shadowOpacity
-                )
-            }
+            .background(AppTheme.surface)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+            )
+            .retroHardShadow(
+                x: shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0,
+                y: shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0
+            )
     }
 }
+
+// MARK: - Retro Readable Panel
+
+struct AppReadableGlassPanel: View {
+    var cornerRadius: CGFloat = 0
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(AppTheme.border)
+                .offset(x: AppTheme.retroShadowOffset, y: AppTheme.retroShadowOffset)
+
+            Rectangle()
+                .fill(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                )
+        }
+    }
+}
+
+// MARK: - Paper Surface (retro version)
+// NOTE: PaperSurface is only used as .background {}, so the shadow here is safe.
 
 struct PaperSurface: View {
-    var cornerRadius: CGFloat = 28
-    var fill: Color = AppTheme.documentPaper
-    var border: Color = AppTheme.documentHairline
-    var shadowOpacity: Double = 0.08
+    var cornerRadius: CGFloat = 0
+    var fill: Color = AppTheme.surface
+    var border: Color = AppTheme.border
+    var shadowOpacity: Double = 1.0
 
     var body: some View {
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(fill)
-            .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(border.opacity(0.55), lineWidth: 1)
+        ZStack {
+            if shadowOpacity > 0.05 {
+                Rectangle()
+                    .fill(AppTheme.border)
+                    .offset(x: AppTheme.retroShadowOffset, y: AppTheme.retroShadowOffset)
             }
-            .shadow(color: AppTheme.documentShadow.opacity(shadowOpacity / 0.08), radius: 24, x: 0, y: 12)
+
+            Rectangle()
+                .fill(fill)
+                .overlay(
+                    Rectangle()
+                        .stroke(border, lineWidth: AppTheme.retroBorderWidth)
+                )
+        }
     }
 }
 
+// MARK: - Paper Card (retro version)
+
 struct PaperCard<Content: View>: View {
-    var cornerRadius: CGFloat = 28
-    var fill: Color = AppTheme.documentPaper
-    var border: Color = AppTheme.documentHairline
+    var cornerRadius: CGFloat = 0
+    var fill: Color = AppTheme.surface
+    var border: Color = AppTheme.border
     var padding: CGFloat = 18
-    var shadowOpacity: Double = 0.08
+    var shadowOpacity: Double = 1.0
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         content()
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                PaperSurface(
-                    cornerRadius: cornerRadius,
-                    fill: fill,
-                    border: border,
-                    shadowOpacity: shadowOpacity
-                )
-            }
+            .background(fill)
+            .overlay(
+                Rectangle()
+                    .stroke(border, lineWidth: AppTheme.retroBorderWidth)
+            )
+            .retroHardShadow(
+                x: shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0,
+                y: shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0
+            )
     }
 }
+
+// MARK: - Retro Dividers
 
 struct AppGlassDivider: View {
     var inset: CGFloat = 0
 
     var body: some View {
         Rectangle()
-            .fill(AppTheme.glassStroke.opacity(0.72))
-            .frame(height: 1)
+            .fill(AppTheme.border)
+            .frame(height: AppTheme.retroBorderWidth)
             .padding(.leading, inset)
-            .opacity(0.7)
     }
 }
 
@@ -186,11 +184,13 @@ struct PaperDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(AppTheme.documentHairline.opacity(0.75))
-            .frame(height: 1)
+            .fill(AppTheme.border)
+            .frame(height: AppTheme.retroBorderWidth)
             .padding(.leading, inset)
     }
 }
+
+// MARK: - Retro Square Button (replaces glass circle button)
 
 struct AppGlassCircleButton: View {
     let systemName: String
@@ -200,145 +200,52 @@ struct AppGlassCircleButton: View {
     let action: () -> Void
 
     var body: some View {
-        if #available(iOS 26.0, *) {
-            if prominent {
-                Button(action: action) {
-                    Image(systemName: systemName)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: size, height: size)
-                }
-                .buttonStyle(.glassProminent)
-                .accessibilityLabel(accessibilityLabel)
-            } else {
-                Button(action: action) {
-                    Image(systemName: systemName)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(AppTheme.ink)
-                        .frame(width: size, height: size)
-                }
-                .buttonStyle(.glass)
-                .accessibilityLabel(accessibilityLabel)
-            }
-        } else {
-            Button(action: action) {
-                if prominent {
-                    Image(systemName: systemName)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: size, height: size)
-                        .background {
-                            Circle().fill(AppTheme.ink)
-                        }
-                } else {
-                    GlassIconBadge(
-                        systemName: systemName,
-                        size: size,
-                        shape: .circle
+        Button(action: action) {
+            ZStack {
+                Rectangle()
+                    .fill(prominent ? AppTheme.ink : AppTheme.surface)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
                     )
-                }
+
+                Image(systemName: systemName)
+                    .font(.system(size: 17, weight: .bold, design: .monospaced))
+                    .foregroundStyle(prominent ? AppTheme.surface : AppTheme.ink)
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accessibilityLabel)
+            .frame(width: size, height: size)
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
+
+// MARK: - Retro Icon Badge (replaces glass icon badge)
 
 struct GlassIconBadge: View {
     let systemName: String
     var size: CGFloat = 44
     var symbolSize: CGFloat? = nil
-    var shape: GlassIconShape = .rounded(16)
+    var shape: GlassIconShape = .rounded(0)
 
     var body: some View {
         ZStack {
-            backgroundShape
-                .shadow(color: AppTheme.homeCardShadow.opacity(0.72), radius: 14, x: 0, y: 8)
-
-            overlayShape
-            strokeShape
+            Rectangle()
+                .fill(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                )
 
             Image(systemName: systemName)
-                .font(.system(size: symbolSize ?? size * 0.38, weight: .semibold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [AppTheme.ink, AppTheme.mutedInk],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .shadow(color: AppTheme.glassHighlight.opacity(0.40), radius: 2, x: 0, y: 1)
+                .font(.system(size: symbolSize ?? size * 0.38, weight: .bold))
+                .foregroundStyle(AppTheme.ink)
         }
         .frame(width: size, height: size)
     }
-
-    @ViewBuilder
-    private var backgroundShape: some View {
-        switch shape {
-        case .circle:
-            AppGlassSurface(cornerRadius: size / 2, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.10)
-                .clipShape(Circle())
-        case let .rounded(cornerRadius):
-            AppGlassSurface(cornerRadius: cornerRadius, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.10)
-                .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        }
-    }
-
-    @ViewBuilder
-    private var overlayShape: some View {
-        switch shape {
-        case .circle:
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            AppTheme.glassHighlight.opacity(0.82),
-                            AppTheme.glassTint.opacity(0.20),
-                            .clear,
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .padding(strokeInset)
-        case let .rounded(cornerRadius):
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            AppTheme.glassHighlight.opacity(0.82),
-                            AppTheme.glassTint.opacity(0.20),
-                            .clear,
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .padding(strokeInset)
-        }
-    }
-
-    @ViewBuilder
-    private var strokeShape: some View {
-        switch shape {
-        case .circle:
-            Circle()
-                .stroke(AppTheme.glassStroke.opacity(0.64), lineWidth: 0.9)
-        case let .rounded(cornerRadius):
-            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .stroke(AppTheme.glassStroke.opacity(0.64), lineWidth: 0.9)
-        }
-    }
-
-    private var strokeInset: CGFloat {
-        switch shape {
-        case .circle:
-            return 2
-        case .rounded:
-            return 2
-        }
-    }
 }
+
+// MARK: - Retro Capsule Button (replaces glass capsule)
 
 struct AppGlassCapsuleButton<Label: View>: View {
     var prominent = false
@@ -348,58 +255,17 @@ struct AppGlassCapsuleButton<Label: View>: View {
     @ViewBuilder let label: () -> Label
 
     var body: some View {
-        if #available(iOS 26.0, *) {
-            if prominent {
-                Button(action: action) {
-                    label()
-                        .frame(minHeight: minHeight)
-                        .frame(maxWidth: fillsWidth ? .infinity : nil)
-                }
-                .buttonStyle(.glassProminent)
-            } else {
-                Button(action: action) {
-                    label()
-                        .frame(minHeight: minHeight)
-                        .frame(maxWidth: fillsWidth ? .infinity : nil)
-                }
-                .buttonStyle(.glass)
-            }
-        } else {
-            Button(action: action) {
-                label()
-                    .frame(minHeight: minHeight)
-                    .frame(maxWidth: fillsWidth ? .infinity : nil)
-                    .background {
-                        if prominent {
-                            Capsule().fill(AppTheme.ink)
-                        } else {
-                            AppGlassSurface(cornerRadius: minHeight / 2, style: .regular, shadowOpacity: 0.08)
-                                .clipShape(Capsule())
-                        }
-                    }
-            }
-            .buttonStyle(.plain)
+        Button(action: action) {
+            label()
+                .frame(minHeight: minHeight)
+                .frame(maxWidth: fillsWidth ? .infinity : nil)
+                .background(prominent ? AppTheme.ink : AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                )
+                .retroHardShadow()
         }
-    }
-}
-
-@available(iOS 26.0, *)
-private struct NativeGlassBackground: UIViewRepresentable {
-    let cornerRadius: CGFloat
-    let style: AppGlassStyle
-
-    func makeUIView(context: Context) -> UIVisualEffectView {
-        let view = UIVisualEffectView()
-        view.clipsToBounds = true
-        view.layer.cornerCurve = .continuous
-        return view
-    }
-
-    func updateUIView(_ uiView: UIVisualEffectView, context: Context) {
-        uiView.layer.cornerRadius = cornerRadius
-
-        let effect = UIGlassEffect(style: style == .clear ? .clear : .regular)
-        uiView.effect = effect
-        uiView.backgroundColor = .clear
+        .buttonStyle(.plain)
     }
 }

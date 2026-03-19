@@ -12,7 +12,7 @@ final class RecordingFlowUITests: XCTestCase {
         let homeChatField = app.textFields["HomeGlobalChatField"]
         XCTAssertTrue(homeChatField.waitForExistence(timeout: 8), "首页未正常加载。")
 
-        let newRecordingButton = app.buttons["NewRecordingButton"]
+        let newRecordingButton = element(in: app, identifier: "NewRecordingButton", fallbackLabel: "新录音")
         XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 8), "首页录音入口未出现。")
         newRecordingButton.tap()
 
@@ -65,7 +65,12 @@ final class RecordingFlowUITests: XCTestCase {
 
         let globalField = app.textFields["GlobalChatInputField"]
         XCTAssertTrue(globalField.waitForExistence(timeout: 5))
-        XCTAssertEqual(globalField.value as? String, question)
+
+        let sentQuestion = app.staticTexts[question]
+        XCTAssertTrue(
+            sentQuestion.waitForExistence(timeout: 5) || (globalField.value as? String) == question,
+            "进入全局对话后应保留或发送首页输入的问题。"
+        )
     }
 
     @MainActor
@@ -110,19 +115,68 @@ final class RecordingFlowUITests: XCTestCase {
         XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "详情页更多按钮未出现。")
         moreButton.tap()
 
-        XCTAssertTrue(app.buttons["Edit title"].waitForExistence(timeout: 2), "缺少 Edit title 动作。")
-        XCTAssertTrue(app.buttons["Edit AI notes"].exists, "缺少 Edit AI notes 动作。")
-        XCTAssertTrue(app.buttons["Show my notes"].exists, "缺少 Show my notes 动作。")
-        XCTAssertTrue(app.buttons["Copy notes"].exists, "缺少 Copy notes 动作。")
-        XCTAssertFalse(app.buttons["View transcript"].exists, "AI Notes 菜单不应再出现 View transcript。")
+        XCTAssertTrue(app.otherElements["MeetingDetailActionMenu"].waitForExistence(timeout: 2), "详情页操作菜单未出现。")
+        XCTAssertTrue(app.buttons["MeetingDetailActionEditTitle"].exists, "缺少 Edit title 动作。")
+        XCTAssertTrue(app.buttons["MeetingDetailActionEditAINotes"].exists, "缺少 Edit AI notes 动作。")
+        XCTAssertTrue(app.buttons["MeetingDetailActionShowMyNotes"].exists, "缺少 Show my notes 动作。")
+        XCTAssertTrue(app.buttons["MeetingDetailActionCopyNotes"].exists, "缺少 Copy notes 动作。")
+        XCTAssertFalse(app.buttons["MeetingDetailActionViewAINotes"].exists, "AI Notes 菜单不应再出现 View AI notes。")
 
-        app.buttons["Edit AI notes"].tap()
+        app.buttons["MeetingDetailActionEditAINotes"].tap()
         XCTAssertTrue(app.textViews["EnhancedNotesMarkdownEditor"].waitForExistence(timeout: 3), "应能进入原始 markdown 编辑界面。")
         XCTAssertTrue(app.buttons["EnhancedNotesEditorCancelButton"].exists, "缺少 Cancel 操作。")
         XCTAssertTrue(app.buttons["EnhancedNotesEditorSaveButton"].exists, "缺少 Save 操作。")
 
         app.buttons["EnhancedNotesEditorCancelButton"].tap()
         XCTAssertTrue(app.otherElements["EnhancedNotesRenderedView"].waitForExistence(timeout: 3), "取消后应返回渲染态 AI Notes。")
+    }
+
+    @MainActor
+    func testMeetingDetailMenuDismissesWithoutTriggeringUnderlyingAction() throws {
+        let app = launchApp()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        app.buttons["MeetingModeSummaryTab"].tap()
+
+        let askButton = app.buttons["MeetingAskButton"]
+        XCTAssertTrue(askButton.waitForExistence(timeout: 3), "AI Notes 页缺少 Chat with note 入口。")
+
+        let moreButton = app.buttons["MeetingDetailMoreButton"]
+        moreButton.tap()
+
+        XCTAssertTrue(app.otherElements["MeetingDetailActionMenu"].waitForExistence(timeout: 2), "详情页操作菜单未出现。")
+
+        askButton.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+
+        let menuDismissed = NSPredicate(format: "exists == false")
+        expectation(for: menuDismissed, evaluatedWith: app.otherElements["MeetingDetailActionMenu"])
+        waitForExpectations(timeout: 3)
+
+        XCTAssertFalse(app.otherElements["SecondarySheetPanel"].exists, "点菜单外空白不应触发底部 Chat with note。")
+        XCTAssertTrue(askButton.exists, "关闭菜单后应仍停留在详情页。")
+    }
+
+    @MainActor
+    func testMyNotesSheetUsesSecondarySheetChrome() throws {
+        let app = launchApp()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        let moreButton = app.buttons["MeetingDetailMoreButton"]
+        XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "详情页更多按钮未出现。")
+        moreButton.tap()
+
+        let showMyNotesButton = app.buttons["MeetingDetailActionShowMyNotes"]
+        XCTAssertTrue(showMyNotesButton.waitForExistence(timeout: 2), "缺少 Show my notes 动作。")
+        showMyNotesButton.tap()
+
+        XCTAssertTrue(app.otherElements["SecondarySheetPanel"].waitForExistence(timeout: 3), "我的笔记页应显示统一矩形面板。")
+        XCTAssertTrue(app.otherElements["SecondarySheetHeaderBar"].exists, "我的笔记页应显示统一顶部标题栏。")
     }
 
     private func launchApp() -> XCUIApplication {

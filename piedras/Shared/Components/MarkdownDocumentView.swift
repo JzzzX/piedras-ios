@@ -39,7 +39,7 @@ struct MarkdownDocumentView: View {
         switch block.kind {
         case let .heading(level):
             Text(block.attributedText)
-                .font(level <= 1 ? AppTheme.editorialEmphasisFont(size: 28) : AppTheme.editorialEmphasisFont(size: 22))
+                .font(level <= 1 ? AppTheme.editorialEmphasisFont(size: 24) : AppTheme.editorialEmphasisFont(size: 20))
                 .foregroundStyle(AppTheme.ink)
                 .padding(.top, level <= 1 ? 4 : 2)
                 .padding(.bottom, 2)
@@ -47,19 +47,20 @@ struct MarkdownDocumentView: View {
 
         case .paragraph:
             Text(block.attributedText)
-                .font(AppTheme.editorialFont(size: 17))
+                .font(AppTheme.editorialFont(size: 15))
                 .lineSpacing(AppTheme.editorialBodyLineSpacing)
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
         case .bullet:
             HStack(alignment: .top, spacing: 10) {
-                Text("•")
-                    .font(AppTheme.editorialFont(size: 17))
-                    .foregroundStyle(AppTheme.ink)
+                Rectangle()
+                    .fill(AppTheme.ink)
+                    .frame(width: 4, height: 4)
+                    .padding(.top, 7)
 
                 Text(block.attributedText)
-                    .font(AppTheme.editorialFont(size: 17))
+                    .font(AppTheme.editorialFont(size: 15))
                     .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -68,12 +69,17 @@ struct MarkdownDocumentView: View {
 
         case let .checklist(isChecked):
             HStack(alignment: .top, spacing: 10) {
-                Text(isChecked ? "☑" : "□")
-                    .font(AppTheme.editorialFont(size: 16))
-                    .foregroundStyle(isChecked ? AppTheme.documentOlive : AppTheme.subtleInk)
+                Rectangle()
+                    .fill(isChecked ? AppTheme.ink : .clear)
+                    .frame(width: 12, height: 12)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.ink, lineWidth: AppTheme.retroBorderWidth)
+                    )
+                    .padding(.top, 3)
 
                 Text(block.attributedText)
-                    .font(AppTheme.editorialFont(size: 17))
+                    .font(AppTheme.editorialFont(size: 15))
                     .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -82,12 +88,12 @@ struct MarkdownDocumentView: View {
 
         case .quote:
             HStack(alignment: .top, spacing: 12) {
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(AppTheme.documentHairline.opacity(0.8))
+                Rectangle()
+                    .fill(AppTheme.border)
                     .frame(width: 3)
 
                 Text(block.attributedText)
-                    .font(AppTheme.editorialFont(size: 16))
+                    .font(AppTheme.editorialFont(size: 14))
                     .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.mutedInk)
                     .frame(maxWidth: .infinity, alignment: .leading)

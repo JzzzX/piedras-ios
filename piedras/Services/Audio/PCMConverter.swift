@@ -2,9 +2,9 @@ import AVFoundation
 import Foundation
 
 enum PCMConverter {
-    static let targetSampleRate: Double = 16_000
+    nonisolated static let targetSampleRate: Double = 16_000
 
-    static func downsampledPCMData(from buffer: AVAudioPCMBuffer) -> Data? {
+    nonisolated static func downsampledPCMData(from buffer: AVAudioPCMBuffer) -> Data? {
         guard let monoSamples = makeMonoFloat32Samples(from: buffer) else {
             return nil
         }
@@ -13,7 +13,7 @@ enum PCMConverter {
         return makeInt16PCMData(from: downsampled)
     }
 
-    static func normalizedRMSLevel(from buffer: AVAudioPCMBuffer) -> Double {
+    nonisolated static func normalizedRMSLevel(from buffer: AVAudioPCMBuffer) -> Double {
         guard let monoSamples = makeMonoFloat32Samples(from: buffer), !monoSamples.isEmpty else {
             return 0
         }
@@ -26,7 +26,7 @@ enum PCMConverter {
         return max(0, min(Double(rms) * 3.2, 1))
     }
 
-    private static func makeMonoFloat32Samples(from buffer: AVAudioPCMBuffer) -> [Float]? {
+    private nonisolated static func makeMonoFloat32Samples(from buffer: AVAudioPCMBuffer) -> [Float]? {
         let channelCount = Int(buffer.format.channelCount)
         let frameLength = Int(buffer.frameLength)
 
@@ -34,31 +34,75 @@ enum PCMConverter {
             return []
         }
 
-        guard let channelData = buffer.floatChannelData else {
-            return nil
-        }
-
-        if channelCount == 1 {
-            return Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
-        }
-
-        var output = Array(repeating: Float.zero, count: frameLength)
-        for channelIndex in 0 ..< channelCount {
-            let samples = UnsafeBufferPointer(start: channelData[channelIndex], count: frameLength)
-            for frameIndex in 0 ..< frameLength {
-                output[frameIndex] += samples[frameIndex]
+        if let channelData = buffer.floatChannelData {
+            if channelCount == 1 {
+                return Array(UnsafeBufferPointer(start: channelData[0], count: frameLength))
             }
+
+            var output = Array(repeating: Float.zero, count: frameLength)
+            for channelIndex in 0 ..< channelCount {
+                let samples = UnsafeBufferPointer(start: channelData[channelIndex], count: frameLength)
+                for frameIndex in 0 ..< frameLength {
+                    output[frameIndex] += samples[frameIndex]
+                }
+            }
+
+            let divisor = Float(channelCount)
+            for frameIndex in 0 ..< frameLength {
+                output[frameIndex] /= divisor
+            }
+
+            return output
         }
 
-        let divisor = Float(channelCount)
-        for frameIndex in 0 ..< frameLength {
-            output[frameIndex] /= divisor
+        if let int16ChannelData = buffer.int16ChannelData {
+            if channelCount == 1 {
+                let samples = UnsafeBufferPointer(start: int16ChannelData[0], count: frameLength)
+                return samples.map { Float($0) / Float(Int16.max) }
+            }
+
+            var output = Array(repeating: Float.zero, count: frameLength)
+            for channelIndex in 0 ..< channelCount {
+                let samples = UnsafeBufferPointer(start: int16ChannelData[channelIndex], count: frameLength)
+                for frameIndex in 0 ..< frameLength {
+                    output[frameIndex] += Float(samples[frameIndex]) / Float(Int16.max)
+                }
+            }
+
+            let divisor = Float(channelCount)
+            for frameIndex in 0 ..< frameLength {
+                output[frameIndex] /= divisor
+            }
+
+            return output
         }
 
-        return output
+        if let int32ChannelData = buffer.int32ChannelData {
+            if channelCount == 1 {
+                let samples = UnsafeBufferPointer(start: int32ChannelData[0], count: frameLength)
+                return samples.map { Float($0) / Float(Int32.max) }
+            }
+
+            var output = Array(repeating: Float.zero, count: frameLength)
+            for channelIndex in 0 ..< channelCount {
+                let samples = UnsafeBufferPointer(start: int32ChannelData[channelIndex], count: frameLength)
+                for frameIndex in 0 ..< frameLength {
+                    output[frameIndex] += Float(samples[frameIndex]) / Float(Int32.max)
+                }
+            }
+
+            let divisor = Float(channelCount)
+            for frameIndex in 0 ..< frameLength {
+                output[frameIndex] /= divisor
+            }
+
+            return output
+        }
+
+        return nil
     }
 
-    private static func downsample(samples: [Float], inputSampleRate: Double) -> [Float] {
+    private nonisolated static func downsample(samples: [Float], inputSampleRate: Double) -> [Float] {
         guard !samples.isEmpty else {
             return []
         }
@@ -94,7 +138,7 @@ enum PCMConverter {
         return output
     }
 
-    private static func makeInt16PCMData(from samples: [Float]) -> Data {
+    private nonisolated static func makeInt16PCMData(from samples: [Float]) -> Data {
         var pcm = Array(repeating: Int16.zero, count: samples.count)
         for index in samples.indices {
             let sample = max(-1, min(1, samples[index]))

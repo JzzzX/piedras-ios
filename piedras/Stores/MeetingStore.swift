@@ -25,6 +25,7 @@ final class MeetingStore {
     var isLoading = false
     var lastErrorMessage: String?
     var enhancingMeetingIDs: Set<String> = []
+    var generatingTitleMeetingIDs: Set<String> = []
     var streamingChatMeetingIDs: Set<String> = []
     private var didLoad = false
     private var didStartBackendPreparation = false
@@ -583,6 +584,10 @@ final class MeetingStore {
         enhancingMeetingIDs.contains(meetingID)
     }
 
+    func isGeneratingTitle(meetingID: String) -> Bool {
+        generatingTitleMeetingIDs.contains(meetingID)
+    }
+
     func isStreamingChat(meetingID: String) -> Bool {
         streamingChatMeetingIDs.contains(meetingID)
     }
@@ -724,8 +729,12 @@ final class MeetingStore {
            !transcript.isEmpty,
            await ensureAIReady(force: false) {
             do {
+                generatingTitleMeetingIDs.insert(meetingID)
+                defer { generatingTitleMeetingIDs.remove(meetingID) }
                 let titleResponse = try await apiClient.generateMeetingTitle(
-                    transcript: transcript
+                    transcript: transcript,
+                    durationSeconds: meeting.durationSeconds,
+                    meetingDate: meeting.date
                 )
                 let generatedTitle = titleResponse.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !generatedTitle.isEmpty {

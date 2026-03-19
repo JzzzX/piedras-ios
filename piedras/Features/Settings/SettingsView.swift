@@ -5,6 +5,8 @@ struct SettingsView: View {
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(MeetingStore.self) private var meetingStore
 
+    @State private var showDeveloperSettings = false
+
     var body: some View {
         ZStack {
             AppGlassBackdrop()
@@ -13,72 +15,70 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     header
 
-                    AppGlassCard(cornerRadius: 28, style: .regular, padding: 16, shadowOpacity: 0.06) {
+                    // Language picker
+                    VStack(spacing: 0) {
+                        RetroTitleBar(label: AppStrings.current.languageLabel)
+
+                        VStack(spacing: 12) {
+                            languagePicker
+                        }
+                        .padding(16)
+                    }
+                    .background(AppTheme.surface)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                    )
+                    .retroHardShadow()
+
+                    // About section
+                    VStack(spacing: 0) {
+                        RetroTitleBar(label: AppStrings.current.about)
+
                         VStack(spacing: 0) {
-                            settingsRow(systemName: "network", title: "Service", value: settingsStore.serviceModeLabel)
-                            AppGlassDivider(inset: 42)
-                            settingsRow(systemName: "mic.fill", title: "Recording", value: "16 kHz")
-                            AppGlassDivider(inset: 42)
-                            settingsRow(systemName: "internaldrive", title: "Storage", value: "On Device")
-                            AppGlassDivider(inset: 42)
-                            settingsRow(systemName: "app.badge", title: "Version", value: AppEnvironment.versionDescription)
+                            aboutRow(title: AppStrings.current.version, value: AppEnvironment.versionDescription)
+                            RetroDivider(inset: 0)
+                            aboutRow(title: AppStrings.current.serviceMode, value: settingsStore.serviceModeLabel)
                         }
+                        .padding(16)
                     }
+                    .background(AppTheme.surface)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                    )
+                    .retroHardShadow()
 
-                    AppGlassCard(cornerRadius: 28, style: .regular, padding: 16, shadowOpacity: 0.06) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(AppEnvironment.cloudName)
-                                .font(.headline)
-                                .foregroundStyle(AppTheme.ink)
+                    // Developer mode navigation
+                    NavigationLink(destination: DeveloperSettingsView()) {
+                        HStack(spacing: 12) {
+                            RetroIconBadge(systemName: "wrench.and.screwdriver", size: 28, symbolSize: 11)
 
-                            Text(settingsStore.backendDisplayURLString)
-                                .font(.footnote)
-                                .foregroundStyle(AppTheme.subtleInk)
-                                .textSelection(.enabled)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(AppStrings.current.developerMode)
+                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .foregroundStyle(AppTheme.ink)
 
-                            AppGlassCapsuleButton(
-                                prominent: !settingsStore.isCheckingHealth,
-                                minHeight: 42,
-                                action: {
-                                    Task {
-                                        await meetingStore.checkBackendHealth(force: true)
-                                    }
-                                }
-                            ) {
-                                Text(settingsStore.isCheckingHealth ? "Checking..." : "Refresh Status")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(settingsStore.isCheckingHealth ? AppTheme.subtleInk : .white)
+                                Text(AppStrings.current.developerDiagnostics)
+                                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                    .foregroundStyle(AppTheme.subtleInk)
                             }
-                            .disabled(settingsStore.isCheckingHealth)
 
-                            Text(cloudHelpText)
-                                .font(.footnote)
+                            Spacer()
+
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(AppTheme.subtleInk)
-
-                            #if DEBUG
-                            if settingsStore.isUsingDebugBackendOverride {
-                                Button("Use Cloud Default") {
-                                    settingsStore.clearDebugBackendOverride()
-                                }
-                                .buttonStyle(.plain)
-                                .font(.footnote.weight(.semibold))
-                                .foregroundStyle(AppTheme.ink)
-                            }
-                            #endif
                         }
+                        .padding(16)
+                        .background(AppTheme.surface)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        )
+                        .retroHardShadow()
                     }
-
-                    AppGlassCard(cornerRadius: 28, style: .regular, padding: 16, shadowOpacity: 0.06) {
-                        VStack(spacing: 0) {
-                            statusRow(title: "Backend", value: backendStateLabel)
-                            AppGlassDivider(inset: 0)
-                            statusRow(title: "ASR", value: asrStateLabel)
-                            AppGlassDivider(inset: 0)
-                            statusRow(title: "AI", value: llmStateLabel)
-                            AppGlassDivider(inset: 0)
-                            statusRow(title: "Sync", value: syncValue)
-                        }
-                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -86,146 +86,63 @@ struct SettingsView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
-        .task {
-            await meetingStore.checkBackendHealth(force: false)
-        }
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Settings")
-                    .font(.system(size: 30, weight: .regular, design: .serif))
+                Text(AppStrings.current.settingsTitle)
+                    .font(.system(size: 28, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.ink)
-
-                Text("Service & status")
-                    .font(.footnote)
-                    .foregroundStyle(AppTheme.subtleInk)
             }
 
             Spacer()
 
-            AppGlassCircleButton(systemName: "xmark", accessibilityLabel: "关闭", size: 40) {
+            AppGlassCircleButton(systemName: "xmark", accessibilityLabel: AppStrings.current.close, size: 40) {
                 dismiss()
             }
         }
     }
 
-    private func settingsRow(systemName: String, title: String, value: String) -> some View {
-        HStack(spacing: 10) {
-            GlassIconBadge(systemName: systemName, size: 28, symbolSize: 11, shape: .rounded(12))
-
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppTheme.ink)
-
-            Spacer()
-
-            Text(value)
-                .font(.footnote.weight(.medium))
-                .foregroundStyle(AppTheme.subtleInk)
-                .multilineTextAlignment(.trailing)
+    @MainActor
+    private var languagePicker: some View {
+        @Bindable var store = settingsStore
+        return HStack(spacing: 0) {
+            ForEach(AppLanguage.allCases) { lang in
+                Button {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        settingsStore.appLanguage = lang
+                    }
+                } label: {
+                    Text(lang.displayName)
+                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .foregroundStyle(settingsStore.appLanguage == lang ? AppTheme.surface : AppTheme.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 40)
+                        .background(settingsStore.appLanguage == lang ? AppTheme.ink : AppTheme.surface)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .padding(.vertical, 11)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
     }
 
-    private func statusRow(title: String, value: String) -> some View {
+    private func aboutRow(title: String, value: String) -> some View {
         HStack {
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 14, weight: .bold, design: .monospaced))
                 .foregroundStyle(AppTheme.ink)
 
             Spacer()
 
             Text(value)
-                .font(.footnote)
+                .font(.system(size: 13, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.subtleInk)
                 .multilineTextAlignment(.trailing)
         }
         .padding(.vertical, 11)
-    }
-
-    private var cloudHelpText: String {
-        switch settingsStore.backendCapabilityStatus {
-        case .checking:
-            return "Checking current endpoint and capabilities."
-        case .standby:
-            return "Connects to \(AppEnvironment.cloudName) by default."
-        case .ready:
-            return "Current endpoint: \(settingsStore.backendHostLabel)"
-        case .offline, .unavailable:
-            return "\(AppEnvironment.cloudName) is offline or unreachable."
-        }
-    }
-
-    private var syncValue: String {
-        let message = settingsStore.syncStatusMessage.trimmingCharacters(in: .whitespacesAndNewlines)
-        return message.isEmpty ? "Idle" : message
-    }
-
-    private var transcriptValue: String {
-        switch settingsStore.backendConnectionState {
-        case .configuredUnchecked:
-            return "Standby"
-        case .reachable:
-            return settingsStore.asrReady ? "Ready" : "Unavailable"
-        case .unreachable:
-            return "Offline"
-        }
-    }
-
-    private var aiValue: String {
-        switch settingsStore.backendConnectionState {
-        case .configuredUnchecked:
-            return "Standby"
-        case .reachable:
-            return settingsStore.llmReady ? "Ready" : "Unavailable"
-        case .unreachable:
-            return "Offline"
-        }
-    }
-
-    private var backendStateLabel: String {
-        switch settingsStore.backendCapabilityStatus {
-        case .checking:
-            return "Checking..."
-        case .standby:
-            return "Standby"
-        case .ready:
-            return settingsStore.backendStatusMessage
-        case .offline, .unavailable:
-            return settingsStore.backendStatusMessage
-        }
-    }
-
-    private var asrStateLabel: String {
-        switch settingsStore.asrCapabilityStatus {
-        case .checking:
-            return "Checking..."
-        case .standby:
-            return "Standby"
-        case .ready, .unavailable, .offline:
-            return settingsStore.asrStatusMessage
-        }
-    }
-
-    private var llmStateLabel: String {
-        switch settingsStore.llmCapabilityStatus {
-        case .checking:
-            return "Checking..."
-        case .standby:
-            return "Standby"
-        case .offline, .unavailable:
-            return settingsStore.llmStatusMessage
-        case .ready:
-            guard settingsStore.llmReady else {
-                return settingsStore.llmStatusMessage
-            }
-
-            let provider = settingsStore.llmProvider.capitalized
-            let preset = settingsStore.llmPreset.flatMap { $0.isEmpty ? nil : $0 }
-            let model = settingsStore.llmModel.flatMap { $0.isEmpty ? nil : $0 }
-            return [provider, preset, model].compactMap { $0 }.joined(separator: " · ")
-        }
     }
 }

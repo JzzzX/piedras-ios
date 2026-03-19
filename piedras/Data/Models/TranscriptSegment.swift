@@ -10,6 +10,7 @@ final class TranscriptSegment {
     var endTime: Double
     var isFinal: Bool
     var orderIndex: Int
+    var confidence: Double?
     var meeting: Meeting?
 
     init(
@@ -19,7 +20,8 @@ final class TranscriptSegment {
         startTime: Double,
         endTime: Double,
         isFinal: Bool = true,
-        orderIndex: Int
+        orderIndex: Int,
+        confidence: Double? = nil
     ) {
         self.id = id
         self.speaker = speaker
@@ -28,5 +30,6 @@ final class TranscriptSegment {
         self.endTime = endTime
         self.isFinal = isFinal
         self.orderIndex = orderIndex
+        self.confidence = confidence
     }
 }

@@ -3,18 +3,15 @@ import SwiftUI
 struct RecordingControlBar: View {
     @Environment(MeetingStore.self) private var meetingStore
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
+    @Environment(SettingsStore.self) private var settingsStore
 
     let meeting: Meeting
     var onRequestStartRecording: (() -> Void)? = nil
 
     var body: some View {
-        PaperCard(
-            cornerRadius: 30,
-            fill: AppTheme.documentPaper,
-            border: AppTheme.documentHairline,
-            padding: 16,
-            shadowOpacity: 0.12
-        ) {
+        VStack(spacing: 0) {
+            RetroTitleBar(label: isActiveMeeting ? AppStrings.current.recordingTitle : AppStrings.current.recorderTitle)
+
             VStack(spacing: 14) {
                 if isActiveMeeting {
                     activeControls
@@ -24,31 +21,38 @@ struct RecordingControlBar: View {
                     idleControls
                 }
             }
+            .padding(16)
         }
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+        .retroHardShadow()
+        .id(settingsStore.appLanguage)
     }
 
     private var activeControls: some View {
         VStack(spacing: 14) {
             HStack(spacing: 10) {
-                Circle()
+                Rectangle()
                     .fill(AppTheme.highlight)
                     .frame(width: 10, height: 10)
 
                 Text(recordingSessionStore.durationSeconds.mmss)
-                    .font(.headline.monospacedDigit())
+                    .font(.system(size: 17, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.ink)
                     .accessibilityIdentifier("RecordDurationLabel")
 
                 Spacer()
 
-                Image(systemName: recordingSessionStore.asrState == .connected ? "waveform" : "waveform.badge.exclamationmark")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.accent : AppTheme.highlight)
+                Text(recordingSessionStore.asrState == .connected ? "ASR:OK" : "ASR:ERR")
+                    .font(.system(size: 12, weight: .bold, design: .monospaced))
+                    .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
             }
 
             WaveformView(samples: recordingSessionStore.waveformSamples)
                 .frame(height: 34)
-                .foregroundStyle(AppTheme.accent)
 
             HStack(spacing: 12) {
                 Button {
@@ -62,20 +66,18 @@ struct RecordingControlBar: View {
                     }
                 } label: {
                     Image(systemName: recordingSessionStore.phase == .paused ? "play.fill" : "pause.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(AppTheme.ink)
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
-                        .background {
-                            PaperSurface(
-                                cornerRadius: 22,
-                                fill: AppTheme.documentPaperSecondary,
-                                border: AppTheme.documentHairline,
-                                shadowOpacity: 0.04
-                            )
-                        }
+                        .background(AppTheme.surface)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        )
+                        .retroHardShadow(x: 2, y: 2)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(recordingSessionStore.phase == .paused ? "继续录音" : "暂停录音")
+                        .accessibilityLabel(recordingSessionStore.phase == .paused ? AppStrings.current.resumeRecording : AppStrings.current.pauseRecording)
                         .accessibilityIdentifier("PauseRecordingButton")
                 }
                 .buttonStyle(.plain)
@@ -88,13 +90,18 @@ struct RecordingControlBar: View {
                     }
                 } label: {
                     Image(systemName: "stop.fill")
-                        .font(.system(size: 18, weight: .semibold))
+                        .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
-                        .background(AppTheme.ink, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .background(AppTheme.highlight)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        )
+                        .retroHardShadow(x: 2, y: 2)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("停止录音")
+                        .accessibilityLabel(AppStrings.current.stopRecording)
                         .accessibilityIdentifier("StopRecordingButton")
                 }
                 .buttonStyle(.plain)
@@ -104,7 +111,7 @@ struct RecordingControlBar: View {
 
             if let info = currentBannerMessage {
                 Text(info)
-                    .font(.footnote)
+                    .font(.system(size: 12, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.subtleInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -118,11 +125,11 @@ struct RecordingControlBar: View {
     private var passiveConflictState: some View {
         HStack(spacing: 10) {
             Image(systemName: "mic.badge.xmark")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(AppTheme.highlight)
 
-            Text("另一条会议正在录音")
-                .font(.footnote)
+            Text(AppStrings.current.anotherMeetingRecording)
+                .font(.system(size: 13, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.subtleInk)
 
             Spacer()
@@ -131,15 +138,15 @@ struct RecordingControlBar: View {
 
     private var idleControls: some View {
         HStack(spacing: 14) {
-            GlassIconBadge(systemName: "doc.text", size: 52, symbolSize: 19, shape: .rounded(20))
+            RetroIconBadge(systemName: "doc.text", size: 52, symbolSize: 19)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(meeting.audioLocalPath == nil ? "Ready" : "Resume")
-                    .font(.headline)
+                Text(meeting.audioLocalPath == nil ? AppStrings.current.ready : AppStrings.current.resume)
+                    .font(.system(size: 17, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.ink)
 
                 Text(meeting.durationLabel)
-                    .font(.footnote.monospacedDigit())
+                    .font(.system(size: 13, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
@@ -154,14 +161,14 @@ struct RecordingControlBar: View {
                     }
                 }
             } label: {
-                GlassIconBadge(systemName: "mic.fill", size: 52, symbolSize: 18, shape: .circle)
+                RetroIconBadge(systemName: "mic.fill", size: 52, symbolSize: 18)
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(meeting.audioLocalPath == nil ? "开始录音" : "继续录音")
+                    .accessibilityLabel(meeting.audioLocalPath == nil ? AppStrings.current.startRecording : AppStrings.current.resumeRecording)
                     .accessibilityIdentifier("StartRecordingButton")
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(meeting.audioLocalPath == nil ? "开始录音" : "继续录音")
+            .accessibilityLabel(meeting.audioLocalPath == nil ? AppStrings.current.startRecording : AppStrings.current.resumeRecording)
             .accessibilityIdentifier("StartRecordingButton")
         }
     }
@@ -180,16 +187,16 @@ struct RecordingControlBar: View {
 
     private var sourcePlaybackStrip: some View {
         HStack(spacing: 10) {
-            GlassIconBadge(systemName: "music.note", size: 34, symbolSize: 12, shape: .rounded(14))
+            RetroIconBadge(systemName: "music.note", size: 34, symbolSize: 12)
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(recordingSessionStore.sourceAudioDisplayName ?? "Source")
-                    .font(.footnote.weight(.semibold))
+                Text(recordingSessionStore.sourceAudioDisplayName ?? AppStrings.current.source)
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
 
                 Text(sourceProgressLabel)
-                    .font(.caption2.monospacedDigit())
+                    .font(.system(size: 11, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
@@ -198,11 +205,10 @@ struct RecordingControlBar: View {
             Button {
                 meetingStore.toggleSourceAudioPlayback()
             } label: {
-                GlassIconBadge(
+                RetroIconBadge(
                     systemName: recordingSessionStore.isSourceAudioPlaying ? "pause.fill" : "play.fill",
                     size: 34,
-                    symbolSize: 12,
-                    shape: .rounded(14)
+                    symbolSize: 12
                 )
             }
             .buttonStyle(.plain)

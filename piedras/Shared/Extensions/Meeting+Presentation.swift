@@ -2,7 +2,7 @@ import SwiftUI
 
 extension Meeting {
     var durationLabel: String {
-        guard durationSeconds > 0 else { return "未录音" }
+        guard durationSeconds > 0 else { return AppStrings.current.notRecorded }
         let hours = durationSeconds / 3600
         let minutes = (durationSeconds % 3600) / 60
         let seconds = durationSeconds % 60
@@ -35,11 +35,11 @@ extension Meeting {
 
     var daySectionTitle: String {
         if Calendar.current.isDateInToday(date) {
-            return "Today"
+            return AppStrings.current.today
         }
 
         if Calendar.current.isDateInYesterday(date) {
-            return "Yesterday"
+            return AppStrings.current.yesterday
         }
 
         return date.formatted(.dateTime.month(.wide).day())
@@ -53,8 +53,19 @@ extension Meeting {
         date.formatted(.dateTime.hour().minute())
     }
 
+    var homeMetadataLine: String {
+        let sectionTitle = daySectionTitle
+        let parts = [
+            sectionTitle == AppStrings.current.today || sectionTitle == AppStrings.current.yesterday ? compactTimestampLabel : sectionTitle,
+            durationLabel,
+        ]
+            .filter { !$0.isEmpty }
+
+        return parts.joined(separator: " · ")
+    }
+
     var transcriptSummaryLabel: String {
-        "\(orderedSegments.count) 段转写"
+        "\(orderedSegments.count)\(AppStrings.current.segmentsTranscript)"
     }
 
     var transcriptCountLabel: String {
@@ -64,28 +75,28 @@ extension Meeting {
     var syncStateLabel: String {
         switch syncState {
         case .pending:
-            return "待同步"
+            return AppStrings.current.syncPending
         case .syncing:
-            return "同步中"
+            return AppStrings.current.syncing
         case .synced:
-            return "已同步"
+            return AppStrings.current.synced
         case .failed:
-            return "同步失败"
+            return AppStrings.current.syncFailed
         case .deleted:
-            return "待删除"
+            return AppStrings.current.syncDeleted
         }
     }
 
     var statusLabel: String {
         switch status {
         case .idle:
-            return "待开始"
+            return AppStrings.current.statusIdle
         case .recording:
-            return "录音中"
+            return AppStrings.current.statusRecording
         case .paused:
-            return "已暂停"
+            return AppStrings.current.statusPaused
         case .ended:
-            return "已结束"
+            return AppStrings.current.statusEnded
         }
     }
 
@@ -145,15 +156,15 @@ extension RecordingPhase {
     var displayLabel: String {
         switch self {
         case .idle:
-            return "空闲"
+            return AppStrings.current.phaseIdle
         case .starting:
-            return "启动中"
+            return AppStrings.current.phaseStarting
         case .recording:
-            return "录音中"
+            return AppStrings.current.phaseRecording
         case .paused:
-            return "已暂停"
+            return AppStrings.current.phasePaused
         case .stopping:
-            return "收尾中"
+            return AppStrings.current.phaseStopping
         }
     }
 }
@@ -162,15 +173,15 @@ extension ASRConnectionState {
     var displayLabel: String {
         switch self {
         case .idle:
-            return "未启动"
+            return AppStrings.current.asrIdle
         case .connecting:
-            return "连接中"
+            return AppStrings.current.asrConnecting
         case .connected:
-            return "已连接"
+            return AppStrings.current.asrConnected
         case .degraded:
-            return "已降级"
+            return AppStrings.current.asrDegraded
         case .disconnected:
-            return "已断开"
+            return AppStrings.current.asrDisconnected
         }
     }
 

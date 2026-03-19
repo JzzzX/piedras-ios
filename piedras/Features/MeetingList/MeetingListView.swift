@@ -1,19 +1,42 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-private struct MeetingDaySection: Identifiable {
-    let id: String
-    let title: String
+private enum MeetingHomeBucket: String, CaseIterable, Identifiable {
+    case processing = "Processing"
+    case today = "Today"
+    case yesterday = "Yesterday"
+    case earlierThisWeek = "Earlier this week"
+    case earlier = "Earlier"
+
+    var id: String { rawValue }
+
+    var title: String {
+        let s = AppStrings.current
+        switch self {
+        case .processing: return s.bucketProcessing
+        case .today: return s.bucketToday
+        case .yesterday: return s.bucketYesterday
+        case .earlierThisWeek: return s.bucketEarlierThisWeek
+        case .earlier: return s.bucketEarlier
+        }
+    }
+}
+
+private struct MeetingHomeSection: Identifiable {
+    let bucket: MeetingHomeBucket
     let meetings: [Meeting]
+
+    var id: String { bucket.id }
+    var title: String { bucket.title }
 }
 
 struct MeetingListView: View {
     @Environment(MeetingStore.self) private var meetingStore
     @Environment(AppRouter.self) private var router
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
+    @Environment(SettingsStore.self) private var settingsStore
 
     @State private var homeChatInput = ""
-    @State private var showsRecordingModeDialog = false
     @State private var isImportingSourceAudio = false
     @FocusState private var isHomeChatFocused: Bool
 
@@ -21,10 +44,10 @@ struct MeetingListView: View {
         ZStack {
             AppGlassBackdrop()
 
-            VStack(spacing: 12) {
+            VStack(spacing: 14) {
                 header
-                    .padding(.horizontal, 16)
-                    .padding(.top, 16)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
 
                 feedList
             }
@@ -41,19 +64,6 @@ struct MeetingListView: View {
                     .padding(.horizontal, 16)
             }
         }
-        .confirmationDialog("选择录音方式", isPresented: $showsRecordingModeDialog, titleVisibility: .visible) {
-            Button("仅麦克风") {
-                startMicrophoneRecording()
-            }
-
-            Button("音频文件 + 麦克风") {
-                isImportingSourceAudio = true
-            }
-
-            Button("取消", role: .cancel) {}
-        } message: {
-            Text("选择这次会议的录音输入。")
-        }
         .fileImporter(
             isPresented: $isImportingSourceAudio,
             allowedContentTypes: [.audio],
@@ -61,19 +71,16 @@ struct MeetingListView: View {
         ) { result in
             handleSourceAudioSelection(result)
         }
+        .id(settingsStore.appLanguage)
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Date.now.formatted(.dateTime.weekday(.wide).month(.abbreviated).day()))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.subtleInk)
-
-                Text("Notes")
-                    .font(.system(size: 34, weight: .regular, design: .serif))
-                    .foregroundStyle(AppTheme.ink)
-            }
+            Text(AppStrings.current.appTitle)
+                .font(.system(size: 28, weight: .bold, design: .monospaced))
+                .foregroundStyle(AppTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
 
             Spacer()
 
@@ -81,45 +88,38 @@ struct MeetingListView: View {
                 AppGlassCircleButton(systemName: "magnifyingglass", accessibilityLabel: "搜索", size: 40) {
                     router.showSearch()
                 }
+                .accessibilityIdentifier("HomeSearchButton")
 
                 AppGlassCircleButton(systemName: "slider.horizontal.3", accessibilityLabel: "设置", size: 40) {
                     router.showSettings()
                 }
+                .accessibilityIdentifier("HomeSettingsButton")
             }
         }
     }
 
     private var feedList: some View {
         List {
-            if let activeMeeting = meetingStore.activeRecordingMeeting {
-                Section {
-                    activeRecordingStrip(meeting: activeMeeting)
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 10, trailing: 0))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
-            }
-
-            if groupedMeetings.isEmpty {
+            if homeSections.isEmpty {
                 Section {
                     emptyState
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 0, trailing: 0))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
             } else {
-                ForEach(groupedMeetings) { section in
+                ForEach(homeSections) { section in
                     Section {
                         ForEach(section.meetings) { meeting in
                             MeetingRowView(
                                 meeting: meeting,
-                                isRecording: meeting.id == recordingSessionStore.meetingID && recordingSessionStore.phase != .idle,
+                                isRecording: isMeetingRecording(meeting),
                                 onOpen: {
                                     router.showMeeting(id: meeting.id)
                                 }
                             )
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button("删除", role: .destructive) {
+                                Button(AppStrings.current.deleteAction, role: .destructive) {
                                     meetingStore.deleteMeeting(id: meeting.id)
                                 }
                             }
@@ -128,9 +128,9 @@ struct MeetingListView: View {
                             .listRowSeparator(.hidden)
                         }
                     } header: {
-                        Text(section.title)
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(AppTheme.mutedInk)
+                        Text(section.title.uppercased())
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundStyle(AppTheme.subtleInk)
                             .textCase(nil)
                     }
                 }
@@ -143,84 +143,78 @@ struct MeetingListView: View {
         .contentMargins(.horizontal, 16, for: .scrollContent)
     }
 
-    private func activeRecordingStrip(meeting: Meeting) -> some View {
-        Button {
-            router.showMeeting(id: meeting.id)
-        } label: {
-            PaperCard(
-                cornerRadius: 26,
-                fill: AppTheme.homeCard,
-                border: AppTheme.homeCardBorder,
-                padding: 14,
-                shadowOpacity: 0.08
-            ) {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack(spacing: 10) {
-                        GlassIconBadge(systemName: "doc.text", size: 38, symbolSize: 14, shape: .rounded(14))
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 8) {
-                                Circle()
-                                    .fill(AppTheme.highlight)
-                                    .frame(width: 6, height: 6)
-
-                                Text(meeting.displayTitle)
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(AppTheme.ink)
-                                    .lineLimit(1)
-                            }
-                        }
-
-                        Spacer(minLength: 0)
-
-                        Text(recordingSessionStore.durationSeconds.mmss)
-                            .font(.caption.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(AppTheme.ink)
-                    }
-
-                    WaveformView(samples: recordingSessionStore.waveformSamples)
-                        .frame(height: 18)
-                        .foregroundStyle(AppTheme.accent)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
     private var emptyState: some View {
-        PaperCard(
-            cornerRadius: 28,
-            fill: AppTheme.homeCard,
-            border: AppTheme.homeCardBorder,
-            padding: 18,
-            shadowOpacity: 0.06
-        ) {
-            VStack(alignment: .leading, spacing: 12) {
-                GlassIconBadge(systemName: "doc.text", size: 48, symbolSize: 17, shape: .rounded(18))
+        VStack(alignment: .leading, spacing: 12) {
+            RetroIconBadge(systemName: "mic.fill", size: 48, symbolSize: 17)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("No notes")
-                        .font(.system(size: 22, weight: .regular, design: .serif))
-                        .foregroundStyle(AppTheme.ink)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(AppStrings.current.noNotesYet)
+                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .foregroundStyle(AppTheme.ink)
 
-                    Text("Tap the mic.")
-                        .font(.footnote)
-                        .foregroundStyle(AppTheme.subtleInk)
-                }
+                Text(AppStrings.current.tapMicToCapture)
+                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .foregroundStyle(AppTheme.subtleInk)
             }
         }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
+                .foregroundStyle(AppTheme.border)
+        )
+        .retroHardShadow()
     }
 
     private var bottomDock: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: "star")
-                    .font(.system(size: 13, weight: .semibold))
+        VStack(spacing: 0) {
+            // 向上渐变 scrim — 让滚动内容柔和淡出
+            LinearGradient(
+                colors: [
+                    AppTheme.background.opacity(0),
+                    AppTheme.background.opacity(0.85)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 28)
+            .allowsHitTesting(false)
+
+            unifiedBottomDock
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 14)
+    }
+
+    private var unifiedBottomDock: some View {
+        HStack(spacing: 14) {
+            dockIconButton(
+                systemName: "waveform.badge.plus",
+                accessibilityLabel: "上传音频",
+                identifier: "HomeUploadAudioButton",
+                action: openUploadAudio
+            )
+
+            Rectangle()
+                .fill(AppTheme.border)
+                .frame(width: AppTheme.retroBorderWidth, height: 28)
+
+            recordingButton(size: 58)
+
+            Rectangle()
+                .fill(AppTheme.border)
+                .frame(width: AppTheme.retroBorderWidth, height: 28)
+
+            HStack(spacing: 10) {
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(AppTheme.subtleInk)
 
-                TextField("Ask anything", text: $homeChatInput)
+                TextField(AppStrings.current.chatWithNotes, text: $homeChatInput)
                     .textFieldStyle(.plain)
-                    .font(.subheadline)
+                    .font(.system(size: 14, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.ink)
                     .focused($isHomeChatFocused)
                     .submitLabel(.send)
@@ -230,60 +224,87 @@ struct MeetingListView: View {
                 if !trimmedHomeChatInput.isEmpty {
                     Button(action: sendHomeQuestion) {
                         Image(systemName: "arrow.up")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(AppTheme.surface)
                             .frame(width: 30, height: 30)
-                            .background(AppTheme.ink, in: Circle())
+                            .background(AppTheme.ink)
+                            .overlay(
+                                Rectangle()
+                                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                            )
                     }
                     .buttonStyle(.plain)
                     .accessibilityIdentifier("HomeGlobalChatSendButton")
                 }
             }
-            .padding(.horizontal, 14)
-            .frame(height: 52)
-            .background {
-                AppGlassSurface(cornerRadius: 24, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.08)
-                    .clipShape(Capsule())
-            }
-
-            Button {
-                hideKeyboard()
-                if recordingSessionStore.phase == .idle {
-                    showsRecordingModeDialog = true
-                } else {
-                    Task {
-                        await meetingStore.stopRecording()
-                    }
-                }
-            } label: {
-                ZStack {
-                    if recordingSessionStore.phase == .idle {
-                        GlassIconBadge(systemName: "mic.fill", size: 58, symbolSize: 21, shape: .circle)
-                    } else {
-                        Circle()
-                            .fill(AppTheme.highlight)
-                            .shadow(color: AppTheme.highlight.opacity(0.30), radius: 20, x: 0, y: 10)
-
-                        Image(systemName: "stop.fill")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundStyle(.white)
-                    }
-                }
-                .frame(width: 58, height: 58)
-                .contentShape(Circle())
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(recordingSessionStore.phase == .idle ? "新录音" : "停止")
-                .accessibilityIdentifier("NewRecordingButton")
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(recordingSessionStore.phase == .idle ? "新录音" : "停止")
-            .accessibilityIdentifier("NewRecordingButton")
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 6)
-        .padding(.bottom, 14)
-        .background(Color.clear)
+        .frame(height: 74)
+        .background(
+            Rectangle()
+                .fill(AppTheme.dockSurface)
+                .shadow(color: AppTheme.border.opacity(0.18), radius: 12, x: 0, y: -4)
+                .shadow(color: AppTheme.border.opacity(0.18), radius: 12, x: 0, y: 4)
+        )
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+    }
+
+    private func dockIconButton(
+        systemName: String,
+        accessibilityLabel: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(AppTheme.ink)
+                .frame(width: 34, height: 34)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(identifier)
+    }
+
+    private func recordingButton(size: CGFloat) -> some View {
+        Button {
+            hideKeyboard()
+
+            if recordingSessionStore.phase == .idle {
+                startMicrophoneRecording()
+            } else {
+                Task {
+                    await meetingStore.stopRecording()
+                }
+            }
+        } label: {
+            ZStack {
+                if recordingSessionStore.phase == .idle {
+                    RetroIconBadge(systemName: "mic.fill", size: size, symbolSize: size * 0.34)
+                } else {
+                    Rectangle()
+                        .fill(AppTheme.highlight)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        )
+
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: size * 0.30, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+            }
+            .frame(width: size, height: size)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(recordingSessionStore.phase == .idle ? AppStrings.current.newRecording : AppStrings.current.stop)
+        .accessibilityIdentifier("NewRecordingButton")
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -292,7 +313,7 @@ struct MeetingListView: View {
                 .foregroundStyle(.white)
 
             Text(message)
-                .font(.footnote)
+                .font(.system(size: 13, weight: .regular, design: .monospaced))
                 .foregroundStyle(.white)
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -307,30 +328,86 @@ struct MeetingListView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(AppTheme.danger, in: Capsule())
-        .shadow(color: AppTheme.cardShadow, radius: 10, x: 0, y: 8)
+        .background(AppTheme.danger)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+        .retroHardShadow()
     }
 
-    private var groupedMeetings: [MeetingDaySection] {
-        let grouped = Dictionary(grouping: meetingStore.meetings) { meeting in
-            Calendar.current.startOfDay(for: meeting.date)
+    // MARK: - Data
+
+    private var homeSections: [MeetingHomeSection] {
+        let calendar = Calendar.current
+        var grouped: [MeetingHomeBucket: [Meeting]] = [:]
+
+        for meeting in meetingStore.meetings {
+            let bucket = sectionBucket(for: meeting, calendar: calendar)
+            grouped[bucket, default: []].append(meeting)
         }
 
-        return grouped
-            .keys
-            .sorted(by: >)
-            .map { day in
-                let meetings = (grouped[day] ?? []).sorted(by: { $0.updatedAt > $1.updatedAt })
-                return MeetingDaySection(
-                    id: day.ISO8601Format(),
-                    title: meetings.first?.daySectionTitle ?? day.formatted(.dateTime.month(.wide).day()),
-                    meetings: meetings
-                )
+        return MeetingHomeBucket.allCases.compactMap { bucket in
+            guard let meetings = grouped[bucket], !meetings.isEmpty else {
+                return nil
             }
+
+            return MeetingHomeSection(
+                bucket: bucket,
+                meetings: meetings.sorted(by: { $0.updatedAt > $1.updatedAt })
+            )
+        }
     }
 
     private var trimmedHomeChatInput: String {
         homeChatInput.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func sectionBucket(for meeting: Meeting, calendar: Calendar) -> MeetingHomeBucket {
+        if isMeetingProcessing(meeting) {
+            return .processing
+        }
+
+        if calendar.isDateInToday(meeting.date) {
+            return .today
+        }
+
+        if calendar.isDateInYesterday(meeting.date) {
+            return .yesterday
+        }
+
+        if let weekInterval = calendar.dateInterval(of: .weekOfYear, for: .now),
+           weekInterval.contains(meeting.date) {
+            return .earlierThisWeek
+        }
+
+        return .earlier
+    }
+
+    private func isMeetingProcessing(_ meeting: Meeting) -> Bool {
+        if isMeetingRecording(meeting) {
+            return true
+        }
+
+        if meetingStore.isGeneratingTitle(meetingID: meeting.id) {
+            return true
+        }
+
+        if meetingStore.isEnhancing(meetingID: meeting.id) {
+            return true
+        }
+
+        return meeting.syncState == .syncing
+    }
+
+    private func isMeetingRecording(_ meeting: Meeting) -> Bool {
+        meeting.id == recordingSessionStore.meetingID && recordingSessionStore.phase != .idle
+    }
+
+    private func openUploadAudio() {
+        isHomeChatFocused = false
+        hideKeyboard()
+        isImportingSourceAudio = true
     }
 
     private func sendHomeQuestion() {

@@ -7,6 +7,13 @@ private enum MeetingDetailMode: String, CaseIterable, Identifiable {
     case summary = "AI Notes"
 
     var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .transcript: return AppStrings.current.transcript
+        case .summary: return AppStrings.current.aiNotes
+        }
+    }
 }
 
 private enum MeetingDetailSheet: String, Identifiable {
@@ -22,6 +29,7 @@ private struct MeetingActionItem: Identifiable {
     let id = UUID().uuidString
     let title: String
     let systemName: String
+    let accessibilityIdentifier: String
     let action: () -> Void
 }
 
@@ -29,6 +37,7 @@ struct MeetingDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MeetingStore.self) private var meetingStore
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
+    @Environment(SettingsStore.self) private var settingsStore
 
     let meetingID: String
 
@@ -45,6 +54,8 @@ struct MeetingDetailView: View {
     @FocusState private var isTitleEditorFocused: Bool
 
     private let topAnchorID = "MeetingDetailTopAnchor"
+    private let actionMenuTopInset: CGFloat = 70
+    private let actionMenuHorizontalInset: CGFloat = 24
 
     var body: some View {
         Group {
@@ -52,9 +63,9 @@ struct MeetingDetailView: View {
                 detailScene(meeting: meeting)
             } else {
                 ContentUnavailableView(
-                    "会议不存在",
+                    AppStrings.current.meetingNotExist,
                     systemImage: "doc.badge.questionmark",
-                    description: Text("这条会议可能已经被删除。")
+                    description: Text(AppStrings.current.meetingMayBeDeleted)
                 )
             }
         }
@@ -62,19 +73,12 @@ struct MeetingDetailView: View {
             noteSaveTask?.cancel()
             toastTask?.cancel()
         }
+        .id(settingsStore.appLanguage)
     }
 
     private func detailScene(meeting: Meeting) -> some View {
         ZStack(alignment: .top) {
-            DocumentBackdrop()
-
-            if showsActionMenu {
-                Color.black.opacity(0.001)
-                    .ignoresSafeArea()
-                    .onTapGesture {
-                        closeActionMenu()
-                    }
-            }
+            AppGlassBackdrop()
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
@@ -108,14 +112,15 @@ struct MeetingDetailView: View {
 
             if let toastMessage {
                 Text(toastMessage)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(AppTheme.ink)
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundStyle(AppTheme.surface)
                     .padding(.horizontal, 14)
                     .frame(height: 36)
-                    .background {
-                        AppGlassSurface(cornerRadius: 18, style: .clear, borderOpacity: 0.18, shadowOpacity: 0.08)
-                            .clipShape(Capsule())
-                    }
+                    .background(AppTheme.ink)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                    )
                     .padding(.top, 72)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
@@ -125,20 +130,25 @@ struct MeetingDetailView: View {
         .safeAreaInset(edge: .bottom) {
             bottomDock(for: meeting)
         }
-        .confirmationDialog("选择录音方式", isPresented: $showsRecordingModeDialog, titleVisibility: .visible) {
-            Button("仅麦克风") {
+        .overlay {
+            if showsActionMenu {
+                actionMenuOverlay(meeting: meeting)
+            }
+        }
+        .confirmationDialog(AppStrings.current.chooseRecordingMode, isPresented: $showsRecordingModeDialog, titleVisibility: .visible) {
+            Button(AppStrings.current.micOnly) {
                 Task {
                     await meetingStore.startRecording(meetingID: meeting.id)
                 }
             }
 
-            Button("音频文件 + 麦克风") {
+            Button(AppStrings.current.audioFilePlusMic) {
                 isImportingSourceAudio = true
             }
 
-            Button("取消", role: .cancel) {}
+            Button(AppStrings.current.cancel, role: .cancel) {}
         } message: {
-            Text("选择这次会议的录音输入。")
+            Text(AppStrings.current.chooseRecordingInput)
         }
         .fileImporter(
             isPresented: $isImportingSourceAudio,
@@ -154,7 +164,7 @@ struct MeetingDetailView: View {
 
     private func topBar(meeting: Meeting) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            AppGlassCircleButton(systemName: "chevron.left", accessibilityLabel: "返回") {
+            AppGlassCircleButton(systemName: "chevron.left", accessibilityLabel: AppStrings.current.back) {
                 closeActionMenu()
                 dismiss()
             }
@@ -174,7 +184,7 @@ struct MeetingDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(meetingStore.isEnhancing(meetingID: meeting.id) || !canRefreshSummary(for: meeting))
-                    .accessibilityLabel(meetingStore.isEnhancing(meetingID: meeting.id) ? "Generating notes" : "Refresh notes")
+                    .accessibilityLabel(meetingStore.isEnhancing(meetingID: meeting.id) ? AppStrings.current.generatingNotes : AppStrings.current.refreshNotes)
                     .accessibilityIdentifier("MeetingRefreshSummaryButton")
                 }
 
@@ -194,13 +204,6 @@ struct MeetingDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("MeetingDetailMoreButton")
-                .overlay(alignment: .topTrailing) {
-                    if showsActionMenu {
-                        actionMenu(meeting: meeting)
-                            .offset(y: 54)
-                            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
-                    }
-                }
             }
         }
     }
@@ -208,35 +211,55 @@ struct MeetingDetailView: View {
     private func titleBlock(meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(meeting.displayTitle)
-                .font(AppTheme.editorialEmphasisFont(size: 32))
+                .font(.system(size: 28, weight: .bold, design: .monospaced))
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
             VStack(alignment: .leading, spacing: 8) {
                 Text(metaLine(for: meeting))
-                    .font(.subheadline.weight(.medium))
+                    .font(.system(size: 14, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.subtleInk)
 
                 if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
                     HStack(spacing: 7) {
-                        Circle()
-                            .fill(recordingSessionStore.asrState == .connected ? AppTheme.documentOlive : AppTheme.highlight)
+                        Rectangle()
+                            .fill(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
                             .frame(width: 6, height: 6)
 
-                        Text(recordingSessionStore.asrState == .connected ? "Live transcription" : "Reconnecting")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.documentOlive : AppTheme.highlight)
+                        Text(recordingSessionStore.asrState == .connected ? AppStrings.current.liveTranscription : AppStrings.current.reconnecting)
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
                     }
                 }
             }
         }
     }
 
+    private func actionMenuOverlay(meeting: Meeting) -> some View {
+        ZStack(alignment: .topTrailing) {
+            Rectangle()
+                .fill(Color.black.opacity(0.001))
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("MeetingDetailActionMenuBackdrop")
+                .onTapGesture {
+                    closeActionMenu()
+                }
+
+            actionMenu(meeting: meeting)
+                .padding(.top, actionMenuTopInset)
+                .padding(.trailing, actionMenuHorizontalInset)
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("MeetingDetailActionMenu")
+    }
+
     private func documentPage(meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if selectedMode == .summary {
-                PaperDivider()
-                    .opacity(0.62)
+                RetroDivider()
             }
 
             Group {
@@ -257,7 +280,7 @@ struct MeetingDetailView: View {
     }
 
     private var modePicker: some View {
-        HStack(spacing: 24) {
+        HStack(spacing: 0) {
             ForEach(MeetingDetailMode.allCases) { mode in
                 Button {
                     closeActionMenu()
@@ -265,21 +288,21 @@ struct MeetingDetailView: View {
                         selectedMode = mode
                     }
                 } label: {
-                    VStack(spacing: 8) {
-                        Text(mode.rawValue)
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(selectedMode == mode ? AppTheme.ink : AppTheme.subtleInk)
-
-                        Capsule()
-                            .fill(selectedMode == mode ? AppTheme.ink : Color.clear)
-                            .frame(height: 2)
-                    }
+                    Text(mode.title.uppercased())
+                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                        .foregroundStyle(selectedMode == mode ? AppTheme.surface : AppTheme.ink)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(selectedMode == mode ? AppTheme.ink : AppTheme.surface)
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier(mode == .transcript ? "MeetingModeTranscriptTab" : "MeetingModeSummaryTab")
             }
         }
-        .frame(maxWidth: .infinity)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
     }
 
     @ViewBuilder
@@ -300,18 +323,27 @@ struct MeetingDetailView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 12)
         } else if selectedMode == .summary {
-            AppGlassCapsuleButton(prominent: false) {
+            Button {
                 activeSheet = .chat
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: "bubble.left.and.sparkles")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 13, weight: .bold))
 
-                    Text("Chat with note")
-                        .font(.subheadline.weight(.semibold))
+                    Text(AppStrings.current.chatWithNote)
+                        .font(.system(size: 15, weight: .bold, design: .monospaced))
                 }
                 .foregroundStyle(AppTheme.ink)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                )
+                .retroHardShadow()
             }
+            .buttonStyle(.plain)
             .accessibilityIdentifier("MeetingAskButton")
             .padding(.horizontal, 20)
             .padding(.top, 8)
@@ -324,32 +356,31 @@ struct MeetingDetailView: View {
         if let meeting = meetingStore.meeting(withID: meetingID) {
             switch sheet {
             case .titleEditor:
-                DocumentSheetScaffold(title: "Edit title", onDone: {
+                DocumentSheetScaffold(title: AppStrings.current.editTitle, onDone: {
                     isTitleEditorFocused = false
                     hideKeyboard()
                     meetingStore.updateTitle(titleDraft, for: meeting)
                     activeSheet = nil
                 }) {
                     VStack(alignment: .leading, spacing: 18) {
-                        TextField("Untitled note", text: $titleDraft, axis: .vertical)
+                        TextField(AppStrings.current.untitledNote, text: $titleDraft, axis: .vertical)
                             .textFieldStyle(.plain)
-                            .font(AppTheme.editorialEmphasisFont(size: 34))
+                            .font(.system(size: 28, weight: .bold, design: .monospaced))
                             .foregroundStyle(AppTheme.ink)
                             .focused($isTitleEditorFocused)
                             .lineLimit(3, reservesSpace: false)
 
-                        PaperDivider()
-                            .opacity(0.56)
+                        RetroDivider()
 
                         Text(metaLine(for: meeting))
-                            .font(.footnote)
+                            .font(.system(size: 13, weight: .regular, design: .monospaced))
                             .foregroundStyle(AppTheme.subtleInk)
                     }
                     .dismissKeyboardOnTap(isFocused: $isTitleEditorFocused)
                 }
 
             case .rawNotes:
-                DocumentSheetScaffold(title: "My notes", onDone: {
+                DocumentSheetScaffold(title: AppStrings.current.myNotes, onDone: {
                     meetingStore.updateNotes(meeting.userNotesPlainText, for: meeting)
                     activeSheet = nil
                 }) {
@@ -359,8 +390,8 @@ struct MeetingDetailView: View {
                             set: { scheduleNoteSave($0, for: meeting) }
                         ),
                         showsHeader: false,
-                        title: "Notes",
-                        placeholder: "Write here.",
+                        title: AppStrings.current.notes,
+                        placeholder: AppStrings.current.writeHere,
                         minHeight: 520
                     )
                 }
@@ -376,7 +407,7 @@ struct MeetingDetailView: View {
                 ) {
                     EditorialDocumentEditor(
                         text: $enhancedNotesDraft,
-                        placeholder: "Write markdown here.",
+                        placeholder: AppStrings.current.writeMarkdownHere,
                         minHeight: 520,
                         fontSize: 16,
                         lineSpacing: 6,
@@ -389,21 +420,21 @@ struct MeetingDetailView: View {
 
             case .chat:
                 ZStack {
-                    DocumentBackdrop()
+                    AppGlassBackdrop()
 
-                    VStack(spacing: 0) {
-                        SheetHeaderBar(title: "Chat with note") {
-                            activeSheet = nil
-                        }
-
+                    SecondarySheetPanel(title: AppStrings.current.chatWithNote, onClose: {
+                        activeSheet = nil
+                    }) {
                         ChatView(meeting: meeting)
-                            .padding(.horizontal, 18)
-                            .padding(.top, 12)
-                            .padding(.bottom, 8)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
+                    .padding(.bottom, 8)
                 }
                 .presentationBackground(.clear)
                 .presentationDragIndicator(.hidden)
+                .edgeSwipeToDismiss {
+                    activeSheet = nil
+                }
             }
         } else {
             EmptyView()
@@ -418,74 +449,75 @@ struct MeetingDetailView: View {
                 Button(action: item.action) {
                     HStack(spacing: 12) {
                         Image(systemName: item.systemName)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(AppTheme.ink)
                             .frame(width: 18)
 
                         Text(item.title)
-                            .font(.subheadline.weight(.medium))
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
                             .foregroundStyle(AppTheme.ink)
 
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 14)
                     .frame(height: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(item.title)
+                .accessibilityIdentifier(item.accessibilityIdentifier)
 
                 if index < items.count - 1 {
-                    Divider()
-                        .overlay(AppTheme.documentHairline.opacity(0.45))
+                    RetroDivider()
                         .padding(.horizontal, 12)
                 }
             }
         }
         .frame(width: 230, alignment: .leading)
         .padding(.vertical, 8)
-        .background {
-            AppGlassSurface(cornerRadius: 24, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.12)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .fill(AppTheme.documentPaper.opacity(0.90))
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        }
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+        .retroHardShadow()
     }
 
     private func actionItems(meeting: Meeting) -> [MeetingActionItem] {
         switch selectedMode {
         case .summary:
             return [
-                MeetingActionItem(title: "Edit title", systemName: "pencil") {
+                MeetingActionItem(title: AppStrings.current.editTitle, systemName: "pencil", accessibilityIdentifier: "MeetingDetailActionEditTitle") {
                     openTitleEditor(for: meeting)
                 },
-                MeetingActionItem(title: "Edit AI notes", systemName: "square.and.pencil") {
+                MeetingActionItem(title: AppStrings.current.editAINotes, systemName: "square.and.pencil", accessibilityIdentifier: "MeetingDetailActionEditAINotes") {
                     closeActionMenu()
                     openEnhancedNotesEditor(for: meeting)
                 },
-                MeetingActionItem(title: "Show my notes", systemName: "square.and.pencil") {
+                MeetingActionItem(title: AppStrings.current.showMyNotes, systemName: "square.and.pencil", accessibilityIdentifier: "MeetingDetailActionShowMyNotes") {
                     closeActionMenu()
                     activeSheet = .rawNotes
                 },
-                MeetingActionItem(title: "Copy notes", systemName: "doc.on.doc") {
+                MeetingActionItem(title: AppStrings.current.copyNotes, systemName: "doc.on.doc", accessibilityIdentifier: "MeetingDetailActionCopyNotes") {
                     copyCurrentContent(for: meeting)
                 },
             ]
 
         case .transcript:
             return [
-                MeetingActionItem(title: "Edit title", systemName: "pencil") {
+                MeetingActionItem(title: AppStrings.current.editTitle, systemName: "pencil", accessibilityIdentifier: "MeetingDetailActionEditTitle") {
                     openTitleEditor(for: meeting)
                 },
-                MeetingActionItem(title: "View AI notes", systemName: "sparkles") {
+                MeetingActionItem(title: AppStrings.current.viewAINotes, systemName: "sparkles", accessibilityIdentifier: "MeetingDetailActionViewAINotes") {
                     closeActionMenu()
                     selectedMode = .summary
                 },
-                MeetingActionItem(title: "Show my notes", systemName: "square.and.pencil") {
+                MeetingActionItem(title: AppStrings.current.showMyNotes, systemName: "square.and.pencil", accessibilityIdentifier: "MeetingDetailActionShowMyNotes") {
                     closeActionMenu()
                     activeSheet = .rawNotes
                 },
-                MeetingActionItem(title: "Copy transcript", systemName: "doc.on.doc") {
+                MeetingActionItem(title: AppStrings.current.copyTranscript, systemName: "doc.on.doc", accessibilityIdentifier: "MeetingDetailActionCopyTranscript") {
                     copyCurrentContent(for: meeting)
                 },
             ]
@@ -533,10 +565,10 @@ struct MeetingDetailView: View {
         switch selectedMode {
         case .transcript:
             content = meeting.transcriptText
-            toast = "Copied transcript"
+            toast = AppStrings.current.copiedTranscript
         case .summary:
             content = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
-            toast = "Copied notes"
+            toast = AppStrings.current.copiedNotes
         }
 
         UIPasteboard.general.string = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -590,7 +622,7 @@ struct MeetingDetailView: View {
 
     private func metaLine(for meeting: Meeting) -> String {
         let date = meeting.date.formatted(.dateTime.month(.wide).day().year())
-        let duration = meeting.durationSeconds > 0 ? "\(meeting.durationLabel) recording" : "Not recorded yet"
+        let duration = meeting.durationSeconds > 0 ? "\(meeting.durationLabel) \(AppStrings.current.recording_suffix)" : AppStrings.current.notRecordedYet
         return "\(date) · \(duration)"
     }
 
@@ -628,15 +660,18 @@ struct MeetingDetailView: View {
 
     private func detailToolLabel(systemName: String) -> some View {
         Image(systemName: systemName)
-            .font(.system(size: 16, weight: .semibold))
+            .font(.system(size: 16, weight: .bold))
             .foregroundStyle(AppTheme.ink)
             .frame(width: 40, height: 40)
-            .background {
-                AppGlassSurface(cornerRadius: 20, style: .clear, borderOpacity: 0.18, shadowOpacity: 0.08)
-                    .clipShape(Circle())
-            }
+            .background(AppTheme.surface)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+            )
     }
 }
+
+// MARK: - Retro Sheet Scaffolds
 
 private struct DocumentSheetScaffold<Content: View>: View {
     let title: String
@@ -645,25 +680,13 @@ private struct DocumentSheetScaffold<Content: View>: View {
 
     var body: some View {
         ZStack {
-            DocumentBackdrop()
+            AppGlassBackdrop()
 
-            VStack(spacing: 0) {
-                SheetHeaderBar(title: title, onDone: onDone)
-
+            SecondarySheetPanel(title: title, onClose: onDone) {
                 ScrollView(showsIndicators: false) {
                     content()
                         .padding(24)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background {
-                            PaperSurface(
-                                cornerRadius: 34,
-                                fill: AppTheme.documentPaper,
-                                border: AppTheme.documentHairline,
-                                shadowOpacity: 0.05
-                            )
-                        }
-                        .padding(.horizontal, 18)
-                        .padding(.top, 12)
                         .padding(.bottom, 40)
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -671,6 +694,33 @@ private struct DocumentSheetScaffold<Content: View>: View {
         }
         .presentationBackground(.clear)
         .presentationDragIndicator(.hidden)
+        .edgeSwipeToDismiss(onDismiss: onDone)
+    }
+}
+
+private struct SecondarySheetPanel<Content: View>: View {
+    let title: String
+    let onClose: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ZStack {
+            VStack(spacing: 0) {
+                SheetHeaderBar(title: title, onDone: onClose)
+                content()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(AppTheme.surface)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+            )
+            .retroHardShadow()
+            .padding(.horizontal, 18)
+            .padding(.top, 12)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("SecondarySheetPanel")
     }
 }
 
@@ -681,23 +731,22 @@ private struct MarkdownEditorSheetScaffold<Content: View>: View {
 
     var body: some View {
         ZStack {
-            DocumentBackdrop()
+            AppGlassBackdrop()
 
             VStack(spacing: 0) {
+                Spacer().frame(height: 12)
                 SheetActionHeaderBar(onCancel: onCancel, onSave: onSave)
 
                 ScrollView(showsIndicators: false) {
                     content()
                         .padding(24)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background {
-                            PaperSurface(
-                                cornerRadius: 34,
-                                fill: AppTheme.documentPaper,
-                                border: AppTheme.documentHairline,
-                                shadowOpacity: 0.05
-                            )
-                        }
+                        .background(AppTheme.surface)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        )
+                        .retroHardShadow()
                         .padding(.horizontal, 18)
                         .padding(.top, 12)
                         .padding(.bottom, 40)
@@ -707,6 +756,7 @@ private struct MarkdownEditorSheetScaffold<Content: View>: View {
         }
         .presentationBackground(.clear)
         .presentationDragIndicator(.hidden)
+        .edgeSwipeToDismiss(onDismiss: onCancel)
     }
 }
 
@@ -715,39 +765,11 @@ private struct SheetHeaderBar: View {
     let onDone: () -> Void
 
     var body: some View {
-        VStack(spacing: 8) {
-            Capsule()
-                .fill(AppTheme.subtleInk.opacity(0.28))
-                .frame(width: 42, height: 5)
-                .padding(.top, 10)
-
-            HStack {
-                Color.clear
-                    .frame(width: 54, height: 38)
-
-                Spacer()
-
-                Text(title)
-                    .font(AppTheme.editorialEmphasisFont(size: 18))
-                    .foregroundStyle(AppTheme.ink)
-
-                Spacer()
-
-                Button("Done") {
-                    onDone()
-                }
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(AppTheme.ink)
-                .padding(.horizontal, 14)
-                .frame(height: 38)
-                .background {
-                    AppGlassSurface(cornerRadius: 19, style: .clear, borderOpacity: 0.18, shadowOpacity: 0.08)
-                        .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 18)
+        ZStack {
+            RetroTitleBar(label: title, showCloseBox: true, onClose: onDone)
         }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("SecondarySheetHeaderBar")
     }
 }
 
@@ -757,35 +779,80 @@ private struct SheetActionHeaderBar: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Capsule()
-                .fill(AppTheme.subtleInk.opacity(0.28))
-                .frame(width: 42, height: 5)
-                .padding(.top, 10)
-
             HStack {
-                Button("Cancel") {
+                Button(AppStrings.current.cancel) {
                     onCancel()
                 }
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(Color.red)
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .foregroundStyle(AppTheme.highlight)
                 .accessibilityIdentifier("EnhancedNotesEditorCancelButton")
 
                 Spacer()
 
-                Button("Save") {
+                Button(AppStrings.current.save) {
                     onSave()
                 }
-                .font(.title3.weight(.bold))
+                .font(.system(size: 16, weight: .bold, design: .monospaced))
                 .foregroundStyle(AppTheme.ink)
                 .accessibilityIdentifier("EnhancedNotesEditorSaveButton")
             }
-            .padding(.horizontal, 28)
-            .frame(height: 58)
-            .background {
-                AppGlassSurface(cornerRadius: 29, style: .clear, borderOpacity: 0.22, shadowOpacity: 0.10)
-                    .clipShape(Capsule())
-            }
+            .padding(.horizontal, 20)
+            .frame(height: 52)
+            .background(AppTheme.surface)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+            )
             .padding(.horizontal, 18)
+            .padding(.top, 10)
         }
+    }
+}
+
+private struct EdgeSwipeDismissModifier: ViewModifier {
+    let onDismiss: () -> Void
+
+    @State private var dragOffset: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: dragOffset)
+            .overlay(alignment: .leading) {
+                Color.clear
+                    .frame(width: 28)
+                    .contentShape(Rectangle())
+                    .highPriorityGesture(edgeSwipeGesture)
+            }
+            .animation(.spring(response: 0.22, dampingFraction: 0.9), value: dragOffset)
+    }
+
+    private var edgeSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 10, coordinateSpace: .local)
+            .onChanged { value in
+                guard shouldTrack(value) else { return }
+                dragOffset = min(max(value.translation.width, 0), 120)
+            }
+            .onEnded { value in
+                defer { dragOffset = 0 }
+                guard shouldTrack(value) else { return }
+
+                let projectedWidth = max(value.translation.width, value.predictedEndTranslation.width)
+                if projectedWidth > 84 {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    onDismiss()
+                }
+            }
+    }
+
+    private func shouldTrack(_ value: DragGesture.Value) -> Bool {
+        guard value.startLocation.x <= 28 else { return false }
+        guard value.translation.width > 0 else { return false }
+        return value.translation.width > abs(value.translation.height)
+    }
+}
+
+private extension View {
+    func edgeSwipeToDismiss(onDismiss: @escaping () -> Void) -> some View {
+        modifier(EdgeSwipeDismissModifier(onDismiss: onDismiss))
     }
 }

@@ -2,40 +2,93 @@ import AVFoundation
 import Observation
 import SwiftUI
 
+struct AudioPlaybackBar: View {
+    let filePath: String
+
+    @State private var playbackController = AudioPlaybackController()
+
+    var body: some View {
+        TranscriptAudioControlBar(
+            sourceURL: URL(fileURLWithPath: filePath),
+            playbackController: playbackController,
+            onPlaybackIntent: {}
+        )
+        .id(AppStrings.currentLanguage)
+    }
+}
+
 @MainActor
 @Observable
 final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
+    var isPreparing = false
     var isPlaying = false
+    var isScrubbing = false
     var currentTime: TimeInterval = 0
     var duration: TimeInterval = 0
+    var playbackRate: Double = 1.0 {
+        didSet {
+            let normalizedRate = min(max(playbackRate, 0.75), 2.0)
+            if normalizedRate != playbackRate {
+                playbackRate = normalizedRate
+                return
+            }
+
+            player?.enableRate = true
+            player?.rate = Float(playbackRate)
+        }
+    }
     var errorMessage: String?
 
     private var player: AVAudioPlayer?
     private var timer: Timer?
-    private var loadedURL: URL?
+    private var loadedSourceIdentifier: String?
+    private var loadedFileURL: URL?
 
-    func togglePlayback(fileURL: URL) {
+    func prepare(sourceURL: URL) async {
         do {
-            if loadedURL != fileURL {
-                try load(fileURL: fileURL)
-            }
+            try await prepareIfNeeded(sourceURL: sourceURL)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 
+    func togglePlayback(sourceURL: URL) async {
+        do {
+            try await prepareIfNeeded(sourceURL: sourceURL)
             guard let player else { return }
 
             if player.isPlaying {
-                player.pause()
-                stopTimer()
-                isPlaying = false
+                pause()
             } else {
                 try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
                 try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
+                player.enableRate = true
+                player.rate = Float(playbackRate)
                 player.play()
                 startTimer()
                 isPlaying = true
+                errorMessage = nil
             }
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func pause() {
+        player?.pause()
+        stopTimer()
+        isPlaying = false
+    }
+
+    func stop() {
+        player?.stop()
+        player = nil
+        stopTimer()
+        isPlaying = false
+        currentTime = 0
+        duration = 0
+        loadedSourceIdentifier = nil
+        loadedFileURL = nil
     }
 
     func seek(to newValue: TimeInterval) {
@@ -44,21 +97,59 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
         currentTime = player.currentTime
     }
 
+    func seek(by delta: TimeInterval) {
+        seek(to: currentTime + delta)
+    }
+
+    func setScrubbing(_ isScrubbing: Bool) {
+        self.isScrubbing = isScrubbing
+    }
+
     func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         currentTime = duration
         isPlaying = false
         stopTimer()
     }
 
-    private func load(fileURL: URL) throws {
+    private func prepareIfNeeded(sourceURL: URL) async throws {
+        let sourceIdentifier = sourceURL.absoluteString
+        if loadedSourceIdentifier == sourceIdentifier,
+           player != nil,
+           loadedFileURL.map({ FileManager.default.fileExists(atPath: $0.path) }) != false {
+            return
+        }
+
+        isPreparing = true
+        defer { isPreparing = false }
+
+        let resolvedFileURL: URL
+        if sourceURL.isFileURL {
+            resolvedFileURL = sourceURL
+        } else {
+            resolvedFileURL = try await AudioFileResolver.resolveFileURL(
+                localPath: nil,
+                remoteURLString: sourceIdentifier
+            )
+        }
+
+        try load(fileURL: resolvedFileURL, sourceIdentifier: sourceIdentifier)
+    }
+
+    private func load(fileURL: URL, sourceIdentifier: String) throws {
         let player = try AVAudioPlayer(contentsOf: fileURL)
         player.delegate = self
+        player.enableRate = true
+        player.rate = Float(playbackRate)
         player.prepareToPlay()
+
         self.player = player
-        loadedURL = fileURL
-        duration = player.duration
-        currentTime = player.currentTime
-        errorMessage = nil
+        self.loadedFileURL = fileURL
+        self.loadedSourceIdentifier = sourceIdentifier
+        self.duration = player.duration
+        self.currentTime = player.currentTime
+        self.errorMessage = nil
+        self.isPlaying = false
+        stopTimer()
     }
 
     private func startTimer() {
@@ -66,7 +157,10 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
         timer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self, let player else { return }
-                currentTime = player.currentTime
+                if !isScrubbing {
+                    currentTime = player.currentTime
+                }
+
                 if !player.isPlaying {
                     isPlaying = false
                     stopTimer()
@@ -81,87 +175,164 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
     }
 }
 
-struct AudioPlaybackBar: View {
-    let filePath: String
+struct TranscriptAudioControlBar: View {
+    let sourceURL: URL
+    var playbackController: AudioPlaybackController
+    var isRetranscribing = false
+    let onPlaybackIntent: () -> Void
 
-    @State private var playbackController = AudioPlaybackController()
+    @State private var didPrepare = false
 
     var body: some View {
-        let fileURL = URL(fileURLWithPath: filePath)
+        @Bindable var playbackController = playbackController
 
-        VStack(alignment: .leading, spacing: 14) {
-            PlaybackWaveformStrip(progress: playbackProgress)
-                .frame(height: 22)
+        VStack(spacing: 0) {
+            RetroTitleBar(label: AppStrings.current.playback)
 
-            HStack(spacing: 12) {
-                Button {
-                    playbackController.togglePlayback(fileURL: fileURL)
-                } label: {
-                    GlassIconBadge(
-                        systemName: playbackController.isPlaying ? "pause.fill" : "play.fill",
-                        size: 40,
-                        symbolSize: 15,
-                        shape: .circle
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 12) {
+                    Button {
+                        onPlaybackIntent()
+                        Task {
+                            await playbackController.togglePlayback(sourceURL: sourceURL)
+                        }
+                    } label: {
+                        ZStack {
+                            Rectangle()
+                                .fill(AppTheme.ink)
+                                .frame(width: 40, height: 40)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                                )
+
+                            if playbackController.isPreparing {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: playbackController.isPlaying ? "pause.fill" : "play.fill")
+                                    .font(.system(size: 14, weight: .bold))
+                                    .foregroundStyle(.white)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(playbackController.isPreparing || isRetranscribing)
+                    .accessibilityIdentifier("TranscriptPlaybackToggleButton")
+
+                    Text("\(playbackController.currentTime.mmss) / \(playbackController.duration.mmss)")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundStyle(AppTheme.subtleInk)
+                        .accessibilityIdentifier("TranscriptPlaybackTimeLabel")
+
+                    Spacer(minLength: 0)
+
+                    Menu {
+                        ForEach([0.75, 1.0, 1.25, 1.5, 2.0], id: \.self) { rate in
+                            Button(rateLabel(rate), systemImage: playbackController.playbackRate == rate ? "checkmark" : "") {
+                                playbackController.playbackRate = rate
+                            }
+                        }
+                    } label: {
+                        Text(rateLabel(playbackController.playbackRate))
+                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .foregroundStyle(AppTheme.ink)
+                            .padding(.horizontal, 12)
+                            .frame(height: 34)
+                            .background(AppTheme.surface)
+                            .overlay(
+                                Rectangle()
+                                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                            )
+                    }
+                    .disabled(isRetranscribing)
+                    .accessibilityIdentifier("TranscriptPlaybackSpeedButton")
+                }
+
+                HStack(spacing: 12) {
+                    jumpButton(systemName: "gobackward.15") {
+                        onPlaybackIntent()
+                        playbackController.seek(by: -15)
+                    }
+
+                    Slider(
+                        value: Binding(
+                            get: { playbackController.currentTime },
+                            set: { playbackController.seek(to: $0) }
+                        ),
+                        in: 0...max(playbackController.duration, 1),
+                        onEditingChanged: { isEditing in
+                            playbackController.setScrubbing(isEditing)
+                            if !isEditing {
+                                onPlaybackIntent()
+                            }
+                        }
                     )
-                }
-                .buttonStyle(.plain)
+                    .tint(AppTheme.ink)
+                    .disabled(playbackController.isPreparing || isRetranscribing)
+                    .accessibilityIdentifier("TranscriptPlaybackSlider")
 
-                Slider(
-                    value: Binding(
-                        get: { playbackController.currentTime },
-                        set: { playbackController.seek(to: $0) }
-                    ),
-                    in: 0...max(playbackController.duration, 1)
+                    jumpButton(systemName: "goforward.15") {
+                        onPlaybackIntent()
+                        playbackController.seek(by: 15)
+                    }
+                }
+
+                if let error = playbackController.errorMessage, !error.isEmpty {
+                    Text(error)
+                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        .foregroundStyle(AppTheme.danger)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+        }
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+        .retroHardShadow()
+        .task(id: sourceURL.absoluteString) {
+            guard !didPrepare else { return }
+            didPrepare = true
+            await playbackController.prepare(sourceURL: sourceURL)
+        }
+        .onChange(of: sourceURL.absoluteString, initial: false) { _, _ in
+            didPrepare = false
+        }
+    }
+
+    private func jumpButton(systemName: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(AppTheme.ink)
+                .frame(width: 34, height: 34)
+                .background(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
                 )
-                .tint(AppTheme.documentOlive)
-
-                Text("\(playbackController.currentTime.mmss) / \(playbackController.duration.mmss)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(AppTheme.subtleInk)
-            }
-
-            if let error = playbackController.errorMessage {
-                Text(error)
-                    .font(.caption)
-                    .foregroundStyle(AppTheme.danger)
-            }
         }
-        .padding(16)
-        .background {
-            PaperSurface(
-                cornerRadius: 24,
-                fill: AppTheme.documentPaper,
-                border: AppTheme.documentHairline,
-                shadowOpacity: 0.08
-            )
-        }
+        .buttonStyle(.plain)
+        .disabled(isRetranscribing || playbackController.isPreparing)
     }
 
-    private var playbackProgress: Double {
-        guard playbackController.duration > 0 else { return 0 }
-        return min(max(playbackController.currentTime / playbackController.duration, 0), 1)
-    }
-}
-
-private struct PlaybackWaveformStrip: View {
-    let progress: Double
-
-    private let barHeights: [CGFloat] = [5, 9, 12, 7, 15, 10, 6, 13, 18, 10, 7, 14, 9, 5, 11, 16, 8, 6, 12, 17, 8, 5, 10, 14, 7, 6, 12, 9, 5, 8]
-
-    var body: some View {
-        GeometryReader { proxy in
-            let count = barHeights.count
-            let step = proxy.size.width / CGFloat(max(count, 1))
-            let activeCount = Int((Double(count) * progress).rounded(.down))
-
-            HStack(alignment: .center, spacing: max(2, step * 0.22)) {
-                ForEach(Array(barHeights.enumerated()), id: \.offset) { index, height in
-                    Capsule()
-                        .fill(index < activeCount ? AppTheme.documentOlive : AppTheme.documentHairline.opacity(0.55))
-                        .frame(width: max(2, step * 0.36), height: height)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    private func rateLabel(_ rate: Double) -> String {
+        switch rate {
+        case 0.75:
+            return "0.75x"
+        case 1.0:
+            return "1.0x"
+        case 1.25:
+            return "1.25x"
+        case 1.5:
+            return "1.5x"
+        case 2.0:
+            return "2.0x"
+        default:
+            return String(format: "%.2fx", rate)
         }
     }
 }

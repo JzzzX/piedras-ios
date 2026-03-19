@@ -79,17 +79,18 @@ struct GlobalChatView: View {
         .onDisappear {
             globalChatStore.resetConversation()
         }
+        .id(settingsStore.appLanguage)
     }
 
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text("Ask")
-                    .font(.system(size: 34, weight: .regular, design: .serif))
+                Text(AppStrings.current.ask)
+                    .font(.system(size: 28, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.ink)
 
-                Text("All notes")
-                    .font(.subheadline)
+                Text(AppStrings.current.allNotes)
+                    .font(.system(size: 14, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
@@ -97,12 +98,12 @@ struct GlobalChatView: View {
 
             HStack(spacing: 10) {
                 if !globalChatStore.messages.isEmpty {
-                    AppGlassCircleButton(systemName: "arrow.counterclockwise", accessibilityLabel: "重置对话") {
+                    AppGlassCircleButton(systemName: "arrow.counterclockwise", accessibilityLabel: AppStrings.current.resetConversation) {
                         globalChatStore.resetConversation()
                     }
                 }
 
-                AppGlassCircleButton(systemName: "xmark", accessibilityLabel: "关闭") {
+                AppGlassCircleButton(systemName: "xmark", accessibilityLabel: AppStrings.current.close) {
                     dismiss()
                 }
             }
@@ -110,18 +111,24 @@ struct GlobalChatView: View {
     }
 
     private var emptyState: some View {
-        AppGlassCard(cornerRadius: 30, style: .regular, padding: 20, shadowOpacity: 0.06) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Ask from transcript, notes and summaries.")
-                    .font(.body)
-                    .foregroundStyle(AppTheme.mutedInk)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(AppStrings.current.askFromTranscript)
+                .font(.system(size: 15, weight: .regular, design: .monospaced))
+                .foregroundStyle(AppTheme.mutedInk)
 
-                HStack(spacing: 10) {
-                    suggestion("Summarize open decisions")
-                    suggestion("What changed most?")
-                }
+            HStack(spacing: 10) {
+                suggestion(AppStrings.current.suggestSummarize)
+                suggestion(AppStrings.current.suggestChanged)
             }
         }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+        .retroHardShadow()
     }
 
     private var messageList: some View {
@@ -143,32 +150,31 @@ struct GlobalChatView: View {
 
     private func chatBubble(message: GlobalChatMessage, isUser: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(isUser ? "You" : "Piedras")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(isUser ? Color.white.opacity(0.72) : AppTheme.subtleInk)
+            Text(isUser ? "YOU>" : "PIEDRAS>")
+                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                .foregroundStyle(isUser ? AppTheme.surface.opacity(0.72) : AppTheme.subtleInk)
 
             if message.content.isEmpty && !isUser && globalChatStore.isStreaming {
-                ProgressView()
-                    .tint(AppTheme.accent)
+                HStack(spacing: 4) {
+                    RetroBlinkingCursor()
+                    Text(AppStrings.current.processing)
+                        .font(.system(size: 14, weight: .regular, design: .monospaced))
+                        .foregroundStyle(AppTheme.subtleInk)
+                }
             } else {
                 Text(message.content)
-                    .font(.body)
+                    .font(.system(size: 15, weight: .regular, design: .monospaced))
                     .foregroundStyle(isUser ? .white : AppTheme.ink)
                     .textSelection(.enabled)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            isUser ? AppTheme.ink : AppTheme.surface,
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        .background(isUser ? AppTheme.ink : AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
         )
-        .overlay {
-            if !isUser {
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(AppTheme.border.opacity(0.55), lineWidth: 1)
-            }
-        }
     }
 
     private func suggestion(_ text: String) -> some View {
@@ -176,13 +182,15 @@ struct GlobalChatView: View {
             input = text
         } label: {
             Text(text)
-                .font(.footnote.weight(.medium))
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
                 .foregroundStyle(AppTheme.ink)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background {
-                    AppGlassSurface(cornerRadius: 18, style: .clear, shadowOpacity: 0.03)
-                }
+                .background(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: 1)
+                )
         }
         .buttonStyle(.plain)
         .disabled(isComposerBlocked)
@@ -191,12 +199,13 @@ struct GlobalChatView: View {
     private var composer: some View {
         HStack(spacing: 12) {
             HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 14, weight: .semibold))
+                Text(">")
+                    .font(.system(size: 16, weight: .bold, design: .monospaced))
                     .foregroundStyle(AppTheme.subtleInk)
 
-                TextField("Ask across your meetings", text: $input)
+                TextField(AppStrings.current.askAcrossMeetings, text: $input)
                     .textFieldStyle(.plain)
+                    .font(.system(size: 15, weight: .regular, design: .monospaced))
                     .foregroundStyle(AppTheme.ink)
                     .focused($isInputFocused)
                     .submitLabel(.send)
@@ -206,17 +215,22 @@ struct GlobalChatView: View {
             }
             .padding(.horizontal, 16)
             .frame(height: 54)
-            .background {
-                AppGlassSurface(cornerRadius: 22, style: .clear, borderOpacity: 0.20, shadowOpacity: 0.06)
-                    .clipShape(Capsule())
-            }
+            .background(AppTheme.surface)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+            )
 
             Button(action: sendCurrentInput) {
                 Image(systemName: "arrow.up")
-                    .font(.headline.weight(.semibold))
+                    .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
-                    .background(AppTheme.ink, in: Circle())
+                    .background(AppTheme.ink)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                    )
             }
             .buttonStyle(.plain)
             .disabled(trimmedInput.isEmpty || globalChatStore.isStreaming || isComposerBlocked)
@@ -224,42 +238,48 @@ struct GlobalChatView: View {
         .padding(.horizontal, 20)
         .padding(.top, 10)
         .padding(.bottom, 14)
-        .background(.ultraThinMaterial)
+        .background(AppTheme.background)
     }
 
     private func statusBanner(_ message: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "info.circle")
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(AppTheme.subtleInk)
 
             Text(message)
-                .font(.footnote)
+                .font(.system(size: 13, weight: .regular, design: .monospaced))
                 .foregroundStyle(AppTheme.mutedInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button("Settings") {
+            Button(AppStrings.current.settings) {
                 router.showSettings()
             }
             .buttonStyle(.plain)
-            .font(.footnote.weight(.semibold))
+            .font(.system(size: 13, weight: .bold, design: .monospaced))
             .foregroundStyle(AppTheme.ink)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            AppGlassSurface(cornerRadius: 18, style: .clear, shadowOpacity: 0.03)
-        }
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
     }
 
     private func errorBanner(_ message: String) -> some View {
         Text(message)
-            .font(.footnote)
+            .font(.system(size: 13, weight: .regular, design: .monospaced))
             .foregroundStyle(AppTheme.danger)
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppTheme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(AppTheme.danger.opacity(0.08))
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.danger, lineWidth: AppTheme.retroBorderWidth)
+            )
     }
 
     private var availabilityMessage: String? {
