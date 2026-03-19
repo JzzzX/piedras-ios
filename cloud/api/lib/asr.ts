@@ -14,6 +14,24 @@ export interface AsrStatus {
   lastError: string | null;
 }
 
+function normalizeProxyPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '/';
+  }
+
+  const withLeadingSlash = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return withLeadingSlash.replace(/\/{2,}/g, '/');
+}
+
+export function resolveAsrProxyHealthPath(): string {
+  return normalizeProxyPath(process.env.ASR_PROXY_HEALTH_PATH || '/asr-proxy/healthz');
+}
+
+export function resolveAsrProxyWSPath(): string {
+  return normalizeProxyPath(process.env.ASR_PROXY_WS_PATH || '/ws/asr');
+}
+
 export function getAsrMode(): AsrMode {
   const mode = process.env.ASR_MODE?.toLowerCase();
   if (mode === 'aliyun') return 'aliyun';
@@ -151,7 +169,7 @@ export async function getAsrRuntimeStatus(): Promise<AsrStatus> {
   }
 
   const proxyBaseURL = resolveAsrProxyPublicBaseURL();
-  const cacheKey = `asr:${proxyBaseURL?.toString() || 'missing-proxy-base-url'}`;
+  const cacheKey = `asr:${proxyBaseURL?.toString() || 'missing-proxy-base-url'}:${resolveAsrProxyHealthPath()}`;
   const probe = await getCachedRuntimeHealth(
     cacheKey,
     30_000,
@@ -166,7 +184,7 @@ export async function getAsrRuntimeStatus(): Promise<AsrStatus> {
         };
       }
 
-      const healthURL = new URL('/healthz', proxyBaseURL);
+      const healthURL = new URL(resolveAsrProxyHealthPath(), proxyBaseURL);
 
       try {
         const response = await fetchWithTimeout(healthURL, { method: 'GET' }, 3_000);

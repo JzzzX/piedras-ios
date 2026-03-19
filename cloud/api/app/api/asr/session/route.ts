@@ -1,6 +1,11 @@
 import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
-import { getAsrRuntimeStatus, getAsrStatus, resolveAsrProxyPublicBaseURL } from '@/lib/asr';
+import {
+  getAsrRuntimeStatus,
+  getAsrStatus,
+  resolveAsrProxyPublicBaseURL,
+  resolveAsrProxyWSPath,
+} from '@/lib/asr';
 
 interface AsrSessionRequest {
   sampleRate?: number;
@@ -39,10 +44,11 @@ function resolveProxyWSURL(req: NextRequest, sessionToken: string) {
   const explicitBaseURL = resolveAsrProxyPublicBaseURL(
     new URL(req.url).protocol === 'https:' ? 'https' : 'http'
   );
-  const baseURL = explicitBaseURL ?? new URL(req.url);
+  const baseURL = explicitBaseURL ?? new URL(req.nextUrl.origin);
   const wsProtocol = baseURL.protocol === 'https:' ? 'wss:' : 'ws:';
-  const origin = `${wsProtocol}//${baseURL.host}`;
-  return `${origin}/ws/asr?session_token=${encodeURIComponent(sessionToken)}`;
+  const wsURL = new URL(resolveAsrProxyWSPath(), `${wsProtocol}//${baseURL.host}`);
+  wsURL.searchParams.set('session_token', sessionToken);
+  return wsURL.toString();
 }
 
 function buildDoubaoSession(

@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "next build",
-    "start": "next start",
+    "build": "npx prisma generate && next build",
+    "start": "node server.cjs",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate:deploy": "prisma migrate deploy"
@@ -15,7 +15,8 @@
     "next": "16.1.6",
     "prisma": "^6.19.2",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "ws": "^8.19.0"
   },
   "devDependencies": {
     "@types/node": "^20",
