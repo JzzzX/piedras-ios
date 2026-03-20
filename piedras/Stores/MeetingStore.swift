@@ -245,21 +245,30 @@ final class MeetingStore {
             return
         }
 
+        if recordingSessionStore.meetingID == id, recordingSessionStore.phase != .idle {
+            lastErrorMessage = "请先结束当前录音，再删除这条会议。"
+            return
+        }
+
+        lastErrorMessage = nil
         let requiresRemoteDeletion = meeting.lastSyncedAt != nil
             || meeting.syncState == .synced
             || meeting.audioRemotePath != nil
 
-        if !requiresRemoteDeletion {
-            do {
+        do {
+            if !requiresRemoteDeletion {
                 try deleteMeetingLocally(meeting)
-            } catch {
-                lastErrorMessage = error.localizedDescription
+                return
             }
+
+            try stageMeetingForDeferredDeletion(meeting)
+        } catch {
+            lastErrorMessage = error.localizedDescription
             return
         }
 
         Task { @MainActor [weak self] in
-            await self?.deleteMeetingRemotelyIfNeeded(id: id)
+            await self?.syncMeetingIfPossible(meetingID: id)
         }
     }
 
@@ -1074,6 +1083,36 @@ final class MeetingStore {
     ) async {
         await appActivityCoordinator.performExpiringActivity(named: "sync-meeting-\(meetingID)") { [weak self] in
             guard let self else { return }
+            guard let meeting = meeting(withID: meetingID) else { return }
+
+            if meeting.syncState == .deleted {
+                guard await ensureBackendReachable(force: false) else {
+                    recordBackgroundSyncIssue(
+                        detail: settingsStore.blockingMessage(for: .backend) ?? "\(AppEnvironment.cloudName) 暂时不可用。",
+                        summary: "后台删除同步失败，将稍后自动重试。"
+                    )
+                    if let userVisibleFailurePrefix {
+                        lastErrorMessage = "\(userVisibleFailurePrefix)：云端暂时不可用，将稍后自动重试。"
+                    }
+                    return
+                }
+
+                do {
+                    try await meetingSyncService.syncMeeting(id: meetingID)
+                    loadMeetings()
+                } catch {
+                    recordBackgroundSyncIssue(
+                        detail: error.localizedDescription,
+                        summary: "后台删除同步失败，将稍后自动重试。"
+                    )
+                    if let userVisibleFailurePrefix {
+                        lastErrorMessage = "\(userVisibleFailurePrefix)：\(error.localizedDescription)"
+                    }
+                    loadMeetings()
+                }
+                return
+            }
+
             guard await ensureBackendReachable(force: false) else {
                 let message = "云端暂时不可用，将稍后自动重试。"
                 settingsStore.syncStatusMessage = message
@@ -1225,32 +1264,6 @@ final class MeetingStore {
         }
     }
 
-    private func deleteMeetingRemotelyIfNeeded(id: String) async {
-        await appActivityCoordinator.performExpiringActivity(named: "delete-meeting-\(id)") { [weak self] in
-            guard let self, let meeting = meeting(withID: id) else { return }
-
-            if meeting.lastSyncedAt != nil || meeting.syncState == .synced || meeting.audioRemotePath != nil {
-                guard await ensureBackendReachable(force: true) else {
-                    lastErrorMessage = settingsStore.blockingMessage(for: .backend) ?? "\(AppEnvironment.cloudName) 暂时不可用。"
-                    return
-                }
-
-                do {
-                    try await meetingSyncService.deleteRemoteMeeting(id: id)
-                } catch {
-                    lastErrorMessage = error.localizedDescription
-                    return
-                }
-            }
-
-            do {
-                try deleteMeetingLocally(meeting)
-            } catch {
-                lastErrorMessage = error.localizedDescription
-            }
-        }
-    }
-
     private func updateKeepScreenAwake() {
         let shouldKeepScreenAwake: Bool
 
@@ -1317,25 +1330,43 @@ final class MeetingStore {
         }
     }
 
+    private func stageMeetingForDeferredDeletion(_ meeting: Meeting) throws {
+        discardLocalMeetingState(for: meeting)
+        removeLocalAudioIfNeeded(for: meeting)
+        meeting.syncState = .deleted
+        meeting.updatedAt = .now
+        try repository.save()
+        loadMeetings()
+    }
+
     private func deleteMeetingLocally(_ meeting: Meeting) throws {
+        discardLocalMeetingState(for: meeting)
+        removeLocalAudioIfNeeded(for: meeting)
+        try repository.delete(meeting)
+        loadMeetings()
+    }
+
+    private func discardLocalMeetingState(for meeting: Meeting) {
+        scheduledSyncTasks[meeting.id]?.cancel()
+        scheduledSyncTasks[meeting.id] = nil
         fileTranscriptionTasks[meeting.id]?.cancel()
         fileTranscriptionTasks[meeting.id] = nil
         transcribingMeetingIDs.remove(meeting.id)
         fileTranscriptionStatuses.removeValue(forKey: meeting.id)
         fileTranscriptionPartials.removeValue(forKey: meeting.id)
-        removeLocalAudioIfNeeded(for: meeting)
-        try repository.delete(meeting)
+        enhancingMeetingIDs.remove(meeting.id)
+        generatingTitleMeetingIDs.remove(meeting.id)
+        streamingChatMeetingIDs.remove(meeting.id)
 
         if selectedMeetingID == meeting.id {
             selectedMeetingID = nil
         }
 
         if recordingSessionStore.meetingID == meeting.id {
+            cancelASRReconnect()
             recordingSessionStore.reset()
             updateKeepScreenAwake()
         }
-
-        loadMeetings()
     }
 
     private func normalizeGeneratedNotes(_ content: String) -> String {

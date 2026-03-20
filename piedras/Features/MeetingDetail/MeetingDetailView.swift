@@ -33,6 +33,37 @@ private struct MeetingActionItem: Identifiable {
     let action: () -> Void
 }
 
+private struct InteractivePopGestureEnabler: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller {
+        Controller()
+    }
+
+    func updateUIViewController(_ uiViewController: Controller, context: Context) {}
+
+    final class Controller: UIViewController {
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.backgroundColor = .clear
+            view.isUserInteractionEnabled = false
+        }
+
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            enableInteractivePopGesture()
+        }
+
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            enableInteractivePopGesture()
+        }
+
+        private func enableInteractivePopGesture() {
+            navigationController?.interactivePopGestureRecognizer?.isEnabled = true
+            navigationController?.interactivePopGestureRecognizer?.delegate = nil
+        }
+    }
+}
+
 struct MeetingDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(MeetingStore.self) private var meetingStore
@@ -131,6 +162,7 @@ struct MeetingDetailView: View {
         }
         .animation(.easeOut(duration: 0.18), value: showsActionMenu)
         .toolbar(.hidden, for: .navigationBar)
+        .background(InteractivePopGestureEnabler())
         .safeAreaInset(edge: .bottom) {
             bottomDock(for: meeting)
         }

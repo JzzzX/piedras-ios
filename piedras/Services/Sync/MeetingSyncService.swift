@@ -23,9 +23,9 @@ final class MeetingSyncService {
 
     @discardableResult
     func syncPendingMeetings() async -> MeetingSyncBatchResult {
-        let candidates = (try? repository.fetchMeetings())?
+        let candidates = (try? repository.fetchMeetings(includeDeleted: true))?
             .filter {
-                ($0.syncState == .pending || $0.syncState == .failed)
+                ($0.syncState == .pending || $0.syncState == .failed || $0.syncState == .deleted)
                     && $0.status != .transcribing
                     && $0.status != .transcriptionFailed
             } ?? []
@@ -47,6 +47,12 @@ final class MeetingSyncService {
 
     func syncMeeting(id: String) async throws {
         guard let meeting = try repository.meeting(withID: id) else {
+            return
+        }
+
+        if meeting.syncState == .deleted {
+            try await deleteRemoteMeeting(id: id)
+            try repository.delete(meeting)
             return
         }
 
@@ -91,7 +97,9 @@ final class MeetingSyncService {
         for summary in summaries {
             let localMeeting = try repository.meeting(withID: summary.id)
             if let localMeeting,
-               localMeeting.syncState == .pending || localMeeting.syncState == .syncing {
+               localMeeting.syncState == .pending
+                || localMeeting.syncState == .syncing
+                || localMeeting.syncState == .deleted {
                 continue
             }
 

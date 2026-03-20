@@ -115,7 +115,7 @@ final class APIClient {
     func deleteMeeting(id: String) async throws {
         let request = try makeRequest(path: "/api/meetings/\(id)", method: "DELETE")
         let (data, response) = try await session.data(for: request)
-        try validate(response: response, data: data)
+        try validate(response: response, data: data, fallback: "删除会议失败。")
     }
 
     func uploadAudio(
@@ -284,13 +284,21 @@ final class APIClient {
         return request
     }
 
-    private func validate(response: URLResponse, data: Data?) throws {
+    private func validate(
+        response: URLResponse,
+        data: Data?,
+        fallback: String = "请求失败，请检查后端日志。"
+    ) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIClientError.invalidResponse
         }
 
         guard (200 ..< 300).contains(httpResponse.statusCode) else {
-            let message = try parseErrorMessage(from: data, response: httpResponse)
+            let message = try parseErrorMessage(
+                from: data,
+                response: httpResponse,
+                fallback: fallback
+            )
             throw APIClientError.requestFailed(message)
         }
     }
@@ -314,11 +322,15 @@ final class APIClient {
             return appendRequestID(requestID, to: text)
         }
 
-        return appendRequestID(requestID, to: fallback)
+        return appendRequestID(requestID, to: formattedFallbackMessage(fallback, response: response))
     }
 
-    private func parseErrorMessage(from data: Data?, response: HTTPURLResponse?) throws -> String {
-        Self.buildErrorMessage(from: data, response: response)
+    private func parseErrorMessage(
+        from data: Data?,
+        response: HTTPURLResponse?,
+        fallback: String
+    ) throws -> String {
+        Self.buildErrorMessage(from: data, response: response, fallback: fallback)
     }
 
     private static func appendRequestID(_ requestID: String?, to message: String) -> String {
@@ -331,6 +343,20 @@ final class APIClient {
         }
 
         return "\(message) [RID: \(requestID)]"
+    }
+
+    private static func formattedFallbackMessage(
+        _ fallback: String,
+        response: HTTPURLResponse?
+    ) -> String {
+        guard let response else {
+            return fallback
+        }
+
+        let normalizedFallback = fallback
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "。.!"))
+        return "\(normalizedFallback)（HTTP \(response.statusCode)）"
     }
 
     private func makeMultipartBody(

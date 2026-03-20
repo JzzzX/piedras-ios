@@ -129,4 +129,28 @@ struct APIClientDecodingTests {
 
         #expect(message == "保存会议失败：数据库不可用 [RID: rid-456]")
     }
+
+    @MainActor
+    @Test
+    func buildsDeleteFallbackMessageWithHTTPStatusAndRequestID() throws {
+        let response = try #require(
+            HTTPURLResponse(
+                url: URL(string: "https://example.com/api/meetings/meeting-1")!,
+                statusCode: 502,
+                httpVersion: nil,
+                headerFields: [
+                    "Content-Type": "text/html",
+                    "X-Request-Id": "rid-789",
+                ]
+            )
+        )
+
+        let message = APIClient.buildErrorMessage(
+            from: Data("<!DOCTYPE html><html><body>Bad Gateway</body></html>".utf8),
+            response: response,
+            fallback: "删除会议失败。"
+        )
+
+        #expect(message == "删除会议失败（HTTP 502） [RID: rid-789]")
+    }
 }

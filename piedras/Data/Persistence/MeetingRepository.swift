@@ -9,11 +9,15 @@ final class MeetingRepository {
         self.modelContext = modelContext
     }
 
-    func fetchMeetings(matching query: String = "") throws -> [Meeting] {
+    func fetchMeetings(
+        matching query: String = "",
+        includeDeleted: Bool = false
+    ) throws -> [Meeting] {
         let descriptor = FetchDescriptor<Meeting>(
             sortBy: [SortDescriptor(\Meeting.updatedAt, order: .reverse)]
         )
         let meetings = try modelContext.fetch(descriptor)
+            .filter { includeDeleted || $0.syncState != .deleted }
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         guard !trimmedQuery.isEmpty else {
@@ -87,7 +91,7 @@ final class MeetingRepository {
     func seedPreviewDataIfNeeded(workspaceID: String?, preferLocalOnly: Bool = false) {
         let existing: [Meeting]
         do {
-            existing = try fetchMeetings()
+            existing = try fetchMeetings(includeDeleted: true)
         } catch {
             return
         }

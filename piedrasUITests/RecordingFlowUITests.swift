@@ -91,6 +91,25 @@ final class RecordingFlowUITests: XCTestCase {
         let predicate = NSPredicate(format: "exists == false")
         expectation(for: predicate, evaluatedWith: deletedTitle)
         waitForExpectations(timeout: 5)
+        XCTAssertFalse(app.otherElements["HomeErrorBanner"].exists, "本地删除成功后不应再展示错误横幅。")
+    }
+
+    @MainActor
+    func testMeetingDetailSupportsEdgeSwipeBack() throws {
+        let app = launchApp()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        let transcriptTab = app.buttons["MeetingModeTranscriptTab"]
+        XCTAssertTrue(transcriptTab.waitForExistence(timeout: 3), "详情页未正常打开。")
+
+        edgeSwipeBack(in: app)
+
+        let homeField = app.textFields["HomeGlobalChatField"]
+        XCTAssertTrue(homeField.waitForExistence(timeout: 5), "右滑返回后应回到首页。")
+        XCTAssertFalse(transcriptTab.exists, "右滑返回后不应仍停留在详情页。")
     }
 
     @MainActor
@@ -223,5 +242,12 @@ final class RecordingFlowUITests: XCTestCase {
         }
 
         app.tap()
+    }
+
+    private func edgeSwipeBack(in app: XCUIApplication) {
+        let window = app.windows.firstMatch
+        let start = window.coordinate(withNormalizedOffset: CGVector(dx: 0.01, dy: 0.5))
+        let finish = window.coordinate(withNormalizedOffset: CGVector(dx: 0.72, dy: 0.5))
+        start.press(forDuration: 0.05, thenDragTo: finish)
     }
 }
