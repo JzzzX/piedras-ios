@@ -23,6 +23,9 @@ const proxyStats = {
   lastPartialAt: null,
   lastFinalAt: null,
   lastUpstreamCloseAt: null,
+  lastCloseAt: null,
+  lastCloseReason: null,
+  lastCloseSeverity: null,
   lastError: null,
 };
 
@@ -369,15 +372,22 @@ function makeStartPayload(sessionPayload) {
   };
 }
 
-function sendJSON(ws, payload) {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(payload));
+function sendJSON(ws, payload, callback) {
+  if (ws.readyState !== WebSocket.OPEN) {
+    return false;
   }
+
+  ws.send(JSON.stringify(payload), callback);
+  return true;
 }
 
 function closePair(client, upstream, code = 1000, reason = 'closed') {
-  if (upstream && upstream.readyState === WebSocket.OPEN) {
-    upstream.close();
+  if (upstream && upstream.readyState !== WebSocket.CLOSED) {
+    try {
+      upstream.close();
+    } catch {
+      upstream.terminate();
+    }
   }
 
   if (client.readyState === WebSocket.OPEN || client.readyState === WebSocket.CLOSING) {
@@ -385,6 +395,21 @@ function closePair(client, upstream, code = 1000, reason = 'closed') {
       client.close(code, reason);
     } catch {}
   }
+}
+
+function noteClose(reason, severity = 'info') {
+  proxyStats.lastCloseAt = new Date().toISOString();
+  proxyStats.lastCloseReason = reason;
+  proxyStats.lastCloseSeverity = severity;
+}
+
+function isIdleTimeoutError(errorCode, detail) {
+  const normalizedDetail = String(detail || '').toLowerCase();
+  return (
+    Number(errorCode) === 45000081 ||
+    normalizedDetail.includes('timeout waiting next packet') ||
+    normalizedDetail.includes('waiting next packet timeout')
+  );
 }
 
 async function main() {
@@ -437,118 +462,220 @@ async function main() {
     const connectionId = crypto.randomUUID();
     let upstreamSequence = 2;
     let hasSentLastFrame = false;
-    let didSignalReady = false;
     let lastAudioEndTimeMs = 0;
     let lastPartialText = '';
+    let shouldSendLastFrameWhenUpstreamReady = false;
+    let connectionClosed = false;
+    let upstreamStartSent = false;
+    const pendingAudioFrames = [];
 
     proxyStats.totalConnections += 1;
     proxyStats.activeConnections += 1;
+    proxyStats.lastError = null;
     log('client_connected', {
       connectionId,
       sampleRate: sessionPayload.sampleRate || DEFAULT_SAMPLE_RATE,
       channels: sessionPayload.channels || DEFAULT_CHANNELS,
     });
 
-    const upstream = new WebSocket(DOUBAO_WS_URL, {
-      headers: makeConnectHeaders(),
-    });
+    let upstream = null;
 
-    const finalize = (message, detail) => {
-      proxyStats.lastError = detail ? `${message}: ${detail}` : message;
-      log('connection_error', { connectionId, message, detail: detail || null });
-      if (detail) {
-        sendJSON(client, { type: 'error', message: `${message}: ${detail}` });
-      } else {
-        sendJSON(client, { type: 'error', message });
-      }
-      sendJSON(client, { type: 'closed' });
-      closePair(client, upstream, 1011, message);
-    };
-
-    upstream.on('open', () => {
-      log('upstream_open', { connectionId });
-      try {
-        upstream.send(encodeJSONFrame(FULL_CLIENT_REQUEST, makeStartPayload(sessionPayload)));
-      } catch (error) {
-        finalize('豆包 ASR 初始化失败', error instanceof Error ? error.message : '');
-      }
-    });
-
-    upstream.on('message', (raw) => {
-      try {
-        const decoded = decodeServerFrame(raw);
-
-        if (decoded.messageType === 0x0f) {
-          const errorDetail =
-            decoded.json?.message || decoded.json?.error || JSON.stringify(decoded.json || {});
-          finalize(`豆包 ASR 错误 ${decoded.errorCode || ''}`.trim(), errorDetail);
-          return;
-        }
-
-        if (decoded.messageType !== 0x09 || !decoded.json) {
-          return;
-        }
-
-        if (!didSignalReady) {
-          didSignalReady = true;
-          proxyStats.lastReadyAt = new Date().toISOString();
-          log('upstream_ready', { connectionId });
-          sendJSON(client, { type: 'ready' });
-        }
-
-        const update = extractRecognitionUpdate(decoded.json, lastAudioEndTimeMs || Date.now());
-        if (!update) {
-          return;
-        }
-
-        if (update.isFinal) {
-          lastPartialText = '';
-          proxyStats.lastFinalAt = new Date().toISOString();
-          log('final', {
-            connectionId,
-            text: update.text.slice(0, 120),
-            startTimeMs: update.startTimeMs,
-            endTimeMs: update.endTimeMs,
-          });
-          sendJSON(client, {
-            type: 'final',
-            text: update.text,
-            startTimeMs: update.startTimeMs,
-            endTimeMs: update.endTimeMs,
-          });
-        } else if (update.text !== lastPartialText) {
-          lastPartialText = update.text;
-          proxyStats.lastPartialAt = new Date().toISOString();
-          log('partial', {
-            connectionId,
-            text: update.text.slice(0, 120),
-          });
-          sendJSON(client, {
-            type: 'partial',
-            text: update.text,
-          });
-        }
-      } catch (error) {
-        finalize('解析豆包 ASR 响应失败', error instanceof Error ? error.message : '');
-      }
-    });
-
-    upstream.on('error', (error) => {
-      finalize('豆包 ASR 连接失败', error.message);
-    });
-
-    upstream.on('close', () => {
-      proxyStats.lastUpstreamCloseAt = new Date().toISOString();
-      log('upstream_closed', { connectionId });
-      sendJSON(client, { type: 'closed' });
-      closePair(client, upstream);
-    });
-
-    client.on('message', (data, isBinary) => {
-      if (upstream.readyState !== WebSocket.OPEN) {
+    const closeSession = ({
+      message,
+      detail = null,
+      severity = 'error',
+      notifyClientError = severity === 'error',
+      closeCode = severity === 'error' ? 1011 : 1000,
+    }) => {
+      if (connectionClosed) {
         return;
       }
 
+      connectionClosed = true;
+
+      const composedMessage = detail ? `${message}: ${detail}` : message;
+      noteClose(composedMessage, severity);
+
+      if (severity === 'error') {
+        proxyStats.lastError = composedMessage;
+        log('connection_error', { connectionId, message, detail });
+      } else {
+        log('connection_closed', { connectionId, message, detail });
+      }
+
+      const finalizeClose = () => {
+        closePair(client, upstream, closeCode, message.slice(0, 120));
+      };
+
+      const sendClosedFrame = () => {
+        if (!sendJSON(client, { type: 'closed' }, () => finalizeClose())) {
+          finalizeClose();
+        }
+      };
+
+      if (notifyClientError) {
+        if (!sendJSON(client, { type: 'error', message: composedMessage }, () => sendClosedFrame())) {
+          sendClosedFrame();
+        }
+        return;
+      }
+
+      sendClosedFrame();
+    };
+
+    const flushPendingAudio = () => {
+      if (!upstream || upstream.readyState !== WebSocket.OPEN || !upstreamStartSent || connectionClosed) {
+        return;
+      }
+
+      while (pendingAudioFrames.length > 0) {
+        const audioBytes = pendingAudioFrames.shift();
+        try {
+          upstream.send(encodeAudioFrame(upstreamSequence, audioBytes, false));
+          upstreamSequence += 1;
+        } catch (error) {
+          closeSession({
+            message: '豆包 ASR 音频发送失败',
+            detail: error instanceof Error ? error.message : '',
+          });
+          return;
+        }
+      }
+
+      if (shouldSendLastFrameWhenUpstreamReady && !hasSentLastFrame) {
+        hasSentLastFrame = true;
+        shouldSendLastFrameWhenUpstreamReady = false;
+        try {
+          upstream.send(encodeAudioFrame(-upstreamSequence, Buffer.alloc(0), true));
+          upstreamSequence += 1;
+        } catch (error) {
+          closeSession({
+            message: '豆包 ASR 结束帧发送失败',
+            detail: error instanceof Error ? error.message : '',
+          });
+        }
+      }
+    };
+
+    const ensureUpstream = () => {
+      if (upstream || connectionClosed) {
+        return;
+      }
+
+      upstream = new WebSocket(DOUBAO_WS_URL, {
+        headers: makeConnectHeaders(),
+      });
+
+      upstream.on('open', () => {
+        log('upstream_open', { connectionId });
+        try {
+          upstream.send(encodeJSONFrame(FULL_CLIENT_REQUEST, makeStartPayload(sessionPayload)));
+          upstreamStartSent = true;
+          flushPendingAudio();
+        } catch (error) {
+          closeSession({
+            message: '豆包 ASR 初始化失败',
+            detail: error instanceof Error ? error.message : '',
+          });
+        }
+      });
+
+      upstream.on('message', (raw) => {
+        try {
+          const decoded = decodeServerFrame(raw);
+
+          if (decoded.messageType === 0x0f) {
+            const errorDetail =
+              decoded.json?.message || decoded.json?.error || JSON.stringify(decoded.json || {});
+
+            if (isIdleTimeoutError(decoded.errorCode, errorDetail)) {
+              closeSession({
+                message: '豆包 ASR 会话空闲超时',
+                detail: errorDetail,
+                severity: 'info',
+                notifyClientError: false,
+              });
+              return;
+            }
+
+            closeSession({
+              message: `豆包 ASR 错误 ${decoded.errorCode || ''}`.trim(),
+              detail: errorDetail,
+            });
+            return;
+          }
+
+          if (decoded.messageType !== 0x09 || !decoded.json) {
+            return;
+          }
+
+          const update = extractRecognitionUpdate(decoded.json, lastAudioEndTimeMs || Date.now());
+          if (!update) {
+            return;
+          }
+
+          if (update.isFinal) {
+            lastPartialText = '';
+            proxyStats.lastFinalAt = new Date().toISOString();
+            log('final', {
+              connectionId,
+              text: update.text.slice(0, 120),
+              startTimeMs: update.startTimeMs,
+              endTimeMs: update.endTimeMs,
+            });
+            sendJSON(client, {
+              type: 'final',
+              text: update.text,
+              startTimeMs: update.startTimeMs,
+              endTimeMs: update.endTimeMs,
+            });
+          } else if (update.text !== lastPartialText) {
+            lastPartialText = update.text;
+            proxyStats.lastPartialAt = new Date().toISOString();
+            log('partial', {
+              connectionId,
+              text: update.text.slice(0, 120),
+            });
+            sendJSON(client, {
+              type: 'partial',
+              text: update.text,
+            });
+          }
+        } catch (error) {
+          closeSession({
+            message: '解析豆包 ASR 响应失败',
+            detail: error instanceof Error ? error.message : '',
+          });
+        }
+      });
+
+      upstream.on('error', (error) => {
+        closeSession({
+          message: '豆包 ASR 连接失败',
+          detail: error.message,
+        });
+      });
+
+      upstream.on('close', () => {
+        proxyStats.lastUpstreamCloseAt = new Date().toISOString();
+        log('upstream_closed', { connectionId });
+        if (connectionClosed) {
+          return;
+        }
+
+        closeSession({
+          message: hasSentLastFrame ? '豆包 ASR 会话已结束' : '豆包 ASR 连接关闭',
+          severity: 'info',
+          notifyClientError: false,
+        });
+      });
+    };
+
+    proxyStats.lastReadyAt = new Date().toISOString();
+    log('proxy_ready', { connectionId });
+    sendJSON(client, { type: 'ready' });
+
+    client.on('message', (data, isBinary) => {
       if (isBinary) {
         const audioBytes = Buffer.from(data);
         if (audioBytes.length === 0) {
@@ -561,20 +688,33 @@ async function main() {
         const durationMs = Math.round((audioBytes.length / bytesPerSecond) * 1000);
         lastAudioEndTimeMs += durationMs;
 
-        upstream.send(encodeAudioFrame(upstreamSequence, audioBytes, false));
-        upstreamSequence += 1;
+        pendingAudioFrames.push(audioBytes);
+        ensureUpstream();
+        flushPendingAudio();
         return;
       }
 
       try {
         const payload = JSON.parse(Buffer.from(data).toString('utf8'));
         if (payload?.type === 'stop' && !hasSentLastFrame) {
-          hasSentLastFrame = true;
-          upstream.send(encodeAudioFrame(-upstreamSequence, Buffer.alloc(0), true));
-          upstreamSequence += 1;
+          if (!upstream && pendingAudioFrames.length === 0) {
+            closeSession({
+              message: 'ASR 会话已结束',
+              detail: '客户端在发送音频前主动结束会话',
+              severity: 'info',
+              notifyClientError: false,
+            });
+            return;
+          }
+
+          shouldSendLastFrameWhenUpstreamReady = true;
+          ensureUpstream();
+          flushPendingAudio();
         }
       } catch {
-        finalize('客户端消息格式错误');
+        closeSession({
+          message: '客户端消息格式错误',
+        });
       }
     });
 

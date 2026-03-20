@@ -5,6 +5,8 @@ enum MeetingStatus: String, Codable, CaseIterable, Identifiable {
     case idle
     case recording
     case paused
+    case transcribing
+    case transcriptionFailed
     case ended
 
     var id: String { rawValue }

@@ -22,9 +22,9 @@ private enum MeetingHomeBucket: String, CaseIterable, Identifiable {
     }
 }
 
-private struct MeetingHomeSection: Identifiable {
+private struct MeetingHomeSectionSnapshot: Identifiable {
     let bucket: MeetingHomeBucket
-    let meetings: [Meeting]
+    let rows: [MeetingRowSnapshot]
 
     var id: String { bucket.id }
     var title: String { bucket.title }
@@ -110,17 +110,16 @@ struct MeetingListView: View {
             } else {
                 ForEach(homeSections) { section in
                     Section {
-                        ForEach(section.meetings) { meeting in
+                        ForEach(section.rows) { row in
                             MeetingRowView(
-                                meeting: meeting,
-                                isRecording: isMeetingRecording(meeting),
+                                snapshot: row,
                                 onOpen: {
-                                    router.showMeeting(id: meeting.id)
+                                    router.showMeeting(id: row.id)
                                 }
                             )
                             .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                 Button(AppStrings.current.deleteAction, role: .destructive) {
-                                    meetingStore.deleteMeeting(id: meeting.id)
+                                    meetingStore.deleteMeeting(id: row.id)
                                 }
                             }
                             .listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0))
@@ -141,6 +140,7 @@ struct MeetingListView: View {
         .scrollContentBackground(.hidden)
         .background(Color.clear)
         .contentMargins(.horizontal, 16, for: .scrollContent)
+        .id(feedStructureIdentity)
     }
 
     private var emptyState: some View {
@@ -338,7 +338,7 @@ struct MeetingListView: View {
 
     // MARK: - Data
 
-    private var homeSections: [MeetingHomeSection] {
+    private var homeSections: [MeetingHomeSectionSnapshot] {
         let calendar = Calendar.current
         var grouped: [MeetingHomeBucket: [Meeting]] = [:]
 
@@ -352,11 +352,22 @@ struct MeetingListView: View {
                 return nil
             }
 
-            return MeetingHomeSection(
+            return MeetingHomeSectionSnapshot(
                 bucket: bucket,
-                meetings: meetings.sorted(by: { $0.updatedAt > $1.updatedAt })
+                rows: meetings
+                    .sorted(by: { $0.updatedAt > $1.updatedAt })
+                    .map { MeetingRowSnapshot(meeting: $0, isRecording: isMeetingRecording($0)) }
             )
         }
+    }
+
+    private var feedStructureIdentity: String {
+        homeSections
+            .map { section in
+                let rowIDs = section.rows.map(\.id).joined(separator: ",")
+                return "\(section.id):\(rowIDs)"
+            }
+            .joined(separator: "|")
     }
 
     private var trimmedHomeChatInput: String {
@@ -386,6 +397,10 @@ struct MeetingListView: View {
 
     private func isMeetingProcessing(_ meeting: Meeting) -> Bool {
         if isMeetingRecording(meeting) {
+            return true
+        }
+
+        if meetingStore.isFileTranscribing(meetingID: meeting.id) {
             return true
         }
 
@@ -440,7 +455,7 @@ struct MeetingListView: View {
             router.showMeeting(id: meeting.id)
             let displayName = sourceURL.deletingPathExtension().lastPathComponent
             Task {
-                await meetingStore.startRecording(
+                await meetingStore.startFileTranscription(
                     meetingID: meeting.id,
                     sourceAudio: SourceAudioAsset(
                         fileURL: sourceURL,

@@ -3,6 +3,8 @@ import SwiftData
 
 @MainActor
 final class AppContainer {
+    private static let isXCTestRuntime = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     let modelContainer: ModelContainer
     let router: AppRouter
     let settingsStore: SettingsStore
@@ -10,6 +12,7 @@ final class AppContainer {
     let appActivityCoordinator: AppActivityCoordinator
     let audioSessionCoordinator: AudioSessionCoordinator
     let audioRecorderService: AudioRecorderService
+    let audioFileTranscriptionService: AudioFileTranscriptionService
     let meetingRepository: MeetingRepository
     let apiClient: APIClient
     let asrService: ASRService
@@ -20,8 +23,8 @@ final class AppContainer {
 
     init(inMemory: Bool = false) {
         let processArguments = ProcessInfo.processInfo.arguments
-        let shouldUseIsolatedDefaults = inMemory || processArguments.contains("UITEST_ISOLATED_DEFAULTS")
-        let shouldDefaultToSimulatorBackend = inMemory || processArguments.contains("UITEST_USE_SIMULATOR_BACKEND")
+        let shouldUseIsolatedDefaults = inMemory || Self.isXCTestRuntime || processArguments.contains("UITEST_ISOLATED_DEFAULTS")
+        let shouldDefaultToSimulatorBackend = inMemory || Self.isXCTestRuntime || processArguments.contains("UITEST_USE_SIMULATOR_BACKEND")
         let settingsDefaults: UserDefaults
         if shouldUseIsolatedDefaults,
            let ephemeralDefaults = UserDefaults(suiteName: "piedras.ui-tests.in-memory") {
@@ -48,6 +51,7 @@ final class AppContainer {
         audioRecorderService = AudioRecorderService(sessionCoordinator: audioSessionCoordinator)
         meetingRepository = MeetingRepository(modelContext: modelContainer.mainContext)
         apiClient = APIClient(settingsStore: settingsStore)
+        audioFileTranscriptionService = AudioFileTranscriptionService(apiClient: apiClient)
         asrService = ASRService(apiClient: apiClient)
         workspaceBootstrapService = WorkspaceBootstrapService(
             apiClient: apiClient,
@@ -64,6 +68,7 @@ final class AppContainer {
             recordingSessionStore: recordingSessionStore,
             appActivityCoordinator: appActivityCoordinator,
             audioRecorderService: audioRecorderService,
+            audioFileTranscriptionService: audioFileTranscriptionService,
             apiClient: apiClient,
             asrService: asrService,
             workspaceBootstrapService: workspaceBootstrapService,

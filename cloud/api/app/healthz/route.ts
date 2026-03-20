@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAsrRuntimeStatus } from "@/lib/asr";
 import { getConfiguredProviders } from "@/lib/llm-provider";
 import { getLlmRuntimeStatus } from "@/lib/llm-health";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const mode = req.nextUrl.searchParams.get('mode')?.toLowerCase();
   let database = false;
 
   try {
@@ -12,6 +13,14 @@ export async function GET() {
     database = true;
   } catch {
     database = false;
+  }
+
+  if (mode === 'basic') {
+    return NextResponse.json({
+      ok: database,
+      database,
+      checkedAt: new Date().toISOString(),
+    });
   }
 
   const asr = await getAsrRuntimeStatus().catch((error) => ({

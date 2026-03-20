@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct TranscriptView: View {
+    @Environment(MeetingStore.self) private var meetingStore
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
 
     let meeting: Meeting
@@ -92,12 +93,40 @@ struct TranscriptView: View {
             )
         }
 
+        if showsImportedFilePartial {
+            items.append(
+                TranscriptSentence(
+                    id: "file-live-\(meeting.id)",
+                    timeLabel: fileTranscriptionTimeLabel,
+                    text: meetingStore.fileTranscriptionPartial(meetingID: meeting.id)
+                        .trimmingCharacters(in: .whitespacesAndNewlines),
+                    isLive: true
+                )
+            )
+        }
+
         return items
     }
 
     private var showsLiveSentence: Bool {
         recordingSessionStore.meetingID == meeting.id &&
             !recordingSessionStore.currentPartial.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var showsImportedFilePartial: Bool {
+        meetingStore.isFileTranscribing(meetingID: meeting.id) &&
+            !meetingStore.fileTranscriptionPartial(meetingID: meeting.id)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+    }
+
+    private var fileTranscriptionTimeLabel: String {
+        guard let status = meetingStore.fileTranscriptionStatus(meetingID: meeting.id),
+              case let .transcribing(elapsed, _) = status.phase else {
+            return meeting.durationLabel
+        }
+
+        return elapsed.mmss
     }
 
     private func timeLabel(for startTime: Double) -> String {

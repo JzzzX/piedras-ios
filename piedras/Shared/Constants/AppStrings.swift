@@ -71,13 +71,23 @@ struct AppStringTable {
     var cancel: String { isChinese ? "取消" : "Cancel" }
     var save: String { isChinese ? "保存" : "Save" }
     var notes: String { isChinese ? "笔记" : "Notes" }
+    var preparingImportedAudio: String { isChinese ? "正在准备音频..." : "Preparing audio..." }
+    var connectingASR: String { isChinese ? "正在连接 ASR..." : "Connecting ASR..." }
+    var finalizingTranscription: String { isChinese ? "正在整理转写..." : "Finalizing transcript..." }
+    var audioTranscriptionFailed: String { isChinese ? "文件转写失败" : "Audio transcription failed" }
+    var retryTranscription: String { isChinese ? "重新转写" : "Retry transcription" }
+    var fileTranscriptionInterrupted: String { isChinese ? "应用中断了上次文件转写，请重新转写。" : "The previous file transcription was interrupted. Please retry." }
+
+    func transcribingAudioProgress(elapsed: String, total: String) -> String {
+        isChinese ? "正在转写 \(elapsed) / \(total)" : "Transcribing \(elapsed) / \(total)"
+    }
 
     // ── Recording Dialog ─────────────────────────────────────────
 
     var chooseRecordingMode: String { isChinese ? "选择录音方式" : "Choose recording mode" }
     var micOnly: String { isChinese ? "仅麦克风" : "Microphone only" }
-    var audioFilePlusMic: String { isChinese ? "音频文件 + 麦克风" : "Audio file + Microphone" }
-    var chooseRecordingInput: String { isChinese ? "选择这次会议的录音输入。" : "Choose the recording input for this meeting." }
+    var audioFilePlusMic: String { isChinese ? "音频文件 + 麦克风（高级）" : "Audio file + Microphone (Advanced)" }
+    var chooseRecordingInput: String { isChinese ? "选择这次会议的录音输入。首页“上传音频”会直接执行文件转写。" : "Choose the recording input for this meeting. The home upload flow performs direct file transcription." }
 
     // ── MeetingSearchView ────────────────────────────────────────
 
@@ -135,6 +145,8 @@ struct AppStringTable {
     var statusIdle: String { isChinese ? "待开始" : "Idle" }
     var statusRecording: String { isChinese ? "录音中" : "Recording" }
     var statusPaused: String { isChinese ? "已暂停" : "Paused" }
+    var statusTranscribing: String { isChinese ? "转写中" : "Transcribing" }
+    var statusTranscriptionFailed: String { isChinese ? "转写失败" : "Transcription failed" }
     var statusEnded: String { isChinese ? "已结束" : "Ended" }
     var phaseIdle: String { isChinese ? "空闲" : "Idle" }
     var phaseStarting: String { isChinese ? "启动中" : "Starting" }

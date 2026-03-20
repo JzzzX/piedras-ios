@@ -2,6 +2,8 @@ import Foundation
 
 private struct APIErrorPayload: Decodable {
     let error: String?
+    let requestId: String?
+    let route: String?
 }
 
 private struct MeetingTitleRequestPayload: Encodable {
@@ -32,6 +34,7 @@ enum APIClientError: LocalizedError {
 
 @MainActor
 final class APIClient {
+    private static let requestIDHeader = "X-Request-Id"
     private let settingsStore: SettingsStore
     private let session: URLSession
     private let encoder = JSONEncoder()
@@ -40,20 +43,7 @@ final class APIClient {
     init(settingsStore: SettingsStore, session: URLSession = .shared) {
         self.settingsStore = settingsStore
         self.session = session
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let string = try container.decode(String.self)
-            if let date = Self.iso8601WithFractionalSeconds.date(from: string) ?? Self.iso8601.date(from: string) {
-                return date
-            }
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Invalid ISO8601 date string: \(string)"
-            )
-        }
-        self.decoder = decoder
+        self.decoder = Self.makeJSONDecoder()
     }
 
     var baseURL: URL? {
@@ -62,6 +52,15 @@ final class APIClient {
 
     func fetchBackendHealth() async throws -> RemoteBackendHealth {
         try await sendJSONRequest(path: "/healthz", method: "GET", responseType: RemoteBackendHealth.self)
+    }
+
+    func fetchBackendWarmup() async throws -> RemoteBackendHealth {
+        try await sendJSONRequest(
+            path: "/healthz",
+            method: "GET",
+            queryItems: [URLQueryItem(name: "mode", value: "basic")],
+            responseType: RemoteBackendHealth.self
+        )
     }
 
     func fetchASRStatus() async throws -> RemoteASRStatus {
@@ -115,8 +114,8 @@ final class APIClient {
 
     func deleteMeeting(id: String) async throws {
         let request = try makeRequest(path: "/api/meetings/\(id)", method: "DELETE")
-        let (_, response) = try await session.data(for: request)
-        try validate(response: response, data: nil)
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
     }
 
     func uploadAudio(
@@ -177,7 +176,12 @@ final class APIClient {
 
         guard (200 ..< 300).contains(httpResponse.statusCode) else {
             let detail = try await StreamTextReader.collect(from: bytes)
-            throw APIClientError.requestFailed(detail.isEmpty ? "会议对话请求失败。" : detail)
+            let message = Self.buildErrorMessage(
+                from: detail.isEmpty ? nil : Data(detail.utf8),
+                response: httpResponse,
+                fallback: "会议对话请求失败。"
+            )
+            throw APIClientError.requestFailed(message)
         }
 
         return StreamTextReader.stream(from: bytes)
@@ -195,7 +199,12 @@ final class APIClient {
 
         guard (200 ..< 300).contains(httpResponse.statusCode) else {
             let detail = try await StreamTextReader.collect(from: bytes)
-            throw APIClientError.requestFailed(detail.isEmpty ? "全局 AI 请求失败。" : detail)
+            let message = Self.buildErrorMessage(
+                from: detail.isEmpty ? nil : Data(detail.utf8),
+                response: httpResponse,
+                fallback: "全局 AI 请求失败。"
+            )
+            throw APIClientError.requestFailed(message)
         }
 
         return StreamTextReader.stream(from: bytes)
@@ -281,27 +290,47 @@ final class APIClient {
         }
 
         guard (200 ..< 300).contains(httpResponse.statusCode) else {
-            let message = try parseErrorMessage(from: data)
+            let message = try parseErrorMessage(from: data, response: httpResponse)
             throw APIClientError.requestFailed(message)
         }
     }
 
-    private func parseErrorMessage(from data: Data?) throws -> String {
-        guard let data, !data.isEmpty else {
-            return "请求失败，请检查后端日志。"
+    static func buildErrorMessage(
+        from data: Data?,
+        response: HTTPURLResponse? = nil,
+        fallback: String = "请求失败，请检查后端日志。"
+    ) -> String {
+        let payload = data.flatMap { try? makeJSONDecoder().decode(APIErrorPayload.self, from: $0) }
+        let requestID = payload?.requestId?.nilIfBlank ?? response?.value(forHTTPHeaderField: requestIDHeader)
+
+        if let error = payload?.error?.nilIfBlank {
+            return appendRequestID(requestID, to: error)
         }
 
-        if let payload = try? decoder.decode(APIErrorPayload.self, from: data),
-           let error = payload.error,
-           !error.isEmpty {
-            return error
+        if let text = data.flatMap({ String(data: $0, encoding: .utf8) })?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !text.isEmpty,
+           !text.hasPrefix("<!DOCTYPE"),
+           !text.hasPrefix("<html") {
+            return appendRequestID(requestID, to: text)
         }
 
-        if let text = String(data: data, encoding: .utf8), !text.isEmpty {
-            return text
+        return appendRequestID(requestID, to: fallback)
+    }
+
+    private func parseErrorMessage(from data: Data?, response: HTTPURLResponse?) throws -> String {
+        Self.buildErrorMessage(from: data, response: response)
+    }
+
+    private static func appendRequestID(_ requestID: String?, to message: String) -> String {
+        guard let requestID = requestID?.nilIfBlank else {
+            return message
         }
 
-        return "请求失败，请检查后端日志。"
+        if message.contains(requestID) {
+            return message
+        }
+
+        return "\(message) [RID: \(requestID)]"
     }
 
     private func makeMultipartBody(
@@ -343,4 +372,34 @@ final class APIClient {
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
+
+    nonisolated static func makeJSONDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+
+            if let string = try? container.decode(String.self),
+               let date = Self.iso8601WithFractionalSeconds.date(from: string) ?? Self.iso8601.date(from: string) {
+                return date
+            }
+
+            if let milliseconds = try? container.decode(Double.self) {
+                let normalizedSeconds = milliseconds > 10_000_000_000 ? (milliseconds / 1000) : milliseconds
+                return Date(timeIntervalSince1970: normalizedSeconds)
+            }
+
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Unsupported date payload"
+            )
+        }
+        return decoder
+    }
+}
+
+private extension String {
+    var nilIfBlank: String? {
+        let trimmed = trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
 }

@@ -1,8 +1,23 @@
 import SwiftUI
 
-struct MeetingRowView: View {
-    let meeting: Meeting
+struct MeetingRowSnapshot: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let metadataLine: String
     let isRecording: Bool
+    let showsSyncFailure: Bool
+
+    init(meeting: Meeting, isRecording: Bool) {
+        id = meeting.id
+        title = meeting.displayTitle
+        metadataLine = meeting.homeMetadataLine
+        self.isRecording = isRecording
+        showsSyncFailure = !isRecording && meeting.syncState == .failed
+    }
+}
+
+struct MeetingRowView: View {
+    let snapshot: MeetingRowSnapshot
     let onOpen: () -> Void
 
     var body: some View {
@@ -12,23 +27,23 @@ struct MeetingRowView: View {
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 10) {
-                        Text(meeting.displayTitle)
+                        Text(snapshot.title)
                             .font(.system(size: 16, weight: .bold, design: .monospaced))
                             .foregroundStyle(AppTheme.ink)
                             .lineLimit(2)
 
                         Spacer(minLength: 0)
 
-                        if isRecording {
+                        if snapshot.isRecording {
                             RetroStampLabel(text: "REC")
-                        } else if meeting.syncState == .failed {
+                        } else if snapshot.showsSyncFailure {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(AppTheme.danger)
                         }
                     }
 
-                    Text(meeting.homeMetadataLine)
+                    Text(snapshot.metadataLine)
                         .font(.system(size: 12, weight: .regular, design: .monospaced))
                         .foregroundStyle(AppTheme.subtleInk)
                         .lineLimit(1)
@@ -41,7 +56,7 @@ struct MeetingRowView: View {
             .overlay(
                 Rectangle()
                     .stroke(
-                        isRecording ? AppTheme.highlight : AppTheme.border,
+                        snapshot.isRecording ? AppTheme.highlight : AppTheme.border,
                         lineWidth: AppTheme.retroBorderWidth
                     )
             )
@@ -56,7 +71,7 @@ struct MeetingRowView: View {
         ZStack(alignment: .topTrailing) {
             RetroIconBadge(systemName: "doc.text", size: 44, symbolSize: 16)
 
-            if isRecording {
+            if snapshot.isRecording {
                 Rectangle()
                     .fill(AppTheme.highlight)
                     .frame(width: 8, height: 8)

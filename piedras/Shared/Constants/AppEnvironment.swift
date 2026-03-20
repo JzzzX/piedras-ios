@@ -1,9 +1,21 @@
 import Foundation
 
 enum AppEnvironment {
-    nonisolated(unsafe) static let cloudName = "Piedras Cloud"
-    nonisolated(unsafe) static let productionBackendBaseURLString = "https://piedras-api.vercel.app"
-    nonisolated(unsafe) static let productionBackendBaseURL = URL(string: productionBackendBaseURLString)!
+    private enum Key {
+        static let backendBaseURL = "PIEDRAS_BACKEND_BASE_URL"
+    }
+
+    private nonisolated static let defaultProductionBackendBaseURLString = "https://piedras.preview.aliyun-zeabur.cn"
+
+    nonisolated static let cloudName = "Piedras Cloud"
+
+    static var productionBackendBaseURLString: String {
+        configuredProductionBackendBaseURL?.absoluteString ?? defaultProductionBackendBaseURLString
+    }
+
+    static var productionBackendBaseURL: URL {
+        configuredProductionBackendBaseURL ?? URL(string: defaultProductionBackendBaseURLString)!
+    }
 
     static var versionDescription: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
@@ -19,5 +31,21 @@ enum AppEnvironment {
         default:
             return "1.0"
         }
+    }
+
+    private static var configuredProductionBackendBaseURL: URL? {
+        let configuredValue = ProcessInfo.processInfo.environment[Key.backendBaseURL]
+            ?? (Bundle.main.object(forInfoDictionaryKey: Key.backendBaseURL) as? String)
+
+        guard let configuredValue else {
+            return nil
+        }
+
+        let normalized = configuredValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return nil
+        }
+
+        return URL(string: normalized)
     }
 }

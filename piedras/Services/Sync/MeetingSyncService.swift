@@ -24,7 +24,11 @@ final class MeetingSyncService {
     @discardableResult
     func syncPendingMeetings() async -> MeetingSyncBatchResult {
         let candidates = (try? repository.fetchMeetings())?
-            .filter { $0.syncState == .pending || $0.syncState == .failed } ?? []
+            .filter {
+                ($0.syncState == .pending || $0.syncState == .failed)
+                    && $0.status != .transcribing
+                    && $0.status != .transcriptionFailed
+            } ?? []
 
         var syncedCount = 0
         var failedCount = 0
@@ -43,6 +47,10 @@ final class MeetingSyncService {
 
     func syncMeeting(id: String) async throws {
         guard let meeting = try repository.meeting(withID: id) else {
+            return
+        }
+
+        guard meeting.status != .transcribing, meeting.status != .transcriptionFailed else {
             return
         }
 
@@ -110,6 +118,10 @@ final class MeetingSyncService {
 
     private func pruneLocalAudioIfNeeded(for meeting: Meeting) throws {
         guard meeting.status == .ended else {
+            return
+        }
+
+        guard meeting.audioRemotePath != nil else {
             return
         }
 

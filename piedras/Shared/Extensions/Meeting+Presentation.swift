@@ -95,6 +95,10 @@ extension Meeting {
             return AppStrings.current.statusRecording
         case .paused:
             return AppStrings.current.statusPaused
+        case .transcribing:
+            return AppStrings.current.statusTranscribing
+        case .transcriptionFailed:
+            return AppStrings.current.statusTranscriptionFailed
         case .ended:
             return AppStrings.current.statusEnded
         }
@@ -108,6 +112,10 @@ extension Meeting {
             return "record.circle"
         case .paused:
             return "pause.circle"
+        case .transcribing:
+            return "waveform.badge.magnifyingglass"
+        case .transcriptionFailed:
+            return "exclamationmark.circle"
         case .ended:
             return "checkmark.circle"
         }

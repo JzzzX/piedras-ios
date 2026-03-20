@@ -92,6 +92,10 @@ struct MeetingDetailView: View {
 
                         modePicker
 
+                        if let transcriptionStatus = meetingStore.fileTranscriptionStatus(meetingID: meeting.id) {
+                            fileTranscriptionStatusView(transcriptionStatus, meetingID: meeting.id)
+                        }
+
                         if selectedMode == .summary {
                             titleBlock(meeting: meeting)
                         }
@@ -505,7 +509,7 @@ struct MeetingDetailView: View {
             ]
 
         case .transcript:
-            return [
+            var items = [
                 MeetingActionItem(title: AppStrings.current.editTitle, systemName: "pencil", accessibilityIdentifier: "MeetingDetailActionEditTitle") {
                     openTitleEditor(for: meeting)
                 },
@@ -521,6 +525,20 @@ struct MeetingDetailView: View {
                     copyCurrentContent(for: meeting)
                 },
             ]
+
+            if meetingStore.fileTranscriptionStatus(meetingID: meeting.id)?.canRetry == true {
+                items.insert(
+                    MeetingActionItem(title: AppStrings.current.retryTranscription, systemName: "arrow.clockwise", accessibilityIdentifier: "MeetingDetailActionRetryTranscription") {
+                        closeActionMenu()
+                        Task {
+                            await meetingStore.retryFileTranscription(meetingID: meeting.id)
+                        }
+                    },
+                    at: 1
+                )
+            }
+
+            return items
         }
     }
 
@@ -636,6 +654,38 @@ struct MeetingDetailView: View {
             return meeting.audioLocalPath == nil ? 64 : 176
         case .summary:
             return 132
+        }
+    }
+
+    @ViewBuilder
+    private func fileTranscriptionStatusView(_ status: FileTranscriptionStatusSnapshot, meetingID: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Rectangle()
+                    .fill(status.canRetry ? AppTheme.danger : AppTheme.highlight)
+                    .frame(width: 6, height: 6)
+
+                Text(status.displayMessage)
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .foregroundStyle(status.canRetry ? AppTheme.danger : AppTheme.highlight)
+            }
+
+            if let errorMessage = status.errorMessage, !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                    .foregroundStyle(AppTheme.subtleInk)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(AppStrings.current.retryTranscription) {
+                    Task {
+                        await meetingStore.retryFileTranscription(meetingID: meetingID)
+                    }
+                }
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .foregroundStyle(AppTheme.ink)
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("MeetingRetryTranscriptionButton")
+            }
         }
     }
 

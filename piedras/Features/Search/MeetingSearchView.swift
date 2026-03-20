@@ -24,8 +24,7 @@ struct MeetingSearchView: View {
                         VStack(spacing: 14) {
                             ForEach(searchResults) { meeting in
                                 MeetingRowView(
-                                    meeting: meeting,
-                                    isRecording: false,
+                                    snapshot: MeetingRowSnapshot(meeting: meeting, isRecording: false),
                                     onOpen: {
                                         openMeeting(meeting.id)
                                     }
