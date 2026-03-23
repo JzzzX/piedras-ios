@@ -1,8 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
 import { ensureDefaultWorkspace } from '@/lib/default-workspace';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const context = createRequestContext(req, '/api/workspaces');
+
   try {
     let workspaces = await prisma.workspace.findMany({
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
@@ -12,14 +15,20 @@ export async function GET() {
       workspaces = [await ensureDefaultWorkspace()];
     }
 
-    return NextResponse.json(workspaces);
+    return jsonResponse(context, workspaces);
   } catch (error) {
-    const message = error instanceof Error ? error.message : '加载工作区失败';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(
+      context,
+      500,
+      error instanceof Error ? `加载工作区失败：${error.message}` : '加载工作区失败，请稍后重试。',
+      error
+    );
   }
 }
 
 export async function POST(req: NextRequest) {
+  const context = createRequestContext(req, '/api/workspaces');
+
   try {
     const body = (await req.json()) as {
       name?: string;
@@ -32,7 +41,7 @@ export async function POST(req: NextRequest) {
     const name = body.name?.trim();
 
     if (!name) {
-      return NextResponse.json({ error: '工作区名称不能为空' }, { status: 400 });
+      return errorResponse(context, 400, '工作区名称不能为空');
     }
 
     const lastWorkspace = await prisma.workspace.findFirst({
@@ -52,9 +61,13 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(workspace);
+    return jsonResponse(context, workspace);
   } catch (error) {
-    const message = error instanceof Error ? error.message : '创建工作区失败';
-    return NextResponse.json({ error: message }, { status: 500 });
+    return errorResponse(
+      context,
+      500,
+      error instanceof Error ? `创建工作区失败：${error.message}` : '创建工作区失败，请稍后重试。',
+      error
+    );
   }
 }

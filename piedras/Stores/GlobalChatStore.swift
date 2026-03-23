@@ -15,6 +15,7 @@ final class GlobalChatStore {
     private let settingsStore: SettingsStore
     private let workspaceBootstrapService: WorkspaceBootstrapService
     private let chatSessionRepository: ChatSessionRepository
+    private let meetingRepository: MeetingRepository?
 
     var sessions: [ChatSession] = []
     var messages: [ChatMessage] = []
@@ -31,12 +32,14 @@ final class GlobalChatStore {
         apiClient: APIClient,
         settingsStore: SettingsStore,
         workspaceBootstrapService: WorkspaceBootstrapService,
-        chatSessionRepository: ChatSessionRepository
+        chatSessionRepository: ChatSessionRepository,
+        meetingRepository: MeetingRepository? = nil
     ) {
         self.apiClient = apiClient
         self.settingsStore = settingsStore
         self.workspaceBootstrapService = workspaceBootstrapService
         self.chatSessionRepository = chatSessionRepository
+        self.meetingRepository = meetingRepository
         reloadSessions(selectMostRecentIfNeeded: true)
     }
 
@@ -66,10 +69,20 @@ final class GlobalChatStore {
 
         do {
             let workspaceID = try await resolveWorkspaceID()
+            let retrieval = buildLocalRetrievalContext(
+                for: trimmedQuestion,
+                workspaceID: workspaceID
+            )
             let payload = GlobalChatRequestPayload(
                 question: trimmedQuestion,
                 chatHistory: history,
-                filters: .init(workspaceId: workspaceID)
+                filters: .init(workspaceId: workspaceID),
+                localRetrievalContext: retrieval?.context,
+                localRetrievalSources: retrieval?.sources,
+                localCommentContext: buildLocalCommentContext(
+                    for: trimmedQuestion,
+                    workspaceID: workspaceID
+                )
             )
             let stream = try await apiClient.streamGlobalChat(payload)
 
@@ -196,5 +209,38 @@ final class GlobalChatStore {
         } else {
             messages = []
         }
+    }
+
+    private func buildLocalCommentContext(for question: String, workspaceID: String?) -> String? {
+        guard let meetings = try? meetingRepository?.fetchMeetings(),
+              !meetings.isEmpty else {
+            return nil
+        }
+
+        let context = MeetingCommentContextBuilder.localCommentContext(
+            for: question,
+            meetings: meetings,
+            workspaceID: workspaceID
+        )
+
+        return context.isEmpty ? nil : context
+    }
+
+    private func buildLocalRetrievalContext(
+        for question: String,
+        workspaceID: String?
+    ) -> LocalMeetingRetrievalResult? {
+        guard let meetings = try? meetingRepository?.fetchMeetings(),
+              !meetings.isEmpty else {
+            return nil
+        }
+
+        let result = MeetingSearchIndexBuilder.localRetrievalResult(
+            for: question,
+            meetings: meetings,
+            workspaceID: workspaceID
+        )
+
+        return result.context.isEmpty ? nil : result
     }
 }

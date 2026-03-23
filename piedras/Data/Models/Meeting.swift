@@ -50,6 +50,8 @@ final class Meeting {
     var hiddenWorkspaceId: String?
     var syncStateRaw: String
     var lastSyncedAt: Date?
+    @Attribute(originalName: "hasPendingImageTextRefresh")
+    private var hasPendingImageTextRefreshValue: Bool?
     var createdAt: Date
     var updatedAt: Date
 
@@ -58,6 +60,9 @@ final class Meeting {
 
     @Relationship(deleteRule: .cascade, inverse: \ChatMessage.meeting)
     var chatMessages: [ChatMessage]
+
+    @Relationship(deleteRule: .cascade, inverse: \ChatSession.meeting)
+    var chatSessions: [ChatSession]
 
     init(
         id: String = UUID().uuidString.lowercased(),
@@ -79,10 +84,12 @@ final class Meeting {
         hiddenWorkspaceId: String? = nil,
         syncState: MeetingSyncState = .pending,
         lastSyncedAt: Date? = nil,
+        hasPendingImageTextRefresh: Bool = false,
         createdAt: Date = .now,
         updatedAt: Date = .now,
         segments: [TranscriptSegment] = [],
-        chatMessages: [ChatMessage] = []
+        chatMessages: [ChatMessage] = [],
+        chatSessions: [ChatSession] = []
     ) {
         self.id = id
         self.title = title
@@ -103,10 +110,12 @@ final class Meeting {
         self.hiddenWorkspaceId = hiddenWorkspaceId
         self.syncStateRaw = syncState.rawValue
         self.lastSyncedAt = lastSyncedAt
+        self.hasPendingImageTextRefreshValue = hasPendingImageTextRefresh
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.segments = segments
         self.chatMessages = chatMessages
+        self.chatSessions = chatSessions
     }
 
     var status: MeetingStatus {
@@ -122,6 +131,11 @@ final class Meeting {
     var syncState: MeetingSyncState {
         get { MeetingSyncState(rawValue: syncStateRaw) ?? .pending }
         set { syncStateRaw = newValue.rawValue }
+    }
+
+    var hasPendingImageTextRefresh: Bool {
+        get { hasPendingImageTextRefreshValue ?? false }
+        set { hasPendingImageTextRefreshValue = newValue }
     }
 
     var displayTitle: String {
@@ -147,14 +161,21 @@ final class Meeting {
         }
     }
 
+    var orderedChatSessions: [ChatSession] {
+        chatSessions.sorted { lhs, rhs in
+            if lhs.updatedAt == rhs.updatedAt {
+                return lhs.createdAt > rhs.createdAt
+            }
+            return lhs.updatedAt > rhs.updatedAt
+        }
+    }
+
     var transcriptText: String {
         orderedSegments.map(\.text).joined(separator: "\n")
     }
 
     var searchIndexText: String {
-        [title, userNotesPlainText, enhancedNotes, transcriptText, sourceAudioDisplayName ?? ""]
-            .joined(separator: "\n")
-            .lowercased()
+        MeetingSearchIndexBuilder.searchIndexText(for: self)
     }
 
     func markPending() {

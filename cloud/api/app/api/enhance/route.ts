@@ -1,4 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
+import { buildMeetingMaterialContext } from '@/lib/meeting-ai-context';
 import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
 import type { PromptOptions } from '@/lib/types';
 
@@ -64,11 +66,14 @@ function buildEnhanceSystemPrompt(
 }
 
 export async function POST(req: NextRequest) {
+  const context = createRequestContext(req, '/api/enhance');
+
   try {
     const {
       transcript,
       userNotes,
       meetingTitle,
+      segmentCommentsContext,
       recipePrompt,
       promptOptions,
       llmRuntimeConfig,
@@ -79,7 +84,7 @@ export async function POST(req: NextRequest) {
 
     if (!hasAvailableLlm(llmRuntimeConfig)) {
       // Demo 模式：无 API Key 时返回模拟结果
-      return NextResponse.json({
+      return jsonResponse(context, {
         content: generateDemoEnhancedNotes(transcript, userNotes, meetingTitle),
         provider: 'demo',
       });
@@ -95,11 +100,11 @@ export async function POST(req: NextRequest) {
           role: 'user',
           content: `会议标题：${meetingTitle || '未命名会议'}
 
---- 会议转写记录 ---
-${transcript || '（无转写内容）'}
-
---- 用户手写要点 ---
-${userNotes || '（用户未记录要点）'}
+${buildMeetingMaterialContext({
+  transcript,
+  userNotes,
+  segmentCommentsContext,
+})}
 
 请根据以上内容生成结构化会议纪要。`,
         },
@@ -109,15 +114,13 @@ ${userNotes || '（用户未记录要点）'}
       runtimeConfig: llmRuntimeConfig,
     });
 
-    return NextResponse.json({ content, provider });
+    return jsonResponse(context, { content, provider });
   } catch (error) {
-    console.error('Enhance error:', error);
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? `AI 服务调用失败：${error.message}` : '服务器内部错误',
-      },
-      { status: 502 }
+    return errorResponse(
+      context,
+      502,
+      error instanceof Error ? `AI 后处理失败：${error.message}` : 'AI 后处理失败，请稍后重试。',
+      error
     );
   }
 }

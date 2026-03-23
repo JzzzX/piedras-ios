@@ -72,6 +72,7 @@ struct AppStringTable {
     var share: String { isChinese ? "分享" : "Share" }
     var generatingNotes: String { isChinese ? "正在生成笔记" : "Generating notes" }
     var refreshNotes: String { isChinese ? "刷新笔记" : "Refresh notes" }
+    var imageTextRefreshHint: String { isChinese ? "图片文字已更新，刷新 AI 笔记后会纳入这些新增上下文。" : "Image text was updated. Refresh AI Notes to include the new context." }
     var cancel: String { isChinese ? "取消" : "Cancel" }
     var save: String { isChinese ? "保存" : "Save" }
     var notes: String { isChinese ? "笔记" : "Notes" }
@@ -100,6 +101,9 @@ struct AppStringTable {
     var startTyping: String { isChinese ? "开始输入。" : "Start typing." }
     var noMatch: String { isChinese ? "无结果。" : "No match." }
     var close: String { isChinese ? "关闭" : "Close" }
+    var userNotesSource: String { isChinese ? "用户笔记" : "User notes" }
+    var commentSource: String { isChinese ? "评论" : "Comment" }
+    var imageTextSource: String { isChinese ? "图片文字" : "Image text" }
 
     // ── GlobalChatView ───────────────────────────────────────────
 

@@ -24,6 +24,7 @@ final class AppContainer {
     let globalChatStore: GlobalChatStore
     let annotationRepository: AnnotationRepository
     let annotationStore: AnnotationStore
+    let annotationImageTextExtractor: any AnnotationImageTextExtracting
 
     init(inMemory: Bool = false) {
         let processArguments = ProcessInfo.processInfo.arguments
@@ -84,10 +85,15 @@ final class AppContainer {
             apiClient: apiClient,
             settingsStore: settingsStore,
             workspaceBootstrapService: workspaceBootstrapService,
-            chatSessionRepository: chatSessionRepository
+            chatSessionRepository: chatSessionRepository,
+            meetingRepository: meetingRepository
         )
         annotationRepository = AnnotationRepository(modelContext: modelContainer.mainContext)
-        annotationStore = AnnotationStore(repository: annotationRepository)
+        annotationImageTextExtractor = VisionAnnotationImageTextExtractor()
+        annotationStore = AnnotationStore(
+            repository: annotationRepository,
+            imageTextExtractor: annotationImageTextExtractor
+        )
 
         if Self.isXCTestRuntime {
             Self.currentXCTestInstance = self
@@ -101,6 +107,11 @@ final class AppContainer {
                 preferLocalOnly: true
             )
             meetingStore.loadMeetings()
+        } else if !Self.isXCTestRuntime {
+            let storeForBackfill = annotationStore
+            Task { @MainActor [weak storeForBackfill] in
+                await storeForBackfill?.backfillImageTextIfNeeded()
+            }
         }
     }
 

@@ -212,6 +212,10 @@ final class MeetingStore {
         (try? repository.fetchMeetings(matching: query)) ?? []
     }
 
+    func searchMeetingResults(matching query: String) -> [MeetingSearchResult] {
+        MeetingSearchIndexBuilder.searchResults(for: meetings, query: query)
+    }
+
     func clearLastError() {
         lastErrorMessage = nil
     }
@@ -665,6 +669,7 @@ final class MeetingStore {
         do {
             let response = try await apiClient.enhanceNotes(MeetingPayloadMapper.makeEnhancePayload(from: meeting))
             meeting.enhancedNotes = normalizeGeneratedNotes(response.content)
+            meeting.hasPendingImageTextRefresh = false
             meeting.markPending()
             try repository.save()
             settingsStore.markLLMRequestSucceeded(provider: response.provider)
@@ -1270,6 +1275,7 @@ final class MeetingStore {
                 let content = normalizeGeneratedNotes(response.content)
                 if !content.isEmpty {
                     meeting.enhancedNotes = content
+                    meeting.hasPendingImageTextRefresh = false
                     meeting.markPending()
                     try repository.save()
                     settingsStore.markLLMRequestSucceeded(provider: response.provider)

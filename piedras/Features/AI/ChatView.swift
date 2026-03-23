@@ -88,6 +88,7 @@ struct ChatView: View {
                 ) {
                     meetingStore.startNewChatDraft(for: meeting.id)
                 }
+                .accessibilityIdentifier("MeetingChatNewSessionButton")
                 .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
 
                 ZStack(alignment: .topTrailing) {
@@ -100,6 +101,7 @@ struct ChatView: View {
                             showHistoryDrawer = true
                         }
                     }
+                    .accessibilityIdentifier("MeetingChatHistoryButton")
                     .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
 
                     SessionCountBadge(count: historySessions.count)
@@ -178,6 +180,7 @@ struct ChatView: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("MeetingChatComposerSendButton")
                 .disabled(trimmedInput.isEmpty || meetingStore.isStreamingChat(meetingID: meeting.id))
             }
             .padding(.horizontal, 20)

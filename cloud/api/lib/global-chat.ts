@@ -1,4 +1,3 @@
-import { Prisma } from '@prisma/client';
 import { prisma } from './db';
 
 export interface GlobalChatFilters {
@@ -40,6 +39,29 @@ interface AssetCandidate {
   assetType: string;
   extractedText: string;
   collectionName: string;
+}
+
+interface MeetingSearchRow {
+  id: string;
+  title: string;
+  date: Date;
+  userNotes: string;
+  enhancedNotes: string;
+  segments: Array<{
+    text: string;
+    isFinal: boolean;
+  }>;
+}
+
+interface AssetSearchRow {
+  id: string;
+  name: string;
+  assetType: string;
+  extractedText: string;
+  createdAt: Date;
+  collection: {
+    name: string;
+  } | null;
 }
 
 const STOP_WORDS = new Set([
@@ -301,13 +323,13 @@ function pickAssetSnippets(
   return [compactText(candidate.extractedText, 180)].filter(Boolean);
 }
 
-function buildWhere(filters: GlobalChatFilters): Prisma.MeetingWhereInput {
-  const where: Prisma.MeetingWhereInput = {};
+function buildWhere(filters: GlobalChatFilters): Record<string, unknown> {
+  const where: Record<string, unknown> = {};
 
   const from = parseDateBoundary(filters.dateFrom, false);
   const to = parseDateBoundary(filters.dateTo, true);
   if (from || to) {
-    const dateFilter: Prisma.DateTimeFilter = {};
+    const dateFilter: { gte?: Date; lte?: Date } = {};
     if (from) dateFilter.gte = from;
     if (to) dateFilter.lte = to;
     where.date = dateFilter;
@@ -324,13 +346,13 @@ function buildWhere(filters: GlobalChatFilters): Prisma.MeetingWhereInput {
   return where;
 }
 
-function buildAssetWhere(filters: GlobalChatFilters): Prisma.WorkspaceAssetWhereInput {
-  const where: Prisma.WorkspaceAssetWhereInput = {};
+function buildAssetWhere(filters: GlobalChatFilters): Record<string, unknown> {
+  const where: Record<string, unknown> = {};
 
   const from = parseDateBoundary(filters.dateFrom, false);
   const to = parseDateBoundary(filters.dateTo, true);
   if (from || to) {
-    const createdAtFilter: Prisma.DateTimeFilter = {};
+    const createdAtFilter: { gte?: Date; lte?: Date } = {};
     if (from) createdAtFilter.gte = from;
     if (to) createdAtFilter.lte = to;
     where.createdAt = createdAtFilter;
@@ -356,7 +378,7 @@ export async function retrieveGlobalMeetingContext(
   const meetingWhere = buildWhere(filters);
   const assetWhere = buildAssetWhere(filters);
 
-  const meetings = await prisma.meeting.findMany({
+  const meetings = (await prisma.meeting.findMany({
     where: meetingWhere,
     orderBy: { date: 'desc' },
     take: 80,
@@ -371,9 +393,9 @@ export async function retrieveGlobalMeetingContext(
         select: { text: true, isFinal: true },
       },
     },
-  });
+  })) as MeetingSearchRow[];
 
-  const assets = await prisma.workspaceAsset.findMany({
+  const assets = (await prisma.workspaceAsset.findMany({
     // 资料库当前为预览模式，不参与 AI 检索。
     where: {
       ...assetWhere,
@@ -391,12 +413,12 @@ export async function retrieveGlobalMeetingContext(
         select: { name: true },
       },
     },
-  });
+  })) as AssetSearchRow[];
 
   const queryVector = vectorizeText(q);
 
   const rankedMeetings = meetings
-    .map((meeting) => {
+    .map((meeting: MeetingSearchRow) => {
       const candidate: MeetingCandidate = {
         meetingId: meeting.id,
         title: (meeting.title || '').trim() || '未命名会议',
@@ -404,8 +426,8 @@ export async function retrieveGlobalMeetingContext(
         userNotes: (meeting.userNotes || '').trim(),
         enhancedNotes: (meeting.enhancedNotes || '').trim(),
         segmentsText: meeting.segments
-          .filter((s) => s.isFinal)
-          .map((s) => s.text)
+          .filter((s: { text: string; isFinal: boolean }) => s.isFinal)
+          .map((s: { text: string; isFinal: boolean }) => s.text)
           .join(' '),
       };
 
@@ -432,7 +454,7 @@ export async function retrieveGlobalMeetingContext(
     .sort((a, b) => b.score - a.score || b.date.localeCompare(a.date));
 
   const rankedAssets = assets
-    .map((asset) => {
+    .map((asset: AssetSearchRow) => {
       const candidate: AssetCandidate = {
         assetId: asset.id,
         title: (asset.name || '').trim() || '未命名资料',

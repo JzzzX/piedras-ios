@@ -390,10 +390,13 @@ function makeStartPayload(sessionPayload) {
   };
 }
 
-function sendJSON(ws, payload) {
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(payload));
+function sendJSON(ws, payload, callback) {
+  if (ws.readyState !== WebSocket.OPEN) {
+    return false;
   }
+
+  ws.send(JSON.stringify(payload), callback);
+  return true;
 }
 
 function closePair(client, upstream, code = 1000, reason = 'closed') {
@@ -502,12 +505,24 @@ function attachAsrProxy(server) {
         log('connection_closed', { connectionId, message, detail });
       }
 
+      const finalizeClose = () => {
+        closePair(client, upstream, closeCode, message.slice(0, 120));
+      };
+
+      const sendClosedFrame = () => {
+        if (!sendJSON(client, { type: 'closed' }, () => finalizeClose())) {
+          finalizeClose();
+        }
+      };
+
       if (notifyClientError) {
-        sendJSON(client, { type: 'error', message: composedMessage });
+        if (!sendJSON(client, { type: 'error', message: composedMessage }, () => sendClosedFrame())) {
+          sendClosedFrame();
+        }
+        return;
       }
 
-      sendJSON(client, { type: 'closed' });
-      closePair(client, upstream, closeCode, message.slice(0, 120));
+      sendClosedFrame();
     };
 
     const flushPendingAudio = () => {

@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
+import { createRequestContext, textResponse } from '@/lib/api-error';
+import { buildGlobalChatContextMessage } from '@/lib/meeting-ai-context';
 import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
 import { retrieveGlobalMeetingContext, type GlobalChatFilters } from '@/lib/global-chat';
+import { selectRetrievalResult } from '@/lib/global-chat-selection';
 import type { PromptOptions } from '@/lib/types';
 
 type PromptOptionsInput = Partial<PromptOptions> | undefined;
@@ -113,24 +116,54 @@ function buildNoResultMessage(filters: GlobalChatFilters): string {
 }
 
 export async function POST(req: NextRequest) {
+  const context = createRequestContext(req, '/api/chat/global');
+
   try {
-    const { question, chatHistory, filters, promptOptions, llmRuntimeConfig, recipePrompt, templatePrompt } =
+    const {
+      question,
+      chatHistory,
+      filters,
+      localRetrievalContext,
+      localRetrievalSources,
+      localCommentContext,
+      promptOptions,
+      llmRuntimeConfig,
+      recipePrompt,
+      templatePrompt,
+    } =
       await req.json();
     const q = (question || '').trim();
     if (!q) {
-      return new Response('问题不能为空', { status: 400 });
+      return textResponse(
+        context,
+        JSON.stringify({
+          error: '问题不能为空',
+          requestId: context.requestId,
+          route: context.route,
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json; charset=utf-8' },
+        }
+      );
     }
 
-    const retrieval = await retrieveGlobalMeetingContext(q, (filters || {}) as GlobalChatFilters);
+    const fallbackRetrieval = await retrieveGlobalMeetingContext(q, (filters || {}) as GlobalChatFilters);
+    const retrieval = selectRetrievalResult({
+      localRetrievalContext,
+      localRetrievalSources,
+      fallback: fallbackRetrieval,
+    });
+
     if (retrieval.sources.length === 0) {
-      return new Response(buildNoResultMessage((filters || {}) as GlobalChatFilters), {
+      return textResponse(context, buildNoResultMessage((filters || {}) as GlobalChatFilters), {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }
 
     if (!hasAvailableLlm(llmRuntimeConfig)) {
       const demo = `当前为 Demo 模式，已检索到 ${retrieval.sources.length} 场相关会议。\n\n你可以配置默认 LLM 或 OpenAI 兼容 API Key 后获得真实模型回答。\n\n${formatSources(retrieval.sources)}`;
-      return new Response(createTextStream(demo), {
+      return textResponse(context, createTextStream(demo), {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }
@@ -142,7 +175,10 @@ export async function POST(req: NextRequest) {
       { role: 'system', content: systemPrompt },
       {
         role: 'user',
-        content: `以下是检索到的历史会议上下文：\n\n${retrieval.context}`,
+        content: `以下是检索到的历史会议上下文：\n\n${buildGlobalChatContextMessage({
+          retrievalContext: retrieval.context,
+          localCommentContext: localRetrievalContext ? undefined : localCommentContext,
+        })}`,
       },
       {
         role: 'assistant',
@@ -168,17 +204,27 @@ export async function POST(req: NextRequest) {
     const fullContent = `${content.trim()}\n\n---\n${formatSources(retrieval.sources)}`;
     const stream = createTextStream(fullContent);
 
-    return new Response(stream, {
+    return textResponse(context, stream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-LLM-Provider': provider,
       },
     });
   } catch (error) {
-    console.error('Global chat error:', error);
-    return new Response(
-      error instanceof Error ? `跨会议 AI 服务调用失败：${error.message}` : '服务器内部错误',
-      { status: 502 }
+    return textResponse(
+      context,
+      JSON.stringify({
+        error:
+          error instanceof Error
+            ? `跨会议 AI 对话失败：${error.message}`
+            : '跨会议 AI 对话失败，请稍后重试。',
+        requestId: context.requestId,
+        route: context.route,
+      }),
+      {
+        status: 502,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      }
     );
   }
 }

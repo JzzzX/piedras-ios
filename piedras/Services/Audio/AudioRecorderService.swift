@@ -385,7 +385,9 @@ final class AudioRecorderService: NSObject {
 
         isInputTapInstalled = true
         audioEngine.prepare()
-        try audioEngine.start()
+        if !audioEngine.isRunning {
+            try audioEngine.start()
+        }
     }
 
     private func stopPCMStreaming() {
@@ -394,8 +396,9 @@ final class AudioRecorderService: NSObject {
             isInputTapInstalled = false
         }
 
-        audioEngine.stop()
-        audioEngine.reset()
+        // Microphone mode only uses an input tap. Pausing is enough here and avoids
+        // tearing down the engine graph while Core Audio is still settling route changes.
+        audioEngine.pause()
         onCaptureStateChange?("PCM 采集已停止")
     }
 
@@ -591,6 +594,7 @@ final class AudioRecorderService: NSObject {
 
     private func cleanupMixedGraph() {
         audioEngine.pause()
+        let hadCustomGraphNodes = playerNode != nil || recordingMixer != nil
         if let playerNode {
             sourcePlaybackGeneration += 1
             playerNode.stop()
@@ -605,8 +609,10 @@ final class AudioRecorderService: NSObject {
             audioEngine.detach(recordingMixer)
             self.recordingMixer = nil
         }
-        audioEngine.stop()
-        audioEngine.reset()
+        if hadCustomGraphNodes {
+            audioEngine.stop()
+            audioEngine.reset()
+        }
         mixedRecordingFile = nil
         sourceAudioFile = nil
         sourceAudioLocalURL = nil

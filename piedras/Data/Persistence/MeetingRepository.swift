@@ -65,15 +65,31 @@ final class MeetingRepository {
     }
 
     func replaceSegments(for meeting: Meeting, with segments: [TranscriptSegment]) {
-        for existingSegment in meeting.segments {
+        let existingByID = Dictionary(uniqueKeysWithValues: meeting.segments.map { ($0.id, $0) })
+        let incomingIDs = Set(segments.map(\.id))
+
+        let mergedSegments = segments.map { incomingSegment -> TranscriptSegment in
+            guard let existingSegment = existingByID[incomingSegment.id] else {
+                incomingSegment.meeting = meeting
+                return incomingSegment
+            }
+
+            existingSegment.speaker = incomingSegment.speaker
+            existingSegment.text = incomingSegment.text
+            existingSegment.startTime = incomingSegment.startTime
+            existingSegment.endTime = incomingSegment.endTime
+            existingSegment.isFinal = incomingSegment.isFinal
+            existingSegment.orderIndex = incomingSegment.orderIndex
+            existingSegment.confidence = incomingSegment.confidence
+            existingSegment.meeting = meeting
+            return existingSegment
+        }
+
+        for existingSegment in meeting.segments where !incomingIDs.contains(existingSegment.id) {
             modelContext.delete(existingSegment)
         }
 
-        for segment in segments {
-            segment.meeting = meeting
-        }
-
-        meeting.segments = segments
+        meeting.segments = mergedSegments
     }
 
     func replaceChatMessages(for meeting: Meeting, with chatMessages: [ChatMessage]) {
@@ -86,6 +102,22 @@ final class MeetingRepository {
         }
 
         meeting.chatMessages = chatMessages
+    }
+
+    func replaceChatMessages(for meeting: Meeting, in session: ChatSession, with chatMessages: [ChatMessage]) {
+        for existingMessage in meeting.chatMessages {
+            modelContext.delete(existingMessage)
+        }
+
+        session.messages.removeAll(keepingCapacity: true)
+
+        for message in chatMessages {
+            message.meeting = meeting
+            message.session = session
+        }
+
+        meeting.chatMessages = chatMessages
+        session.messages = chatMessages
     }
 
     func seedPreviewDataIfNeeded(workspaceID: String?, preferLocalOnly: Bool = false) {

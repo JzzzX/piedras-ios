@@ -120,6 +120,7 @@ struct GlobalChatView: View {
                 ) {
                     globalChatStore.startNewDraft()
                 }
+                .accessibilityIdentifier("GlobalChatNewSessionButton")
                 .disabled(globalChatStore.phase != .idle)
 
                 ZStack(alignment: .topTrailing) {
@@ -132,6 +133,7 @@ struct GlobalChatView: View {
                             showHistoryDrawer = true
                         }
                     }
+                    .accessibilityIdentifier("GlobalChatHistoryButton")
                     .disabled(globalChatStore.phase != .idle)
 
                     SessionCountBadge(count: historySessionCount)
@@ -267,6 +269,7 @@ struct GlobalChatView: View {
                     )
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("GlobalChatComposerSendButton")
             .disabled(trimmedInput.isEmpty || globalChatStore.isStreaming || isComposerBlocked)
         }
         .padding(.horizontal, 20)

@@ -25,12 +25,32 @@ enum RemoteCapabilityKind {
 @MainActor
 @Observable
 final class SettingsStore {
+    private struct RemoteStatusSnapshot: Codable {
+        let apiReachable: Bool
+        let asrReady: Bool
+        let llmReady: Bool
+        let asrReachable: Bool
+        let llmReachable: Bool
+        let lastHealthCheckAt: Date?
+        let backendStatusMessage: String
+        let asrStatusMessage: String
+        let llmStatusMessage: String
+        let llmProvider: String
+        let llmModel: String?
+        let llmPreset: String?
+    }
+
     private enum Key {
         static let hiddenWorkspaceID = "piedras.settings.hiddenWorkspaceID"
         static let appLanguage = "piedras.settings.appLanguage"
+        static let remoteStatusSnapshot = "piedras.settings.remoteStatusSnapshot"
 #if DEBUG
         static let debugBackendBaseURLString = "piedras.settings.debugBackendBaseURLString"
 #endif
+    }
+
+    private enum Constants {
+        static let restoredStatusMaxAge: TimeInterval = 6 * 60 * 60
     }
 
     private let defaults: UserDefaults
@@ -55,6 +75,7 @@ final class SettingsStore {
             workspaceBootstrapState = .idle
             workspaceStatusMessage = "等待连接云端"
             resetRemoteStatus()
+            clearRemoteStatusSnapshot()
         }
     }
 #endif
@@ -95,6 +116,7 @@ final class SettingsStore {
 #endif
         workspaceStatusMessage = "等待连接云端"
         resetRemoteStatus()
+        restoreRemoteStatusSnapshotIfAvailable()
     }
 
     var backendBaseURL: URL? {
@@ -160,6 +182,7 @@ final class SettingsStore {
         apiReachable = true
         backendStatusMessage = message
         lastHealthCheckAt = checkedAt ?? .now
+        persistRemoteStatusSnapshot()
     }
 
     func markBackendUnreachable(message: String) {
@@ -175,6 +198,7 @@ final class SettingsStore {
         llmModel = nil
         llmPreset = nil
         lastHealthCheckAt = .now
+        persistRemoteStatusSnapshot()
     }
 
     func updateASRStatus(_ status: RemoteASRStatus) {
@@ -184,6 +208,7 @@ final class SettingsStore {
         if let checkedAt = status.checkedAt {
             lastHealthCheckAt = checkedAt
         }
+        persistRemoteStatusSnapshot()
     }
 
     func updateLLMStatus(_ status: RemoteLLMStatus) {
@@ -196,6 +221,7 @@ final class SettingsStore {
         if let checkedAt = status.checkedAt {
             lastHealthCheckAt = checkedAt
         }
+        persistRemoteStatusSnapshot()
     }
 
     func markLLMRequestSucceeded(provider: String? = nil) {
@@ -207,6 +233,7 @@ final class SettingsStore {
         if let provider, !provider.isEmpty {
             llmProvider = provider
         }
+        persistRemoteStatusSnapshot()
     }
 
     func markLLMRequestFailed(message: String) {
@@ -214,6 +241,7 @@ final class SettingsStore {
         llmReachable = false
         llmStatusMessage = message
         lastHealthCheckAt = .now
+        persistRemoteStatusSnapshot()
     }
 
     func markASRStreamSucceeded() {
@@ -222,6 +250,7 @@ final class SettingsStore {
         asrReachable = true
         asrStatusMessage = "实时转写已连接"
         lastHealthCheckAt = .now
+        persistRemoteStatusSnapshot()
     }
 
     func markASRStreamFailed(message: String) {
@@ -229,6 +258,7 @@ final class SettingsStore {
         asrReachable = false
         asrStatusMessage = message
         lastHealthCheckAt = .now
+        persistRemoteStatusSnapshot()
     }
 
     func resetRemoteStatus() {
@@ -308,6 +338,10 @@ final class SettingsStore {
         !normalized(debugBackendBaseURLString).isEmpty
     }
 
+    func applyDebugBackendOverride(_ value: String) {
+        debugBackendBaseURLString = normalized(value)
+    }
+
     func clearDebugBackendOverride() {
         debugBackendBaseURLString = ""
     }
@@ -319,12 +353,63 @@ final class SettingsStore {
 
     func markBackendUnconfigured() {
         resetRemoteStatus()
+        clearRemoteStatusSnapshot()
     }
 
     static let simulatorLoopbackBaseURLString = "http://127.0.0.1:3000"
 
     private func normalized(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func restoreRemoteStatusSnapshotIfAvailable() {
+        guard let data = defaults.data(forKey: Key.remoteStatusSnapshot),
+              let snapshot = try? JSONDecoder().decode(RemoteStatusSnapshot.self, from: data),
+              let checkedAt = snapshot.lastHealthCheckAt,
+              Date().timeIntervalSince(checkedAt) <= Constants.restoredStatusMaxAge,
+              snapshot.apiReachable || snapshot.asrReady || snapshot.llmReady else {
+            return
+        }
+
+        apiReachable = snapshot.apiReachable
+        asrReady = snapshot.asrReady
+        llmReady = snapshot.llmReady
+        asrReachable = snapshot.asrReachable
+        llmReachable = snapshot.llmReachable
+        lastHealthCheckAt = snapshot.lastHealthCheckAt
+        backendStatusMessage = snapshot.backendStatusMessage
+        asrStatusMessage = snapshot.asrStatusMessage
+        llmStatusMessage = snapshot.llmStatusMessage
+        llmProvider = snapshot.llmProvider
+        llmModel = snapshot.llmModel
+        llmPreset = snapshot.llmPreset
+    }
+
+    private func persistRemoteStatusSnapshot() {
+        let snapshot = RemoteStatusSnapshot(
+            apiReachable: apiReachable,
+            asrReady: asrReady,
+            llmReady: llmReady,
+            asrReachable: asrReachable,
+            llmReachable: llmReachable,
+            lastHealthCheckAt: lastHealthCheckAt,
+            backendStatusMessage: backendStatusMessage,
+            asrStatusMessage: asrStatusMessage,
+            llmStatusMessage: llmStatusMessage,
+            llmProvider: llmProvider,
+            llmModel: llmModel,
+            llmPreset: llmPreset
+        )
+
+        guard let data = try? JSONEncoder().encode(snapshot) else {
+            return
+        }
+
+        defaults.set(data, forKey: Key.remoteStatusSnapshot)
+    }
+
+    private func clearRemoteStatusSnapshot() {
+        defaults.removeObject(forKey: Key.remoteStatusSnapshot)
     }
 }
 

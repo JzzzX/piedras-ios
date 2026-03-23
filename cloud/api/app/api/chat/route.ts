@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server';
+import { createRequestContext, textResponse } from '@/lib/api-error';
+import { buildMeetingMaterialContext } from '@/lib/meeting-ai-context';
 import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
 import type { PromptOptions } from '@/lib/types';
 
@@ -64,11 +66,14 @@ function buildChatSystemPrompt(
 }
 
 export async function POST(req: NextRequest) {
+  const context = createRequestContext(req, '/api/chat');
+
   try {
     const {
       transcript,
       userNotes,
       enhancedNotes,
+      segmentCommentsContext,
       chatHistory,
       question,
       recipePrompt,
@@ -81,7 +86,7 @@ export async function POST(req: NextRequest) {
       // Demo 模式
       const demoResponse = getDemoResponse(question);
       const stream = createTextStream(demoResponse);
-      return new Response(stream, {
+      return textResponse(context, stream, {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }
@@ -89,14 +94,12 @@ export async function POST(req: NextRequest) {
     const options = normalizePromptOptions(promptOptions);
     const systemPrompt = buildChatSystemPrompt(options, recipePrompt || templatePrompt);
 
-    const contextMessage = `--- 会议转写记录 ---
-${transcript || '（无）'}
-
---- 用户笔记要点 ---
-${userNotes || '（无）'}
-
---- AI 会议纪要 ---
-${enhancedNotes || '（无）'}`;
+    const contextMessage = buildMeetingMaterialContext({
+      transcript,
+      userNotes,
+      enhancedNotes,
+      segmentCommentsContext,
+    });
 
     const messages = [
       { role: 'system', content: systemPrompt },
@@ -121,17 +124,24 @@ ${enhancedNotes || '（无）'}`;
 
     const stream = createTextStream(content);
 
-    return new Response(stream, {
+    return textResponse(context, stream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-LLM-Provider': provider,
       },
     });
   } catch (error) {
-    console.error('Chat error:', error);
-    return new Response(
-      error instanceof Error ? `AI 服务调用失败：${error.message}` : '服务器内部错误',
-      { status: 502 }
+    return textResponse(
+      context,
+      JSON.stringify({
+        error: error instanceof Error ? `会议对话失败：${error.message}` : '会议对话失败，请稍后重试。',
+        requestId: context.requestId,
+        route: context.route,
+      }),
+      {
+        status: 502,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      }
     );
   }
 }

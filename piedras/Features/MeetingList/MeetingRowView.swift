@@ -6,13 +6,15 @@ struct MeetingRowSnapshot: Identifiable, Hashable {
     let metadataLine: String
     let isRecording: Bool
     let showsSyncFailure: Bool
+    let matchedSources: [MeetingSearchSource]
 
-    init(meeting: Meeting, isRecording: Bool) {
+    init(meeting: Meeting, isRecording: Bool, matchedSources: [MeetingSearchSource] = []) {
         id = meeting.id
         title = meeting.displayTitle
         metadataLine = meeting.homeMetadataLine
         self.isRecording = isRecording
         showsSyncFailure = !isRecording && meeting.syncState == .failed
+        self.matchedSources = Array(matchedSources.prefix(2))
     }
 }
 
@@ -47,6 +49,23 @@ struct MeetingRowView: View {
                         .font(AppTheme.dataFont(size: 12))
                         .foregroundStyle(AppTheme.subtleInk)
                         .lineLimit(1)
+
+                    if !snapshot.matchedSources.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(snapshot.matchedSources, id: \.self) { source in
+                                Text(source.label)
+                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(AppTheme.subtleInk)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(AppTheme.background)
+                                    .overlay(
+                                        Rectangle()
+                                            .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                                    )
+                            }
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 14)

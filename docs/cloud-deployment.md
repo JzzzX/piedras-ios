@@ -1,90 +1,114 @@
-# Piedras 单主仓云端部署
+# Piedras 单入口 Zeabur 部署
 
 ## 目标
 
-本仓库同时承载 iOS 客户端和云端服务，部署时不要再把整个仓库当成单一 Node 项目。
+当前生产目标只有一条：
 
-固定拆分如下：
+- 不再让 iOS 走 `Vercel API + Zeabur ASR` 的混合链路
+- 统一改成一个 Zeabur 阿里云服务同时承载 `cloud/api` 和豆包 ASR WebSocket 代理
+- 保持现有 AiHubMix / AliHub 的 OpenAI-compatible LLM 配置，不做 provider 迁移
 
-- Vercel: `cloud/api`
-- Zeabur: `cloud/asr-proxy`
+## 推荐拓扑
 
-主仓根目录额外提供了 `Dockerfile.asr-proxy`，用于兼容已经直接绑定仓库根目录的 Zeabur 服务。
-
-## Vercel
-
-### 项目 Root Directory
-
-设置为：
+现有 Zeabur 域名直接作为唯一入口：
 
 ```text
-cloud/api
+https://piedras.preview.aliyun-zeabur.cn
 ```
 
-### 必需环境变量
+这个服务应当由仓库根目录的 `Dockerfile.asr-proxy` 构建，但实际运行的是 `cloud/api/server.cjs`，因此同一个端口会同时提供：
 
-```bash
-DATABASE_URL=
-ASR_MODE=doubao
-OPENAI_API_KEY=
-OPENAI_BASE_URL=https://aihubmix.com/v1
-OPENAI_MODEL=gpt-4o-mini
-OPENAI_PATH=/chat/completions
-DOUBAO_ASR_APP_ID=
-DOUBAO_ASR_ACCESS_TOKEN=
-DOUBAO_ASR_RESOURCE_ID=volc.seedasr.sauc.duration
-ASR_PROXY_SESSION_SECRET=
-ASR_PROXY_PUBLIC_BASE_URL=https://your-asr-proxy.example.com
-```
+- `GET /healthz`
+- `GET /api/asr/status`
+- `GET /api/llm/status`
+- `POST /api/asr/session`
+- `GET /asr-proxy/healthz`
+- `WS /ws/asr`
 
-### 域名
+## Zeabur 配置
 
-- 正式 API 域名继续使用 `https://piedras-api.vercel.app`
+### 部署入口
 
-## Zeabur
-
-### 服务 Root Directory
-
-设置为：
-
-```text
-cloud/asr-proxy
-```
-
-如果现有服务已经直接绑定了仓库根目录，也可以保留根目录不改，并设置：
+如果当前 Zeabur 服务已经绑定仓库根目录，保持不动即可，并确认：
 
 ```bash
 ZBPACK_DOCKERFILE_NAME=asr-proxy
 ```
 
-Zeabur 会按官方约定优先使用根目录的 `Dockerfile.asr-proxy` 来部署 `cloud/asr-proxy`。
+这会让 Zeabur 使用仓库根目录的 `Dockerfile.asr-proxy`，把现有服务升级为单入口 API + ASR 代理。
 
-### 环境变量
+如果你新建 Zeabur 服务，也可以直接把 Root Directory 指向：
+
+```text
+cloud/api
+```
+
+然后使用 `cloud/api/Dockerfile`。
+
+### 构建与启动
+
+- Node 版本：20
+- 推荐直接使用仓库内 Dockerfile，不要手写平台构建命令
+- 不要手动设置 `PORT`
+- 平台会自动注入 `PORT`
+
+### 必需环境变量
+
+以下变量需要在同一个 Zeabur 服务内同时存在：
 
 ```bash
+DATABASE_URL=
+ASR_MODE=doubao
+
+OPENAI_API_KEY=
+OPENAI_BASE_URL=<沿用你当前的 AiHub/AiHubMix 地址>
+OPENAI_MODEL=<沿用你当前线上模型>
+OPENAI_PATH=<沿用你当前路径，常见为 /chat/completions>
+
 ASR_PROXY_SESSION_SECRET=
+ASR_PROXY_PUBLIC_BASE_URL=https://piedras.preview.aliyun-zeabur.cn
+ASR_PROXY_HEALTH_PATH=/asr-proxy/healthz
+ASR_PROXY_WS_PATH=/ws/asr
+
 DOUBAO_ASR_APP_ID=
 DOUBAO_ASR_ACCESS_TOKEN=
 DOUBAO_ASR_RESOURCE_ID=volc.seedasr.sauc.duration
 ```
 
+可选变量：
+
+```bash
+DOUBAO_ASR_WS_URL=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
+```
+
 说明：
 
-- 不要手动设置 `PORT`
-- 平台会自动注入 `PORT`
-- 代理代码会优先监听平台注入的 `PORT`
+- 你现在提供的 Zeabur 环境变量里只有豆包凭据和 `ZBPACK_DOCKERFILE_NAME`
+- 还必须补上 `DATABASE_URL`、`ASR_MODE`、`ASR_PROXY_PUBLIC_BASE_URL`、`ASR_PROXY_HEALTH_PATH`、`ASR_PROXY_WS_PATH`，以及现有 `OPENAI_*` 变量
+- `ASR_PROXY_PUBLIC_BASE_URL` 必须写成实际公网域名，当前就是 `https://piedras.preview.aliyun-zeabur.cn`
 
-### 验证
+## iOS 对应配置
 
-代理上线后先测：
+- iOS 默认生产后端已经改成 `https://piedras.preview.aliyun-zeabur.cn`
+- Debug 设置页支持手动覆盖后端地址，便于临时切服排障
+
+## 上线后验证
+
+统一入口部署成功后，下面这些请求都应该返回有效结果：
 
 ```bash
-curl https://your-asr-proxy.example.com/healthz
+curl https://piedras.preview.aliyun-zeabur.cn/healthz
+curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
+curl https://piedras.preview.aliyun-zeabur.cn/api/asr/status
+curl https://piedras.preview.aliyun-zeabur.cn/api/llm/status
+curl -X POST https://piedras.preview.aliyun-zeabur.cn/api/asr/session \
+  -H 'content-type: application/json' \
+  -d '{"sampleRate":16000,"channels":1}'
 ```
 
-然后再测 API：
+如果仍然出现下面这种情况：
 
-```bash
-curl https://piedras-api.vercel.app/api/asr/status
-curl https://piedras-api.vercel.app/api/llm/status
-```
+- `/healthz` 有返回
+- `/api/asr/status` 是 `{"error":"Not found"}`
+
+说明线上跑的还是旧的独立 `cloud/asr-proxy`，还没有完成新镜像部署。

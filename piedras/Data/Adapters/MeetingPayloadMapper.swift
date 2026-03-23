@@ -162,6 +162,7 @@ struct EnhanceRequestPayload: Encodable {
     let transcript: String
     let userNotes: String
     let meetingTitle: String
+    let segmentCommentsContext: String
 }
 
 struct ChatHistoryPayload: Encodable {
@@ -173,6 +174,7 @@ struct ChatRequestPayload: Encodable {
     let transcript: String
     let userNotes: String
     let enhancedNotes: String
+    let segmentCommentsContext: String
     let chatHistory: [ChatHistoryPayload]
     let question: String
 }
@@ -185,6 +187,9 @@ struct GlobalChatRequestPayload: Encodable {
     let question: String
     let chatHistory: [ChatHistoryPayload]
     let filters: GlobalChatFiltersPayload?
+    let localRetrievalContext: String?
+    let localRetrievalSources: [LocalMeetingRetrievalSource]?
+    let localCommentContext: String?
 }
 
 enum MeetingPayloadMapper {
@@ -230,7 +235,8 @@ enum MeetingPayloadMapper {
         EnhanceRequestPayload(
             transcript: transcriptText(from: meeting),
             userNotes: meeting.userNotesPlainText,
-            meetingTitle: meeting.displayTitle
+            meetingTitle: meeting.displayTitle,
+            segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting)
         )
     }
 
@@ -239,7 +245,21 @@ enum MeetingPayloadMapper {
             transcript: transcriptText(from: meeting),
             userNotes: meeting.userNotesPlainText,
             enhancedNotes: meeting.enhancedNotes,
+            segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting),
             chatHistory: meeting.orderedChatMessages.suffix(10).map {
+                ChatHistoryPayload(role: $0.role, content: $0.content)
+            },
+            question: question
+        )
+    }
+
+    static func makeChatPayload(from meeting: Meeting, session: ChatSession, question: String) -> ChatRequestPayload {
+        ChatRequestPayload(
+            transcript: transcriptText(from: meeting),
+            userNotes: meeting.userNotesPlainText,
+            enhancedNotes: meeting.enhancedNotes,
+            segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting),
+            chatHistory: session.orderedMessages.suffix(10).map {
                 ChatHistoryPayload(role: $0.role, content: $0.content)
             },
             question: question
@@ -293,7 +313,33 @@ enum MeetingPayloadMapper {
         meeting.updatedAt = remote.updatedAt ?? .now
 
         repository.replaceSegments(for: meeting, with: makeSegments(from: remote.segments))
-        repository.replaceChatMessages(for: meeting, with: makeChatMessages(from: remote.chatMessages))
+        let remoteChatMessages = makeChatMessages(from: remote.chatMessages)
+
+        if meeting.chatSessions.isEmpty {
+            repository.replaceChatMessages(for: meeting, with: remoteChatMessages)
+            return
+        }
+
+        guard let onlySession = meeting.chatSessions.only else {
+            return
+        }
+
+        guard !remoteChatMessages.isEmpty else {
+            return
+        }
+
+        repository.replaceChatMessages(for: meeting, in: onlySession, with: remoteChatMessages)
+        if let title = remoteChatMessages.first(where: { $0.role == "user" })?.content
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !title.isEmpty {
+            onlySession.title = title
+        }
+        if let firstTimestamp = remoteChatMessages.first?.timestamp {
+            onlySession.createdAt = firstTimestamp
+        }
+        if let lastTimestamp = remoteChatMessages.last?.timestamp {
+            onlySession.updatedAt = lastTimestamp
+        }
     }
 
     static func transcriptText(from meeting: Meeting) -> String {
@@ -348,5 +394,11 @@ enum MeetingPayloadMapper {
         }
 
         return URL(string: path, relativeTo: baseURL)?.absoluteURL.absoluteString ?? path
+    }
+}
+
+private extension Collection {
+    var only: Element? {
+        count == 1 ? first : nil
     }
 }

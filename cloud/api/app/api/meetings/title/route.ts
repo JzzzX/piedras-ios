@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
 import type { PromptOptions } from '@/lib/types';
 
@@ -187,19 +188,21 @@ function buildHeuristicTitle(transcript: string, durationSeconds?: number, meeti
 }
 
 export async function POST(req: NextRequest) {
+  const context = createRequestContext(req, '/api/meetings/title');
+
   try {
     const { transcript, durationSeconds, meetingDate, promptOptions, llmRuntimeConfig } = await req.json();
     const normalizedTranscript = (transcript || '').trim();
 
     if (!normalizedTranscript) {
-      return NextResponse.json({
+      return jsonResponse(context, {
         title: buildHeuristicTitle('', durationSeconds, meetingDate),
         provider: 'demo',
       });
     }
 
     if (!hasAvailableLlm(llmRuntimeConfig)) {
-      return NextResponse.json({
+      return jsonResponse(context, {
         title: buildHeuristicTitle(normalizedTranscript, durationSeconds, meetingDate),
         provider: 'demo',
       });
@@ -233,16 +236,16 @@ export async function POST(req: NextRequest) {
 
     const title = sanitizeGeneratedTitle(content);
 
-    return NextResponse.json({
+    return jsonResponse(context, {
       title: title || buildHeuristicTitle(normalizedTranscript, durationSeconds, meetingDate),
       provider,
     });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : '自动标题生成失败',
-      },
-      { status: 500 }
+    return errorResponse(
+      context,
+      502,
+      error instanceof Error ? `标题生成失败：${error.message}` : '标题生成失败，请稍后重试。',
+      error
     );
   }
 }

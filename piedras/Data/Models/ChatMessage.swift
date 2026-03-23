@@ -9,6 +9,7 @@ final class ChatMessage {
     var timestamp: Date
     var orderIndex: Int
     var meeting: Meeting?
+    var session: ChatSession?
 
     init(
         id: String = UUID().uuidString.lowercased(),

@@ -266,6 +266,103 @@ final class RecordingFlowUITests: XCTestCase {
         XCTAssertTrue(app.textFields["MeetingChatComposerField"].waitForExistence(timeout: 2), "对话 sheet 缺少输入框。")
     }
 
+    @MainActor
+    func testMeetingChatSheetRemainsInteractiveAfterFocusingComposer() throws {
+        let app = launchApp()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        let summaryTab = app.buttons["MeetingModeSummaryTab"]
+        XCTAssertTrue(summaryTab.waitForExistence(timeout: 3), "详情页未正常打开。")
+        summaryTab.tap()
+
+        let askButton = app.buttons["MeetingAskButton"]
+        XCTAssertTrue(askButton.waitForExistence(timeout: 3), "AI Notes 页缺少与笔记对话入口。")
+        askButton.tap()
+
+        let chatSheet = app.otherElements["MeetingChatSheet"]
+        XCTAssertTrue(chatSheet.waitForExistence(timeout: 3), "对话 sheet 未打开。")
+
+        let composer = app.textFields["MeetingChatComposerField"]
+        XCTAssertTrue(composer.waitForExistence(timeout: 2), "对话输入框缺失。")
+        composer.tap()
+
+        let closeButton = app.buttons["MeetingChatSheetCloseButton"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 2), "对话 sheet 缺少关闭按钮。")
+        XCTAssertTrue(closeButton.isHittable, "聚焦输入框后关闭按钮不应失去交互。")
+        closeButton.tap()
+
+        XCTAssertFalse(chatSheet.waitForExistence(timeout: 2), "关闭按钮点击后，对话 sheet 应消失。")
+    }
+
+    @MainActor
+    func testMeetingChatSheetWithHistoryRemainsInteractive() throws {
+        let app = launchApp()
+
+        let secondRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 1)
+        XCTAssertTrue(secondRow.waitForExistence(timeout: 5), "带历史对话的会议卡片未出现。")
+        secondRow.tap()
+
+        let summaryTab = app.buttons["MeetingModeSummaryTab"]
+        XCTAssertTrue(summaryTab.waitForExistence(timeout: 3), "详情页未正常打开。")
+        summaryTab.tap()
+
+        let askButton = app.buttons["MeetingAskButton"]
+        XCTAssertTrue(askButton.waitForExistence(timeout: 3), "AI Notes 页缺少与笔记对话入口。")
+        askButton.tap()
+
+        let chatSheet = app.otherElements["MeetingChatSheet"]
+        XCTAssertTrue(chatSheet.waitForExistence(timeout: 3), "对话 sheet 未打开。")
+
+        let historicalSession = app.staticTexts["帮我总结用户最关心的问题"]
+        XCTAssertTrue(historicalSession.waitForExistence(timeout: 3), "历史对话标题未显示。")
+
+        let composer = app.textFields["MeetingChatComposerField"]
+        XCTAssertTrue(composer.waitForExistence(timeout: 2), "对话输入框缺失。")
+        composer.tap()
+
+        let closeButton = app.buttons["MeetingChatSheetCloseButton"]
+        XCTAssertTrue(closeButton.waitForExistence(timeout: 2), "对话 sheet 缺少关闭按钮。")
+        XCTAssertTrue(closeButton.isHittable, "有历史对话时关闭按钮不应失去交互。")
+        closeButton.tap()
+
+        XCTAssertFalse(chatSheet.waitForExistence(timeout: 2), "关闭按钮点击后，对话 sheet 应消失。")
+    }
+
+    @MainActor
+    func testMeetingChatShowsAssistantReplyAfterSending() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append("UITEST_IN_MEMORY")
+        app.launchArguments.append("UITEST_USE_SIMULATOR_BACKEND")
+        app.launch()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        let summaryTab = app.buttons["MeetingModeSummaryTab"]
+        XCTAssertTrue(summaryTab.waitForExistence(timeout: 3), "详情页未正常打开。")
+        summaryTab.tap()
+
+        let askButton = app.buttons["MeetingAskButton"]
+        XCTAssertTrue(askButton.waitForExistence(timeout: 3), "AI Notes 页缺少与笔记对话入口。")
+        askButton.tap()
+
+        let composer = app.textFields["MeetingChatComposerField"]
+        XCTAssertTrue(composer.waitForExistence(timeout: 2), "对话输入框缺失。")
+        composer.tap()
+        composer.typeText("帮我总结")
+
+        let sendButton = app.buttons.matching(identifier: "MeetingChatComposerSendButton").firstMatch
+        XCTAssertTrue(sendButton.waitForExistence(timeout: 2), "发送按钮缺少稳定的 accessibility identifier。")
+        sendButton.tap()
+
+        XCTAssertTrue(app.staticTexts["帮我总结"].waitForExistence(timeout: 5), "发送后用户消息未显示。")
+        XCTAssertTrue(app.staticTexts["这是来自测试后端的回答。"].waitForExistence(timeout: 8), "发送后 AI 回答未显示。")
+    }
+
     private func launchApp() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append("UITEST_IN_MEMORY")

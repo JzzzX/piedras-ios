@@ -14,8 +14,6 @@ struct ChatHistoryDrawerView: View {
     let onDelete: (String) -> Void
     let onNewChat: () -> Void
 
-    @State private var dragOffset: CGFloat = 0
-
     var body: some View {
         if isPresented {
             ZStack(alignment: .trailing) {
@@ -28,8 +26,6 @@ struct ChatHistoryDrawerView: View {
                 // Drawer panel
                 drawerContent
                     .frame(width: drawerWidth)
-                    .offset(x: dragOffset)
-                    .gesture(dismissDragGesture)
                     .transition(.move(edge: .trailing))
             }
             .animation(.easeOut(duration: 0.25), value: isPresented)
@@ -91,6 +87,7 @@ struct ChatHistoryDrawerView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityIdentifier("ChatHistoryDrawerNewChatButton")
             .disabled(isInteractionDisabled)
             .overlay(alignment: .bottom) {
                 ThinDivider()
@@ -105,17 +102,25 @@ struct ChatHistoryDrawerView: View {
                     .padding(20)
                 Spacer()
             } else {
-                ScrollView(showsIndicators: false) {
-                    LazyVStack(spacing: 0) {
-                        ForEach(sections) { section in
-                            sectionHeader(section.bucket.title)
-
+                List {
+                    ForEach(sections) { section in
+                        Section {
                             ForEach(section.sessions) { session in
                                 sessionRow(session)
+                                    .listRowInsets(EdgeInsets())
+                                    .listRowBackground(Color.clear)
+                                    .listRowSeparator(.hidden)
                             }
+                        } header: {
+                            sectionHeader(section.bucket.title)
                         }
                     }
                 }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .background(Color.clear)
+                .contentMargins(.zero, for: .scrollContent)
+                .accessibilityIdentifier("ChatHistoryDrawerSessionList")
             }
         }
         .background(AppTheme.surface)
@@ -137,6 +142,7 @@ struct ChatHistoryDrawerView: View {
             .padding(.horizontal, 16)
             .padding(.top, 14)
             .padding(.bottom, 4)
+            .textCase(nil)
     }
 
     // MARK: - Session Row
@@ -202,23 +208,5 @@ struct ChatHistoryDrawerView: View {
         withAnimation(.easeOut(duration: 0.25)) {
             isPresented = false
         }
-    }
-
-    private var dismissDragGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                let translation = value.translation.width
-                if translation > 0 {
-                    dragOffset = translation
-                }
-            }
-            .onEnded { value in
-                if value.translation.width > 80 {
-                    close()
-                }
-                withAnimation(.easeOut(duration: 0.2)) {
-                    dragOffset = 0
-                }
-            }
     }
 }
