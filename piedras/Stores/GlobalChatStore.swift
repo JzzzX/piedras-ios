@@ -1,25 +1,6 @@
 import Foundation
 import Observation
 
-struct GlobalChatMessage: Identifiable, Hashable {
-    let id: String
-    let role: String
-    var content: String
-    let createdAt: Date
-
-    init(
-        id: String = UUID().uuidString.lowercased(),
-        role: String,
-        content: String,
-        createdAt: Date = .now
-    ) {
-        self.id = id
-        self.role = role
-        self.content = content
-        self.createdAt = createdAt
-    }
-}
-
 enum GlobalChatPhase {
     case idle
     case preparing
@@ -33,8 +14,11 @@ final class GlobalChatStore {
     private let apiClient: APIClient
     private let settingsStore: SettingsStore
     private let workspaceBootstrapService: WorkspaceBootstrapService
+    private let chatSessionRepository: ChatSessionRepository
 
-    var messages: [GlobalChatMessage] = []
+    var sessions: [ChatSession] = []
+    var messages: [ChatMessage] = []
+    var activeSessionID: String?
     var phase: GlobalChatPhase = .idle
     var statusMessage: String?
     var lastErrorMessage: String?
@@ -46,11 +30,14 @@ final class GlobalChatStore {
     init(
         apiClient: APIClient,
         settingsStore: SettingsStore,
-        workspaceBootstrapService: WorkspaceBootstrapService
+        workspaceBootstrapService: WorkspaceBootstrapService,
+        chatSessionRepository: ChatSessionRepository
     ) {
         self.apiClient = apiClient
         self.settingsStore = settingsStore
         self.workspaceBootstrapService = workspaceBootstrapService
+        self.chatSessionRepository = chatSessionRepository
+        reloadSessions(selectMostRecentIfNeeded: true)
     }
 
     func sendMessage(_ question: String) async -> Bool {
@@ -62,11 +49,14 @@ final class GlobalChatStore {
         statusMessage = "AI 正在生成"
         phase = .streaming
 
-        let userMessage = GlobalChatMessage(role: "user", content: trimmedQuestion)
-        let assistantMessageID = UUID().uuidString.lowercased()
-
-        messages.append(userMessage)
-        messages.append(GlobalChatMessage(id: assistantMessageID, role: "assistant", content: ""))
+        let session = ensureActiveSession()
+        let history = chatHistory(for: session)
+        let userMessage = chatSessionRepository.appendUserMessage(trimmedQuestion, to: session)
+        let assistantMessage = chatSessionRepository.appendAssistantPlaceholder(to: session)
+        try? chatSessionRepository.save()
+        activeSessionID = session.id
+        reloadSessions(selectMostRecentIfNeeded: false)
+        messages = session.orderedMessages
 
         defer {
             if phase != .failed {
@@ -78,31 +68,34 @@ final class GlobalChatStore {
             let workspaceID = try await resolveWorkspaceID()
             let payload = GlobalChatRequestPayload(
                 question: trimmedQuestion,
-                chatHistory: chatHistory(excludingAssistantMessageID: assistantMessageID),
+                chatHistory: history,
                 filters: .init(workspaceId: workspaceID)
             )
             let stream = try await apiClient.streamGlobalChat(payload)
 
             for try await partialContent in stream {
-                guard let index = messages.firstIndex(where: { $0.id == assistantMessageID }) else {
-                    continue
-                }
-                messages[index].content = partialContent
+                assistantMessage.content = partialContent
             }
 
-            if let index = messages.firstIndex(where: { $0.id == assistantMessageID }),
-               messages[index].content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                messages[index].content = "当前没有返回内容。"
+            if assistantMessage.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                assistantMessage.content = "当前没有返回内容。"
             }
 
+            session.updatedAt = max(userMessage.timestamp, .now)
+            try? chatSessionRepository.save()
+            reloadSessions(selectMostRecentIfNeeded: false)
+            messages = session.orderedMessages
             statusMessage = nil
             settingsStore.markLLMRequestSucceeded()
             return true
         } catch {
-            messages.removeAll(where: { $0.id == assistantMessageID })
+            session.messages.removeAll(where: { $0.id == assistantMessage.id })
             lastErrorMessage = error.localizedDescription
             statusMessage = nil
             phase = .failed
+            try? chatSessionRepository.save()
+            reloadSessions(selectMostRecentIfNeeded: false)
+            messages = session.orderedMessages
             settingsStore.markLLMRequestFailed(message: error.localizedDescription)
             return false
         }
@@ -127,11 +120,42 @@ final class GlobalChatStore {
         phase = .failed
     }
 
-    func resetConversation() {
-        messages.removeAll()
-        phase = .idle
-        statusMessage = nil
+    func startNewDraft() {
         lastErrorMessage = nil
+        statusMessage = nil
+        phase = .idle
+        activeSessionID = nil
+        messages = []
+        reloadSessions(selectMostRecentIfNeeded: false)
+    }
+
+    func activateSession(_ sessionID: String) {
+        guard phase != .streaming else { return }
+        lastErrorMessage = nil
+        activeSessionID = sessionID
+        reloadSessions(selectMostRecentIfNeeded: false)
+    }
+
+    func deleteSession(_ sessionID: String) {
+        guard phase != .streaming else { return }
+        guard let session = sessions.first(where: { $0.id == sessionID }) else { return }
+
+        do {
+            try chatSessionRepository.delete(session)
+            let wasActive = activeSessionID == sessionID
+            lastErrorMessage = nil
+            reloadSessions(selectMostRecentIfNeeded: false)
+            if wasActive {
+                activeSessionID = sessions.first?.id
+                messages = sessions.first?.orderedMessages ?? []
+            }
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func resetConversation() {
+        startNewDraft()
     }
 
     private func resolveWorkspaceID() async throws -> String? {
@@ -142,10 +166,35 @@ final class GlobalChatStore {
         return try await workspaceBootstrapService.bootstrapHiddenWorkspace()
     }
 
-    private func chatHistory(excludingAssistantMessageID assistantMessageID: String) -> [ChatHistoryPayload] {
-        messages
-            .filter { $0.id != assistantMessageID }
+    private func ensureActiveSession() -> ChatSession {
+        if let activeSession = activeSession {
+            return activeSession
+        }
+
+        let session = chatSessionRepository.makeDraftSession(scope: .global, meeting: nil)
+        activeSessionID = session.id
+        return session
+    }
+
+    private var activeSession: ChatSession? {
+        sessions.first(where: { $0.id == activeSessionID })
+    }
+
+    private func chatHistory(for session: ChatSession) -> [ChatHistoryPayload] {
+        session.orderedMessages
             .suffix(12)
             .map { ChatHistoryPayload(role: $0.role, content: $0.content) }
+    }
+
+    private func reloadSessions(selectMostRecentIfNeeded: Bool) {
+        sessions = (try? chatSessionRepository.fetchSessions(scope: .global)) ?? []
+        if selectMostRecentIfNeeded, activeSessionID == nil {
+            activeSessionID = sessions.first?.id
+            messages = sessions.first?.orderedMessages ?? []
+        } else if let activeSession {
+            messages = activeSession.orderedMessages
+        } else {
+            messages = []
+        }
     }
 }

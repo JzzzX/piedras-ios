@@ -7,46 +7,112 @@ struct ChatView: View {
     let meeting: Meeting
 
     @State private var input = ""
+    @State private var showHistoryDrawer = false
     @FocusState private var isInputFocused: Bool
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 22) {
-                    if meeting.orderedChatMessages.isEmpty {
-                        Color.clear
-                            .frame(height: 8)
-                    } else {
-                        messageList
+            VStack(alignment: .leading, spacing: 14) {
+                actionsBar
+                    .padding(.horizontal, 22)
+                    .padding(.top, 18)
+
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 22) {
+                        if currentMessages.isEmpty {
+                            emptyState
+                        } else {
+                            messageList
+                        }
                     }
+                    .padding(.horizontal, 22)
+                    .padding(.top, 6)
+                    .padding(.bottom, 120)
                 }
-                .padding(.horizontal, 22)
-                .padding(.top, 22)
-                .padding(.bottom, 120)
-            }
-                .onChange(of: meeting.orderedChatMessages.count, initial: false) { _, _ in
-                    if let lastID = meeting.orderedChatMessages.last?.id {
+                .onChange(of: currentMessages.last?.id, initial: true) { _, lastID in
+                    if let lastID {
                         withAnimation(.easeOut(duration: 0.22)) {
                             proxy.scrollTo(lastID, anchor: .bottom)
                         }
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
+            }
         }
         .dismissKeyboardOnTap(isFocused: $isInputFocused)
         .safeAreaInset(edge: .bottom) {
             composer
+        }
+        .overlay {
+            ChatHistoryDrawerView(
+                isPresented: $showHistoryDrawer,
+                sections: historySections,
+                activeSessionID: meetingStore.activeChatSession(for: meeting.id)?.id,
+                scopeIcon: "doc.text",
+                isInteractionDisabled: meetingStore.isStreamingChat(meetingID: meeting.id),
+                onSelect: { sessionID in
+                    meetingStore.activateChatSession(sessionID, for: meeting.id)
+                },
+                onDelete: { sessionID in
+                    meetingStore.deleteChatSession(sessionID, for: meeting.id)
+                },
+                onNewChat: {
+                    meetingStore.startNewChatDraft(for: meeting.id)
+                }
+            )
+        }
+        .task(id: meeting.id) {
+            meetingStore.prepareChatSessions(for: meeting.id)
         }
         .id(settingsStore.appLanguage)
     }
 
     private var messageList: some View {
         VStack(spacing: 22) {
-            ForEach(meeting.orderedChatMessages) { message in
+            ForEach(currentMessages) { message in
                 messageRow(message)
                     .id(message.id)
             }
         }
+    }
+
+    private var actionsBar: some View {
+        HStack {
+            Spacer()
+
+            HStack(spacing: 8) {
+                AppGlassCircleButton(
+                    systemName: "plus",
+                    accessibilityLabel: AppStrings.current.newChat,
+                    size: 36
+                ) {
+                    meetingStore.startNewChatDraft(for: meeting.id)
+                }
+                .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
+
+                ZStack(alignment: .topTrailing) {
+                    AppGlassCircleButton(
+                        systemName: "clock.arrow.circlepath",
+                        accessibilityLabel: AppStrings.current.chatHistoryTitle,
+                        size: 36
+                    ) {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            showHistoryDrawer = true
+                        }
+                    }
+                    .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
+
+                    SessionCountBadge(count: meetingStore.chatSessions(for: meeting.id).count)
+                }
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        Text(AppStrings.current.chatHistoryEmpty)
+            .font(AppTheme.bodyFont(size: 14))
+            .foregroundStyle(AppTheme.subtleInk)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func messageRow(_ message: ChatMessage) -> some View {
@@ -123,6 +189,14 @@ struct ChatView: View {
 
     private var trimmedInput: String {
         input.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var historySections: [ChatSessionHistorySection] {
+        ChatSessionHistorySection.makeSections(from: meetingStore.chatSessions(for: meeting.id))
+    }
+
+    private var currentMessages: [ChatMessage] {
+        meetingStore.chatMessages(for: meeting.id)
     }
 
     private func sendCurrentInput() {

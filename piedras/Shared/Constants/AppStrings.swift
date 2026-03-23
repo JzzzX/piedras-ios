@@ -111,6 +111,10 @@ struct AppStringTable {
     var askAcrossMeetings: String { isChinese ? "跨会议提问" : "Ask across your meetings" }
     var resetConversation: String { isChinese ? "重置对话" : "Reset conversation" }
     var settings: String { isChinese ? "设置" : "Settings" }
+    var newChat: String { isChinese ? "新对话" : "New chat" }
+    var chatHistoryEmpty: String { isChinese ? "开始一个新问题，或点击 ⟲ 查看历史对话。" : "Start a new question, or tap ⟲ to view chat history." }
+    var chatHistoryTitle: String { isChinese ? "历史对话" : "Chat History" }
+    var chatHistoryDrawerEmpty: String { isChinese ? "暂无历史对话" : "No chat history" }
 
     // ── ChatView ─────────────────────────────────────────────────
 

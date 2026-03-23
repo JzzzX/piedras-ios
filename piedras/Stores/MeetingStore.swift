@@ -43,6 +43,7 @@ struct FileTranscriptionStatusSnapshot: Equatable {
 @Observable
 final class MeetingStore {
     private let repository: MeetingRepository
+    private let chatSessionRepository: ChatSessionRepository
     private let settingsStore: SettingsStore
     private let recordingSessionStore: RecordingSessionStore
     private let appActivityCoordinator: AppActivityCoordinator
@@ -66,6 +67,8 @@ final class MeetingStore {
     var generatingTitleMeetingIDs: Set<String> = []
     var streamingChatMeetingIDs: Set<String> = []
     var transcribingMeetingIDs: Set<String> = []
+    var activeChatSessionIDs: [String: String] = [:]
+    var draftChatMeetingIDs: Set<String> = []
     private var didLoad = false
     private var didStartBackendPreparation = false
     private var backendPreparationTask: Task<Void, Never>?
@@ -79,6 +82,7 @@ final class MeetingStore {
 
     init(
         repository: MeetingRepository,
+        chatSessionRepository: ChatSessionRepository,
         settingsStore: SettingsStore,
         recordingSessionStore: RecordingSessionStore,
         appActivityCoordinator: AppActivityCoordinator,
@@ -90,6 +94,7 @@ final class MeetingStore {
         meetingSyncService: MeetingSyncService
     ) {
         self.repository = repository
+        self.chatSessionRepository = chatSessionRepository
         self.settingsStore = settingsStore
         self.recordingSessionStore = recordingSessionStore
         self.appActivityCoordinator = appActivityCoordinator
@@ -162,6 +167,7 @@ final class MeetingStore {
         didLoad = true
         recoverInterruptedFileTranscriptionsIfNeeded()
         loadMeetings()
+        migrateLegacyChatSessionsIfNeeded()
         startBackendPreparationIfNeeded()
     }
 
@@ -675,22 +681,22 @@ final class MeetingStore {
         guard !trimmedQuestion.isEmpty else { return false }
         guard let meeting = meeting(withID: meetingID) else { return false }
         guard !streamingChatMeetingIDs.contains(meetingID) else { return false }
+        prepareChatSessions(for: meetingID)
         guard await ensureBackendReachable(force: false) else {
             lastErrorMessage = "\(AppEnvironment.cloudName) 暂时不可用。"
             return false
         }
 
-        let payload = MeetingPayloadMapper.makeChatPayload(from: meeting, question: trimmedQuestion)
-        let userOrder = meeting.orderedChatMessages.count
-        let userMessage = ChatMessage(role: "user", content: trimmedQuestion, orderIndex: userOrder)
-        let assistantMessage = ChatMessage(role: "assistant", content: "", orderIndex: userOrder + 1)
-
-        meeting.chatMessages.append(userMessage)
-        meeting.chatMessages.append(assistantMessage)
+        let session = activeChatSession(for: meetingID) ?? chatSessionRepository.makeDraftSession(scope: .meeting, meeting: meeting)
+        let payload = MeetingPayloadMapper.makeChatPayload(from: meeting, session: session, question: trimmedQuestion)
+        _ = chatSessionRepository.appendUserMessage(trimmedQuestion, to: session)
+        let assistantMessage = chatSessionRepository.appendAssistantPlaceholder(to: session)
+        draftChatMeetingIDs.remove(meetingID)
+        activeChatSessionIDs[meetingID] = session.id
         meeting.markPending()
 
         do {
-            try repository.save()
+            try chatSessionRepository.save()
         } catch {
             lastErrorMessage = error.localizedDescription
             return false
@@ -708,13 +714,14 @@ final class MeetingStore {
                 assistantMessage.content = partialContent
             }
             assistantMessage.timestamp = .now
+            session.updatedAt = assistantMessage.timestamp
             meeting.markPending()
-            try repository.save()
+            try chatSessionRepository.save()
             settingsStore.markLLMRequestSucceeded()
             await syncMeetingIfPossible(meetingID: meetingID)
             return true
         } catch {
-            meeting.chatMessages.removeAll(where: { $0.id == assistantMessage.id })
+            session.messages.removeAll(where: { $0.id == assistantMessage.id })
             repository.delete(assistantMessage)
             try? repository.save()
             lastErrorMessage = error.localizedDescription
@@ -733,6 +740,78 @@ final class MeetingStore {
 
     func isStreamingChat(meetingID: String) -> Bool {
         streamingChatMeetingIDs.contains(meetingID)
+    }
+
+    func prepareChatSessions(for meetingID: String) {
+        guard let meeting = meeting(withID: meetingID) else { return }
+
+        do {
+            try chatSessionRepository.migrateLegacyMeetingChatsIfNeeded(for: meeting)
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+
+        guard !draftChatMeetingIDs.contains(meetingID) else { return }
+        if activeChatSessionIDs[meetingID] == nil {
+            activeChatSessionIDs[meetingID] = meeting.orderedChatSessions.first?.id
+        }
+    }
+
+    func chatSessions(for meetingID: String) -> [ChatSession] {
+        guard let meeting = meeting(withID: meetingID) else { return [] }
+        return meeting.orderedChatSessions
+    }
+
+    func activeChatSession(for meetingID: String) -> ChatSession? {
+        guard !draftChatMeetingIDs.contains(meetingID) else { return nil }
+        guard let meeting = meeting(withID: meetingID) else { return nil }
+        if let activeID = activeChatSessionIDs[meetingID] {
+            return meeting.chatSessions.first(where: { $0.id == activeID })
+        }
+        return meeting.orderedChatSessions.first
+    }
+
+    func chatMessages(for meetingID: String) -> [ChatMessage] {
+        activeChatSession(for: meetingID)?.orderedMessages ?? []
+    }
+
+    func startNewChatDraft(for meetingID: String) {
+        prepareChatSessions(for: meetingID)
+        lastErrorMessage = nil
+        draftChatMeetingIDs.insert(meetingID)
+        activeChatSessionIDs.removeValue(forKey: meetingID)
+    }
+
+    func activateChatSession(_ sessionID: String, for meetingID: String) {
+        prepareChatSessions(for: meetingID)
+        lastErrorMessage = nil
+        draftChatMeetingIDs.remove(meetingID)
+        activeChatSessionIDs[meetingID] = sessionID
+    }
+
+    func deleteChatSession(_ sessionID: String, for meetingID: String) {
+        guard !streamingChatMeetingIDs.contains(meetingID) else { return }
+        guard let meeting = meeting(withID: meetingID),
+              let session = meeting.chatSessions.first(where: { $0.id == sessionID }) else {
+            return
+        }
+
+        do {
+            let remainingSessions = meeting.orderedChatSessions.filter { $0.id != sessionID }
+            try chatSessionRepository.delete(session)
+            lastErrorMessage = nil
+            if activeChatSessionIDs[meetingID] == sessionID {
+                activeChatSessionIDs[meetingID] = remainingSessions.first?.id
+                if remainingSessions.isEmpty {
+                    draftChatMeetingIDs.insert(meetingID)
+                } else {
+                    draftChatMeetingIDs.remove(meetingID)
+                }
+            }
+            loadMeetings()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
     }
 
     func isFileTranscribing(meetingID: String) -> Bool {
@@ -1217,6 +1296,12 @@ final class MeetingStore {
         }
 
         return Date().timeIntervalSince(lastHealthCheckAt) > 60
+    }
+
+    private func migrateLegacyChatSessionsIfNeeded() {
+        for meeting in meetings {
+            try? chatSessionRepository.migrateLegacyMeetingChatsIfNeeded(for: meeting)
+        }
     }
 
     private func backendStatusMessage(from health: RemoteBackendHealth?) -> String {

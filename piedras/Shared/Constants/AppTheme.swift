@@ -514,6 +514,24 @@ struct RetroSquareButton: View {
     }
 }
 
+// MARK: - Session Count Badge
+
+/// Small red badge showing a count, positioned at the top-right of its parent.
+struct SessionCountBadge: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text("\(count)")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 4)
+                .frame(minWidth: 16, minHeight: 16)
+                .background(AppTheme.highlight)
+        }
+    }
+}
+
 // MARK: - Retro Noise Overlay
 
 struct RetroNoiseOverlay: View {

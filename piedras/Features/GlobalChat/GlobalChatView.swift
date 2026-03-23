@@ -11,6 +11,7 @@ struct GlobalChatView: View {
 
     @State private var input = ""
     @State private var didSendInitialQuestion = false
+    @State private var showHistoryDrawer = false
     @FocusState private var isInputFocused: Bool
 
     init(initialQuestion: String? = nil) {
@@ -46,8 +47,8 @@ struct GlobalChatView: View {
                     .padding(.top, 20)
                     .padding(.bottom, 120)
                 }
-                .onChange(of: globalChatStore.messages.count, initial: false) { _, _ in
-                    if let lastID = globalChatStore.messages.last?.id {
+                .onChange(of: globalChatStore.messages.last?.id, initial: true) { _, lastID in
+                    if let lastID {
                         withAnimation(.easeOut(duration: 0.2)) {
                             proxy.scrollTo(lastID, anchor: .bottom)
                         }
@@ -59,6 +60,24 @@ struct GlobalChatView: View {
         .dismissKeyboardOnTap(isFocused: $isInputFocused)
         .safeAreaInset(edge: .bottom) {
             composer
+        }
+        .overlay {
+            ChatHistoryDrawerView(
+                isPresented: $showHistoryDrawer,
+                sections: historySections,
+                activeSessionID: globalChatStore.activeSessionID,
+                scopeIcon: "globe",
+                isInteractionDisabled: globalChatStore.phase != .idle,
+                onSelect: { sessionID in
+                    globalChatStore.activateSession(sessionID)
+                },
+                onDelete: { sessionID in
+                    globalChatStore.deleteSession(sessionID)
+                },
+                onNewChat: {
+                    globalChatStore.startNewDraft()
+                }
+            )
         }
         .toolbar(.hidden, for: .navigationBar)
         .task {
@@ -75,9 +94,6 @@ struct GlobalChatView: View {
             } else {
                 input = question
             }
-        }
-        .onDisappear {
-            globalChatStore.resetConversation()
         }
         .id(settingsStore.appLanguage)
     }
@@ -96,14 +112,36 @@ struct GlobalChatView: View {
 
             Spacer()
 
-            HStack(spacing: 10) {
-                if !globalChatStore.messages.isEmpty {
-                    AppGlassCircleButton(systemName: "arrow.counterclockwise", accessibilityLabel: AppStrings.current.resetConversation) {
-                        globalChatStore.resetConversation()
+            HStack(spacing: 8) {
+                AppGlassCircleButton(
+                    systemName: "plus",
+                    accessibilityLabel: AppStrings.current.newChat,
+                    size: 36
+                ) {
+                    globalChatStore.startNewDraft()
+                }
+                .disabled(globalChatStore.phase != .idle)
+
+                ZStack(alignment: .topTrailing) {
+                    AppGlassCircleButton(
+                        systemName: "clock.arrow.circlepath",
+                        accessibilityLabel: AppStrings.current.chatHistoryTitle,
+                        size: 36
+                    ) {
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            showHistoryDrawer = true
+                        }
                     }
+                    .disabled(globalChatStore.phase != .idle)
+
+                    SessionCountBadge(count: globalChatStore.sessions.count)
                 }
 
-                AppGlassCircleButton(systemName: "xmark", accessibilityLabel: AppStrings.current.close) {
+                AppGlassCircleButton(
+                    systemName: "xmark",
+                    accessibilityLabel: AppStrings.current.close,
+                    size: 36
+                ) {
                     dismiss()
                 }
             }
@@ -143,7 +181,7 @@ struct GlobalChatView: View {
         }
     }
 
-    private func chatBubble(message: GlobalChatMessage, isUser: Bool) -> some View {
+    private func chatBubble(message: ChatMessage, isUser: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(isUser ? "YOU>" : "PIEDRAS>")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
@@ -288,6 +326,10 @@ struct GlobalChatView: View {
 
     private var trimmedInput: String {
         input.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var historySections: [ChatSessionHistorySection] {
+        ChatSessionHistorySection.makeSections(from: globalChatStore.sessions)
     }
 
     private func sendCurrentInput() {
