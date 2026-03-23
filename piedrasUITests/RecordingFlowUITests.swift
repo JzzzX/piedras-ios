@@ -9,8 +9,8 @@ final class RecordingFlowUITests: XCTestCase {
     func testRecordingContinuesAfterBackgrounding() throws {
         let app = launchApp()
 
-        let homeChatField = app.textFields["HomeGlobalChatField"]
-        XCTAssertTrue(homeChatField.waitForExistence(timeout: 8), "首页未正常加载。")
+        let homeChatLauncher = app.buttons["HomeGlobalChatLauncher"]
+        XCTAssertTrue(homeChatLauncher.waitForExistence(timeout: 8), "首页未正常加载。")
 
         let newRecordingButton = element(in: app, identifier: "NewRecordingButton", fallbackLabel: "新录音")
         XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 8), "首页录音入口未出现。")
@@ -45,32 +45,19 @@ final class RecordingFlowUITests: XCTestCase {
         app.launchArguments.append("UITEST_ISOLATED_DEFAULTS")
         app.launch()
 
-        XCTAssertTrue(app.textFields["HomeGlobalChatField"].waitForExistence(timeout: 8), "首页未正常加载。")
+        XCTAssertTrue(app.buttons["HomeGlobalChatLauncher"].waitForExistence(timeout: 8), "首页未正常加载。")
         XCTAssertFalse(app.staticTexts["Connect your Mac backend first."].exists, "不应再展示本地后端配置引导。")
     }
 
     @MainActor
-    func testHomeAIComposerOpensGlobalChat() throws {
+    func testHomeChatLauncherOpensGlobalChat() throws {
         let app = launchApp()
-        let question = "Summarize roadmap"
-
-        let field = app.textFields["HomeGlobalChatField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        field.tap()
-        field.typeText(question)
-
-        let sendButton = app.buttons["HomeGlobalChatSendButton"]
-        XCTAssertTrue(sendButton.waitForExistence(timeout: 2))
-        sendButton.tap()
+        let launcher = app.buttons["HomeGlobalChatLauncher"]
+        XCTAssertTrue(launcher.waitForExistence(timeout: 5))
+        launcher.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
 
         let globalField = app.textFields["GlobalChatInputField"]
         XCTAssertTrue(globalField.waitForExistence(timeout: 5))
-
-        let sentQuestion = app.staticTexts[question]
-        XCTAssertTrue(
-            sentQuestion.waitForExistence(timeout: 5) || (globalField.value as? String) == question,
-            "进入全局对话后应保留或发送首页输入的问题。"
-        )
     }
 
     @MainActor
@@ -107,8 +94,8 @@ final class RecordingFlowUITests: XCTestCase {
 
         edgeSwipeBack(in: app)
 
-        let homeField = app.textFields["HomeGlobalChatField"]
-        XCTAssertTrue(homeField.waitForExistence(timeout: 5), "右滑返回后应回到首页。")
+        let homeLauncher = app.buttons["HomeGlobalChatLauncher"]
+        XCTAssertTrue(homeLauncher.waitForExistence(timeout: 5), "右滑返回后应回到首页。")
         XCTAssertFalse(transcriptTab.exists, "右滑返回后不应仍停留在详情页。")
     }
 
@@ -127,6 +114,7 @@ final class RecordingFlowUITests: XCTestCase {
 
         app.buttons["MeetingModeSummaryTab"].tap()
         XCTAssertTrue(app.buttons["MeetingAskButton"].waitForExistence(timeout: 3), "AI Notes 页缺少 Chat with note 入口。")
+        XCTAssertTrue(app.staticTexts["MeetingAskButtonGlyph"].exists, "与笔记对话入口应展示简易符号。")
         XCTAssertTrue(app.otherElements["EnhancedNotesRenderedView"].waitForExistence(timeout: 3), "AI Notes 应默认展示渲染后的文稿。")
         XCTAssertFalse(app.staticTexts["## 会议摘要"].exists, "AI Notes 默认页不应暴露原始 markdown 标记。")
 
@@ -226,11 +214,14 @@ final class RecordingFlowUITests: XCTestCase {
 
         let teaser = app.buttons["MeetingTranscriptNotesTeaser"]
         XCTAssertTrue(teaser.waitForExistence(timeout: 3), "Transcript 页应显示我的笔记预览入口。")
+        XCTAssertTrue(app.staticTexts["MeetingTranscriptNotesTeaserGlyph"].exists, "我的笔记入口应展示简易符号。")
         teaser.tap()
 
         let drawer = app.otherElements["MeetingNotesDrawer"]
         XCTAssertTrue(drawer.waitForExistence(timeout: 3), "点击 teaser 后应打开半屏笔记抽屉。")
-        XCTAssertTrue(app.staticTexts["MeetingNotesMergeHint"].exists, "抽屉里应提示笔记会并入 AI Notes。")
+        XCTAssertTrue(app.staticTexts["MeetingNotesDrawerGlyph"].exists, "抽屉 header 应展示笔记符号。")
+        XCTAssertTrue(app.staticTexts["MeetingNotesDrawerTitle"].exists, "抽屉 header 应展示主标题。")
+        XCTAssertFalse(app.staticTexts["MeetingNotesMergeHint"].exists, "抽屉里不应再展示辅助提示语。")
 
         let editor = app.textViews["MeetingNotesEditor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 2), "笔记抽屉缺少输入框。")
@@ -249,6 +240,30 @@ final class RecordingFlowUITests: XCTestCase {
         let editorRetainsDraft = NSPredicate(format: "value CONTAINS %@", "temp note")
         expectation(for: editorRetainsDraft, evaluatedWith: editor)
         waitForExpectations(timeout: 3)
+    }
+
+    @MainActor
+    func testSummaryChatOpensUnifiedMinimalSheet() throws {
+        let app = launchApp()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        let summaryTab = app.buttons["MeetingModeSummaryTab"]
+        XCTAssertTrue(summaryTab.waitForExistence(timeout: 3), "详情页未正常打开。")
+        summaryTab.tap()
+
+        let askButton = app.buttons["MeetingAskButton"]
+        XCTAssertTrue(askButton.waitForExistence(timeout: 3), "AI Notes 页缺少与笔记对话入口。")
+        askButton.tap()
+
+        XCTAssertTrue(app.otherElements["MeetingChatSheet"].waitForExistence(timeout: 3), "点击与笔记对话后应打开统一的对话 sheet。")
+        XCTAssertTrue(app.staticTexts["MeetingChatSheetGlyph"].exists, "对话 sheet header 应展示终端符号。")
+        XCTAssertTrue(app.staticTexts["MeetingChatSheetTitle"].exists, "对话 sheet header 应展示主标题。")
+        XCTAssertFalse(app.otherElements["SecondarySheetPanel"].exists, "对话 sheet 不应再使用旧的内层矩形面板。")
+        XCTAssertFalse(app.otherElements["SecondarySheetHeaderBar"].exists, "对话 sheet 不应再使用旧的条纹标题栏。")
+        XCTAssertTrue(app.textFields["MeetingChatComposerField"].waitForExistence(timeout: 2), "对话 sheet 缺少输入框。")
     }
 
     private func launchApp() -> XCUIApplication {

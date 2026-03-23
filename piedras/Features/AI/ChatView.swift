@@ -78,47 +78,47 @@ struct ChatView: View {
     }
 
     private var composer: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 10) {
-                Text(">")
-                    .font(.system(size: 16, weight: .bold, design: .monospaced))
-                    .foregroundStyle(AppTheme.subtleInk)
+        VStack(spacing: 0) {
+            ThinDivider()
 
-                TextField(AppStrings.current.chatWithNote, text: $input)
-                    .textFieldStyle(.plain)
-                    .font(AppTheme.bodyFont(size: 15))
-                    .foregroundStyle(AppTheme.ink)
-                    .focused($isInputFocused)
-                    .submitLabel(.send)
-                    .onSubmit(sendCurrentInput)
-                    .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
-            }
-            .padding(.horizontal, 16)
-            .frame(height: 54)
-            .background(AppTheme.surface)
-            .overlay(
-                Rectangle()
-                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-            )
+            HStack(spacing: 12) {
+                HStack(spacing: 10) {
+                    Text(">")
+                        .font(.system(size: 16, weight: .bold, design: .monospaced))
+                        .foregroundStyle(AppTheme.subtleInk)
 
-            Button(action: sendCurrentInput) {
-                Image(systemName: "arrow.up")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AppTheme.surface)
-                    .frame(width: 50, height: 50)
-                    .background(AppTheme.ink)
-                    .overlay(
-                        Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                    )
+                    TextField(AppStrings.current.chatWithNote, text: $input)
+                        .textFieldStyle(.plain)
+                        .font(AppTheme.bodyFont(size: 15))
+                        .foregroundStyle(AppTheme.ink)
+                        .focused($isInputFocused)
+                        .submitLabel(.send)
+                        .onSubmit(sendCurrentInput)
+                        .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
+                        .accessibilityIdentifier("MeetingChatComposerField")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 12)
+
+                Button(action: sendCurrentInput) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(AppTheme.surface)
+                        .frame(width: 44, height: 44)
+                        .background(AppTheme.ink)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(trimmedInput.isEmpty || meetingStore.isStreamingChat(meetingID: meeting.id))
             }
-            .buttonStyle(.plain)
-            .disabled(trimmedInput.isEmpty || meetingStore.isStreamingChat(meetingID: meeting.id))
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 14)
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 8)
-        .padding(.bottom, 12)
-        .background(Color.clear)
+        .background(AppTheme.surface)
     }
 
     private var trimmedInput: String {

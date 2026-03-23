@@ -206,7 +206,6 @@ struct MeetingDetailView: View {
         .sheet(isPresented: $showsNotesDrawer) {
             if let meeting = meetingStore.meeting(withID: meetingID) {
                 MeetingNotesDrawer(
-                    meeting: meeting,
                     initialText: currentNotesText(for: meeting),
                     onClose: {
                         closeNotesDrawer(for: meeting)
@@ -412,28 +411,13 @@ struct MeetingDetailView: View {
             AudioPlaybackBar(filePath: filePath)
                 .padding(.horizontal, 20)
         } else if selectedMode == .summary {
-            Button {
+            detailCTAButton(
+                kind: .chat,
+                accessibilityIdentifier: "MeetingAskButton",
+                glyphIdentifier: "MeetingAskButtonGlyph"
+            ) {
                 activeSheet = .chat
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "bubble.left.and.sparkles")
-                        .font(.system(size: 13, weight: .bold))
-
-                    Text(AppStrings.current.chatWithNote)
-                        .font(AppTheme.bodyFont(size: 15, weight: .semibold))
-                }
-                .foregroundStyle(AppTheme.ink)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(AppTheme.surface)
-                .overlay(
-                    Rectangle()
-                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                )
-                .retroHardShadow()
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("MeetingAskButton")
             .padding(.horizontal, 20)
         }
     }
@@ -465,18 +449,13 @@ struct MeetingDetailView: View {
                 }
 
             case .chat:
-                ZStack {
-                    AppGlassBackdrop()
-
-                    SecondarySheetPanel(title: AppStrings.current.chatWithNote, onClose: {
-                        activeSheet = nil
-                    }) {
-                        ChatView(meeting: meeting)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    }
-                    .padding(.bottom, 8)
+                MeetingChatSheet(onClose: {
+                    activeSheet = nil
+                }) {
+                    ChatView(meeting: meeting)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-                .presentationBackground(.clear)
+                .presentationBackground(AppTheme.surface)
                 .presentationDragIndicator(.hidden)
                 .edgeSwipeToDismiss {
                     activeSheet = nil
@@ -773,35 +752,73 @@ struct MeetingDetailView: View {
     }
 
     private func notesTeaser() -> some View {
-        Button {
+        detailCTAButton(
+            kind: .notes,
+            accessibilityIdentifier: "MeetingTranscriptNotesTeaser",
+            glyphIdentifier: "MeetingTranscriptNotesTeaserGlyph"
+        ) {
             closeActionMenu()
             showsNotesDrawer = true
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "square.and.pencil")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(AppTheme.mutedInk)
-                    .frame(width: 22, height: 22)
+        }
+    }
 
-                Text(AppStrings.current.myNotes)
-                    .font(AppTheme.bodyFont(size: 16, weight: .semibold))
+    private func detailCTAButton(
+        kind: MeetingDetailChromeKind,
+        accessibilityIdentifier: String,
+        glyphIdentifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        let config = MeetingDetailChrome.entry(for: kind)
+
+        return Button(action: action) {
+            HStack(spacing: 10) {
+                Spacer(minLength: 0)
+                detailGlyph(
+                    glyph: config.glyph,
+                    usesSymbolImage: config.usesSymbolImage,
+                    textSize: 13,
+                    symbolSize: 14,
+                    identifier: glyphIdentifier
+                )
+
+                Text(config.title)
+                    .font(AppTheme.bodyFont(size: 15, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
 
                 Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.highlight)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 14)
-            .frame(height: 54)
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
             .background(AppTheme.surface)
-            .softCard()
-            .contentShape(Rectangle())
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+            )
+            .retroHardShadow()
         }
         .buttonStyle(.plain)
-        .accessibilityIdentifier("MeetingTranscriptNotesTeaser")
+        .accessibilityIdentifier(accessibilityIdentifier)
+    }
+
+    @ViewBuilder
+    private func detailGlyph(
+        glyph: String,
+        usesSymbolImage: Bool,
+        textSize: CGFloat,
+        symbolSize: CGFloat,
+        identifier: String
+    ) -> some View {
+        if usesSymbolImage {
+            Image(systemName: glyph)
+                .font(.system(size: symbolSize, weight: .semibold))
+                .foregroundStyle(AppTheme.ink)
+                .accessibilityIdentifier(identifier)
+        } else {
+            Text(glyph)
+                .font(.system(size: textSize, weight: .bold, design: .monospaced))
+                .foregroundStyle(AppTheme.ink)
+                .accessibilityIdentifier(identifier)
+        }
     }
 
     private func displayTitle(for meeting: Meeting) -> String {
@@ -912,59 +929,68 @@ struct MeetingDetailView: View {
 
 // MARK: - Retro Sheet Scaffolds
 
-private struct DocumentSheetScaffold<Content: View>: View {
-    let title: String
-    let onDone: () -> Void
-    @ViewBuilder let content: () -> Content
-
-    var body: some View {
-        ZStack {
-            AppGlassBackdrop()
-
-            SecondarySheetPanel(title: title, onClose: onDone) {
-                ScrollView(showsIndicators: false) {
-                    content()
-                        .padding(24)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, 40)
-                }
-                .scrollDismissesKeyboard(.interactively)
-            }
-        }
-        .presentationBackground(.clear)
-        .presentationDragIndicator(.hidden)
-        .edgeSwipeToDismiss(onDismiss: onDone)
-    }
-}
-
-private struct SecondarySheetPanel<Content: View>: View {
-    let title: String
+private struct MeetingDetailSurfaceSheet<Content: View>: View {
+    let chrome: MeetingDetailSheetChrome
+    let accessibilityIdentifier: String
+    let glyphIdentifier: String
+    let titleIdentifier: String
+    let closeIdentifier: String
     let onClose: () -> Void
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        ZStack {
-            VStack(spacing: 0) {
-                SheetHeaderBar(title: title, onDone: onClose)
-                content()
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 12) {
+                if chrome.usesSymbolImage {
+                    Image(systemName: chrome.glyph)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                        .accessibilityIdentifier(glyphIdentifier)
+                } else {
+                    Text(chrome.glyph)
+                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .foregroundStyle(AppTheme.ink)
+                        .accessibilityIdentifier(glyphIdentifier)
+                }
+
+                Text(chrome.title)
+                    .font(AppTheme.bodyFont(size: 24, weight: .bold))
+                    .foregroundStyle(AppTheme.ink)
+                    .accessibilityIdentifier(titleIdentifier)
+
+                Spacer(minLength: 0)
+
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AppTheme.ink)
+                        .frame(width: 36, height: 36)
+                        .background(AppTheme.surface)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier(closeIdentifier)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(AppTheme.surface)
-            .overlay(
-                Rectangle()
-                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-            )
-            .retroHardShadow()
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 16)
+
+            ThinDivider()
+                .padding(.horizontal, 20)
+
+            content()
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .background(AppTheme.surface)
         .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("SecondarySheetPanel")
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
 private struct MeetingNotesDrawer: View {
-    let meeting: Meeting
     let initialText: String
     let onClose: () -> Void
     let onTextChange: (String) -> Void
@@ -972,12 +998,10 @@ private struct MeetingNotesDrawer: View {
     @State private var draft: String
 
     init(
-        meeting: Meeting,
         initialText: String,
         onClose: @escaping () -> Void,
         onTextChange: @escaping (String) -> Void
     ) {
-        self.meeting = meeting
         self.initialText = initialText
         self.onClose = onClose
         self.onTextChange = onTextChange
@@ -985,73 +1009,53 @@ private struct MeetingNotesDrawer: View {
     }
 
     var body: some View {
-        ZStack {
-            AppGlassBackdrop()
-
-            VStack(spacing: 0) {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 6) {
-                            Text(AppStrings.current.myNotes)
-                                .font(AppTheme.bodyFont(size: 22, weight: .bold))
-                                .foregroundStyle(AppTheme.ink)
-
-                            Text(AppStrings.current.notesMergeHint)
-                                .font(AppTheme.bodyFont(size: 13))
-                                .foregroundStyle(AppTheme.subtleInk)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .accessibilityIdentifier("MeetingNotesMergeHint")
-                        }
-
-                        Spacer(minLength: 0)
-
-                        Button(action: onClose) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 12, weight: .bold))
-                                .foregroundStyle(AppTheme.ink)
-                                .frame(width: 36, height: 36)
-                                .background(AppTheme.surface)
-                                .overlay(
-                                    Rectangle()
-                                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityIdentifier("MeetingNotesDrawerCloseButton")
-                    }
-
-                    ThinDivider()
-                }
-                .padding(20)
-
-                ScrollView(showsIndicators: false) {
-                    NoteEditorView(
-                        text: $draft,
-                        showsHeader: false,
-                        title: AppStrings.current.notes,
-                        placeholder: AppStrings.current.writeHere,
-                        minHeight: 320,
-                        usesBodyStyle: true,
-                        accessibilityIdentifier: "MeetingNotesEditor"
-                    )
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 36)
-                }
-                .scrollDismissesKeyboard(.interactively)
+        MeetingDetailSurfaceSheet(
+            chrome: MeetingDetailChrome.sheet(for: .notes),
+            accessibilityIdentifier: "MeetingNotesDrawer",
+            glyphIdentifier: "MeetingNotesDrawerGlyph",
+            titleIdentifier: "MeetingNotesDrawerTitle",
+            closeIdentifier: "MeetingNotesDrawerCloseButton",
+            onClose: onClose
+        ) {
+            ScrollView(showsIndicators: false) {
+                NoteEditorView(
+                    text: $draft,
+                    showsHeader: false,
+                    title: AppStrings.current.notes,
+                    placeholder: AppStrings.current.writeHere,
+                    minHeight: 320,
+                    usesBodyStyle: true,
+                    accessibilityIdentifier: "MeetingNotesEditor"
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 36)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(AppTheme.surface)
-            .softCard()
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
+            .scrollDismissesKeyboard(.interactively)
         }
         .presentationDetents([.fraction(0.55), .large])
         .presentationDragIndicator(.hidden)
-        .presentationBackground(.clear)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("MeetingNotesDrawer")
+        .presentationBackground(AppTheme.surface)
         .onChange(of: draft) { _, newValue in
             onTextChange(newValue)
+        }
+    }
+}
+
+private struct MeetingChatSheet<Content: View>: View {
+    let onClose: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        MeetingDetailSurfaceSheet(
+            chrome: MeetingDetailChrome.sheet(for: .chat),
+            accessibilityIdentifier: "MeetingChatSheet",
+            glyphIdentifier: "MeetingChatSheetGlyph",
+            titleIdentifier: "MeetingChatSheetTitle",
+            closeIdentifier: "MeetingChatSheetCloseButton",
+            onClose: onClose
+        ) {
+            content()
         }
     }
 }
@@ -1089,19 +1093,6 @@ private struct MarkdownEditorSheetScaffold<Content: View>: View {
         .presentationBackground(.clear)
         .presentationDragIndicator(.hidden)
         .edgeSwipeToDismiss(onDismiss: onCancel)
-    }
-}
-
-private struct SheetHeaderBar: View {
-    let title: String
-    let onDone: () -> Void
-
-    var body: some View {
-        ZStack {
-            RetroTitleBar(label: title, showCloseBox: true, onClose: onDone)
-        }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("SecondarySheetHeaderBar")
     }
 }
 
