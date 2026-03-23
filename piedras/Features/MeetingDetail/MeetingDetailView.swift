@@ -17,8 +17,6 @@ private enum MeetingDetailMode: String, CaseIterable, Identifiable {
 }
 
 private enum MeetingDetailSheet: String, Identifiable {
-    case titleEditor
-    case rawNotes
     case enhancedNotesEditor
     case chat
 
@@ -77,12 +75,16 @@ struct MeetingDetailView: View {
     @State private var toastTask: Task<Void, Never>?
     @State private var showsRecordingModeDialog = false
     @State private var isImportingSourceAudio = false
+    @State private var showsNotesDrawer = false
+    @State private var showsTitleRenameDialog = false
     @State private var activeSheet: MeetingDetailSheet?
     @State private var showsActionMenu = false
     @State private var titleDraft = ""
+    @State private var currentTitleOverride: String?
+    @State private var currentNotesOverride: String?
     @State private var enhancedNotesDraft = ""
     @State private var toastMessage: String?
-    @FocusState private var isTitleEditorFocused: Bool
+    @FocusState private var isTitleRenameFocused: Bool
 
     private let topAnchorID = "MeetingDetailTopAnchor"
     private let actionMenuTopInset: CGFloat = 70
@@ -147,7 +149,7 @@ struct MeetingDetailView: View {
 
             if let toastMessage {
                 Text(toastMessage)
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.surface)
                     .padding(.horizontal, 14)
                     .frame(height: 36)
@@ -164,11 +166,16 @@ struct MeetingDetailView: View {
         .toolbar(.hidden, for: .navigationBar)
         .background(InteractivePopGestureEnabler())
         .safeAreaInset(edge: .bottom) {
-            bottomDock(for: meeting)
+            bottomStack(for: meeting)
         }
         .overlay {
             if showsActionMenu {
                 actionMenuOverlay(meeting: meeting)
+            }
+        }
+        .overlay {
+            if showsTitleRenameDialog {
+                titleRenameOverlay(meeting: meeting)
             }
         }
         .confirmationDialog(AppStrings.current.chooseRecordingMode, isPresented: $showsRecordingModeDialog, titleVisibility: .visible) {
@@ -195,6 +202,20 @@ struct MeetingDetailView: View {
         }
         .sheet(item: $activeSheet) { sheet in
             sheetView(for: sheet)
+        }
+        .sheet(isPresented: $showsNotesDrawer) {
+            if let meeting = meetingStore.meeting(withID: meetingID) {
+                MeetingNotesDrawer(
+                    meeting: meeting,
+                    initialText: currentNotesText(for: meeting),
+                    onClose: {
+                        closeNotesDrawer(for: meeting)
+                    },
+                    onTextChange: { newValue in
+                        scheduleNoteSave(newValue, for: meeting)
+                    }
+                )
+            }
         }
     }
 
@@ -245,30 +266,52 @@ struct MeetingDetailView: View {
     }
 
     private func titleBlock(meeting: Meeting) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(meeting.displayTitle)
-                .font(.system(size: 28, weight: .bold, design: .monospaced))
-                .foregroundStyle(AppTheme.ink)
-                .fixedSize(horizontal: false, vertical: true)
+        Button {
+            openTitleRenameDialog(for: meeting)
+        } label: {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Text(displayTitle(for: meeting))
+                        .font(AppTheme.bodyFont(size: 28, weight: .bold))
+                        .foregroundStyle(AppTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("MeetingDetailTitleText")
 
-            VStack(alignment: .leading, spacing: 8) {
-                Text(metaLine(for: meeting))
-                    .font(.system(size: 14, weight: .regular, design: .monospaced))
-                    .foregroundStyle(AppTheme.subtleInk)
+                    Spacer(minLength: 0)
 
-                if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
-                    HStack(spacing: 7) {
-                        Rectangle()
-                            .fill(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
-                            .frame(width: 6, height: 6)
+                    Image(systemName: "pencil")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppTheme.subtleInk)
+                        .frame(width: 28, height: 28)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                        )
+                }
 
-                        Text(recordingSessionStore.asrState == .connected ? AppStrings.current.liveTranscription : AppStrings.current.reconnecting)
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
-                            .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(metaLine(for: meeting))
+                        .font(AppTheme.dataFont(size: 14))
+                        .foregroundStyle(AppTheme.subtleInk)
+
+                    if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
+                        HStack(spacing: 7) {
+                            Rectangle()
+                                .fill(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
+                                .frame(width: 6, height: 6)
+
+                            Text(recordingSessionStore.asrState == .connected ? AppStrings.current.liveTranscription : AppStrings.current.reconnecting)
+                                .font(.system(size: 11, weight: .bold, design: .monospaced))
+                                .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
+                        }
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("MeetingDetailTitleButton")
     }
 
     private func actionMenuOverlay(meeting: Meeting) -> some View {
@@ -295,7 +338,7 @@ struct MeetingDetailView: View {
     private func documentPage(meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if selectedMode == .summary {
-                RetroDivider()
+                ThinDivider()
             }
 
             Group {
@@ -324,8 +367,8 @@ struct MeetingDetailView: View {
                         selectedMode = mode
                     }
                 } label: {
-                    Text(mode.title.uppercased())
-                        .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    Text(mode.title)
+                        .font(AppTheme.bodyFont(size: 13, weight: .semibold))
                         .foregroundStyle(selectedMode == mode ? AppTheme.surface : AppTheme.ink)
                         .frame(maxWidth: .infinity)
                         .frame(height: 36)
@@ -342,6 +385,20 @@ struct MeetingDetailView: View {
     }
 
     @ViewBuilder
+    private func bottomStack(for meeting: Meeting) -> some View {
+        VStack(spacing: 10) {
+            if selectedMode == .transcript {
+                notesTeaser()
+                    .padding(.horizontal, 20)
+            }
+
+            bottomDock(for: meeting)
+        }
+        .padding(.top, selectedMode == .transcript ? 8 : 0)
+        .padding(.bottom, 12)
+    }
+
+    @ViewBuilder
     private func bottomDock(for meeting: Meeting) -> some View {
         if recordingSessionStore.phase != .idle {
             RecordingControlBar(
@@ -351,13 +408,9 @@ struct MeetingDetailView: View {
                 }
             )
             .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
         } else if selectedMode == .transcript, let filePath = meeting.audioLocalPath {
             AudioPlaybackBar(filePath: filePath)
                 .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
         } else if selectedMode == .summary {
             Button {
                 activeSheet = .chat
@@ -367,7 +420,7 @@ struct MeetingDetailView: View {
                         .font(.system(size: 13, weight: .bold))
 
                     Text(AppStrings.current.chatWithNote)
-                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .font(AppTheme.bodyFont(size: 15, weight: .semibold))
                 }
                 .foregroundStyle(AppTheme.ink)
                 .frame(maxWidth: .infinity)
@@ -382,8 +435,6 @@ struct MeetingDetailView: View {
             .buttonStyle(.plain)
             .accessibilityIdentifier("MeetingAskButton")
             .padding(.horizontal, 20)
-            .padding(.top, 8)
-            .padding(.bottom, 12)
         }
     }
 
@@ -391,47 +442,6 @@ struct MeetingDetailView: View {
     private func sheetView(for sheet: MeetingDetailSheet) -> some View {
         if let meeting = meetingStore.meeting(withID: meetingID) {
             switch sheet {
-            case .titleEditor:
-                DocumentSheetScaffold(title: AppStrings.current.editTitle, onDone: {
-                    isTitleEditorFocused = false
-                    hideKeyboard()
-                    meetingStore.updateTitle(titleDraft, for: meeting)
-                    activeSheet = nil
-                }) {
-                    VStack(alignment: .leading, spacing: 18) {
-                        TextField(AppStrings.current.untitledNote, text: $titleDraft, axis: .vertical)
-                            .textFieldStyle(.plain)
-                            .font(.system(size: 28, weight: .bold, design: .monospaced))
-                            .foregroundStyle(AppTheme.ink)
-                            .focused($isTitleEditorFocused)
-                            .lineLimit(3, reservesSpace: false)
-
-                        RetroDivider()
-
-                        Text(metaLine(for: meeting))
-                            .font(.system(size: 13, weight: .regular, design: .monospaced))
-                            .foregroundStyle(AppTheme.subtleInk)
-                    }
-                    .dismissKeyboardOnTap(isFocused: $isTitleEditorFocused)
-                }
-
-            case .rawNotes:
-                DocumentSheetScaffold(title: AppStrings.current.myNotes, onDone: {
-                    meetingStore.updateNotes(meeting.userNotesPlainText, for: meeting)
-                    activeSheet = nil
-                }) {
-                    NoteEditorView(
-                        text: Binding(
-                            get: { meeting.userNotesPlainText },
-                            set: { scheduleNoteSave($0, for: meeting) }
-                        ),
-                        showsHeader: false,
-                        title: AppStrings.current.notes,
-                        placeholder: AppStrings.current.writeHere,
-                        minHeight: 520
-                    )
-                }
-
             case .enhancedNotesEditor:
                 MarkdownEditorSheetScaffold(
                     onCancel: {
@@ -490,7 +500,7 @@ struct MeetingDetailView: View {
                             .frame(width: 18)
 
                         Text(item.title)
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                            .font(AppTheme.bodyFont(size: 14, weight: .semibold))
                             .foregroundStyle(AppTheme.ink)
 
                         Spacer(minLength: 0)
@@ -505,7 +515,7 @@ struct MeetingDetailView: View {
                 .accessibilityIdentifier(item.accessibilityIdentifier)
 
                 if index < items.count - 1 {
-                    RetroDivider()
+                    ThinDivider()
                         .padding(.horizontal, 12)
                 }
             }
@@ -524,16 +534,9 @@ struct MeetingDetailView: View {
         switch selectedMode {
         case .summary:
             return [
-                MeetingActionItem(title: AppStrings.current.editTitle, systemName: "pencil", accessibilityIdentifier: "MeetingDetailActionEditTitle") {
-                    openTitleEditor(for: meeting)
-                },
                 MeetingActionItem(title: AppStrings.current.editAINotes, systemName: "square.and.pencil", accessibilityIdentifier: "MeetingDetailActionEditAINotes") {
                     closeActionMenu()
                     openEnhancedNotesEditor(for: meeting)
-                },
-                MeetingActionItem(title: AppStrings.current.showMyNotes, systemName: "square.and.pencil", accessibilityIdentifier: "MeetingDetailActionShowMyNotes") {
-                    closeActionMenu()
-                    activeSheet = .rawNotes
                 },
                 MeetingActionItem(title: AppStrings.current.copyNotes, systemName: "doc.on.doc", accessibilityIdentifier: "MeetingDetailActionCopyNotes") {
                     copyCurrentContent(for: meeting)
@@ -542,16 +545,9 @@ struct MeetingDetailView: View {
 
         case .transcript:
             var items = [
-                MeetingActionItem(title: AppStrings.current.editTitle, systemName: "pencil", accessibilityIdentifier: "MeetingDetailActionEditTitle") {
-                    openTitleEditor(for: meeting)
-                },
                 MeetingActionItem(title: AppStrings.current.viewAINotes, systemName: "sparkles", accessibilityIdentifier: "MeetingDetailActionViewAINotes") {
                     closeActionMenu()
                     selectedMode = .summary
-                },
-                MeetingActionItem(title: AppStrings.current.showMyNotes, systemName: "square.and.pencil", accessibilityIdentifier: "MeetingDetailActionShowMyNotes") {
-                    closeActionMenu()
-                    activeSheet = .rawNotes
                 },
                 MeetingActionItem(title: AppStrings.current.copyTranscript, systemName: "doc.on.doc", accessibilityIdentifier: "MeetingDetailActionCopyTranscript") {
                     copyCurrentContent(for: meeting)
@@ -578,10 +574,13 @@ struct MeetingDetailView: View {
         max(560, UIScreen.main.bounds.height * 0.66)
     }
 
-    private func openTitleEditor(for meeting: Meeting) {
-        titleDraft = meeting.title
+    private func openTitleRenameDialog(for meeting: Meeting) {
+        titleDraft = currentRawTitle(for: meeting)
         closeActionMenu()
-        activeSheet = .titleEditor
+        showsTitleRenameDialog = true
+        Task { @MainActor in
+            isTitleRenameFocused = true
+        }
     }
 
     private func openEnhancedNotesEditor(for meeting: Meeting) {
@@ -648,6 +647,7 @@ struct MeetingDetailView: View {
 
     private func scheduleNoteSave(_ newValue: String, for meeting: Meeting) {
         noteSaveTask?.cancel()
+        currentNotesOverride = newValue
         meeting.userNotesPlainText = newValue
         noteSaveTask = Task { @MainActor in
             try? await Task.sleep(for: .seconds(1.5))
@@ -670,6 +670,26 @@ struct MeetingDetailView: View {
             !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    private func closeTitleRenameDialog() {
+        isTitleRenameFocused = false
+        hideKeyboard()
+        showsTitleRenameDialog = false
+    }
+
+    private func commitTitleRename(for meeting: Meeting) {
+        let normalized = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        currentTitleOverride = normalized
+        meetingStore.updateTitle(normalized, for: meeting)
+        closeTitleRenameDialog()
+    }
+
+    private func closeNotesDrawer(for meeting: Meeting) {
+        noteSaveTask?.cancel()
+        let currentNotes = currentNotesText(for: meeting)
+        meetingStore.updateNotes(currentNotes, for: meeting)
+        showsNotesDrawer = false
+    }
+
     private func metaLine(for meeting: Meeting) -> String {
         let date = meeting.date.formatted(.dateTime.month(.wide).day().year())
         let duration = meeting.durationSeconds > 0 ? "\(meeting.durationLabel) \(AppStrings.current.recording_suffix)" : AppStrings.current.notRecordedYet
@@ -678,12 +698,12 @@ struct MeetingDetailView: View {
 
     private func contentBottomPadding(for meeting: Meeting) -> CGFloat {
         if recordingSessionStore.phase != .idle {
-            return 210
+            return selectedMode == .transcript ? 296 : 210
         }
 
         switch selectedMode {
         case .transcript:
-            return meeting.audioLocalPath == nil ? 64 : 176
+            return meeting.audioLocalPath == nil ? 152 : 264
         case .summary:
             return 132
         }
@@ -698,13 +718,13 @@ struct MeetingDetailView: View {
                     .frame(width: 6, height: 6)
 
                 Text(status.displayMessage)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 11, weight: .semibold))
                     .foregroundStyle(status.canRetry ? AppTheme.danger : AppTheme.highlight)
             }
 
             if let errorMessage = status.errorMessage, !errorMessage.isEmpty {
                 Text(errorMessage)
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 12))
                     .foregroundStyle(AppTheme.subtleInk)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -713,7 +733,7 @@ struct MeetingDetailView: View {
                         await meetingStore.retryFileTranscription(meetingID: meetingID)
                     }
                 }
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 12, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("MeetingRetryTranscriptionButton")
@@ -750,6 +770,143 @@ struct MeetingDetailView: View {
                 Rectangle()
                     .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
             )
+    }
+
+    private func notesTeaser() -> some View {
+        Button {
+            closeActionMenu()
+            showsNotesDrawer = true
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "square.and.pencil")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(AppTheme.mutedInk)
+                    .frame(width: 22, height: 22)
+
+                Text(AppStrings.current.myNotes)
+                    .font(AppTheme.bodyFont(size: 16, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+
+                Spacer(minLength: 0)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppTheme.highlight)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .frame(height: 54)
+            .background(AppTheme.surface)
+            .softCard()
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("MeetingTranscriptNotesTeaser")
+    }
+
+    private func displayTitle(for meeting: Meeting) -> String {
+        let trimmed = currentRawTitle(for: meeting).trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? AppStrings.current.untitledMeeting : trimmed
+    }
+
+    private func currentRawTitle(for meeting: Meeting) -> String {
+        currentTitleOverride ?? meeting.title
+    }
+
+    private func currentNotesText(for meeting: Meeting) -> String {
+        currentNotesOverride ?? meeting.userNotesPlainText
+    }
+
+    private func titleRenameOverlay(meeting: Meeting) -> some View {
+        ZStack {
+            Rectangle()
+                .fill(Color.black.opacity(0.2))
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    closeTitleRenameDialog()
+                }
+
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(AppStrings.current.editTitle)
+                        .font(AppTheme.bodyFont(size: 20, weight: .bold))
+                        .foregroundStyle(AppTheme.ink)
+
+                    Text(AppStrings.current.renameTitlePrompt)
+                        .font(AppTheme.bodyFont(size: 14))
+                        .foregroundStyle(AppTheme.subtleInk)
+                }
+
+                TextField(AppStrings.current.untitledNote, text: $titleDraft)
+                    .textFieldStyle(.plain)
+                    .font(AppTheme.bodyFont(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .padding(.horizontal, 14)
+                    .frame(height: 50)
+                    .background(AppTheme.surface)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                    )
+                    .focused($isTitleRenameFocused)
+                    .onSubmit {
+                        commitTitleRename(for: meeting)
+                    }
+                    .accessibilityIdentifier("TitleRenameField")
+
+                HStack(spacing: 12) {
+                    titleDialogButton(
+                        title: AppStrings.current.cancel,
+                        foreground: AppTheme.subtleInk,
+                        border: AppTheme.subtleBorderColor,
+                        lineWidth: AppTheme.subtleBorderWidth
+                    ) {
+                        closeTitleRenameDialog()
+                    }
+                    .accessibilityIdentifier("TitleRenameCancelButton")
+
+                    titleDialogButton(
+                        title: AppStrings.current.save,
+                        foreground: AppTheme.ink,
+                        border: AppTheme.border,
+                        lineWidth: AppTheme.retroBorderWidth
+                    ) {
+                        commitTitleRename(for: meeting)
+                    }
+                    .accessibilityIdentifier("TitleRenameSaveButton")
+                }
+            }
+            .padding(20)
+            .frame(maxWidth: 360, alignment: .leading)
+            .background(AppTheme.surface)
+            .softCard()
+            .padding(.horizontal, 24)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("TitleRenameDialog")
+        }
+    }
+
+    private func titleDialogButton(
+        title: String,
+        foreground: Color,
+        border: Color,
+        lineWidth: CGFloat,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(AppTheme.bodyFont(size: 15, weight: .semibold))
+                .foregroundStyle(foreground)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(border, lineWidth: lineWidth)
+                )
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -803,6 +960,99 @@ private struct SecondarySheetPanel<Content: View>: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("SecondarySheetPanel")
+    }
+}
+
+private struct MeetingNotesDrawer: View {
+    let meeting: Meeting
+    let initialText: String
+    let onClose: () -> Void
+    let onTextChange: (String) -> Void
+
+    @State private var draft: String
+
+    init(
+        meeting: Meeting,
+        initialText: String,
+        onClose: @escaping () -> Void,
+        onTextChange: @escaping (String) -> Void
+    ) {
+        self.meeting = meeting
+        self.initialText = initialText
+        self.onClose = onClose
+        self.onTextChange = onTextChange
+        _draft = State(initialValue: initialText)
+    }
+
+    var body: some View {
+        ZStack {
+            AppGlassBackdrop()
+
+            VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(AppStrings.current.myNotes)
+                                .font(AppTheme.bodyFont(size: 22, weight: .bold))
+                                .foregroundStyle(AppTheme.ink)
+
+                            Text(AppStrings.current.notesMergeHint)
+                                .font(AppTheme.bodyFont(size: 13))
+                                .foregroundStyle(AppTheme.subtleInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .accessibilityIdentifier("MeetingNotesMergeHint")
+                        }
+
+                        Spacer(minLength: 0)
+
+                        Button(action: onClose) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(AppTheme.ink)
+                                .frame(width: 36, height: 36)
+                                .background(AppTheme.surface)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityIdentifier("MeetingNotesDrawerCloseButton")
+                    }
+
+                    ThinDivider()
+                }
+                .padding(20)
+
+                ScrollView(showsIndicators: false) {
+                    NoteEditorView(
+                        text: $draft,
+                        showsHeader: false,
+                        title: AppStrings.current.notes,
+                        placeholder: AppStrings.current.writeHere,
+                        minHeight: 320,
+                        usesBodyStyle: true,
+                        accessibilityIdentifier: "MeetingNotesEditor"
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 36)
+                }
+                .scrollDismissesKeyboard(.interactively)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(AppTheme.surface)
+            .softCard()
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+        }
+        .presentationDetents([.fraction(0.55), .large])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.clear)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("MeetingNotesDrawer")
+        .onChange(of: draft) { _, newValue in
+            onTextChange(newValue)
+        }
     }
 }
 
@@ -865,7 +1115,7 @@ private struct SheetActionHeaderBar: View {
                 Button(AppStrings.current.cancel) {
                     onCancel()
                 }
-                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 16, weight: .semibold))
                 .foregroundStyle(AppTheme.highlight)
                 .accessibilityIdentifier("EnhancedNotesEditorCancelButton")
 
@@ -874,7 +1124,7 @@ private struct SheetActionHeaderBar: View {
                 Button(AppStrings.current.save) {
                     onSave()
                 }
-                .font(.system(size: 16, weight: .bold, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 16, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
                 .accessibilityIdentifier("EnhancedNotesEditorSaveButton")
             }

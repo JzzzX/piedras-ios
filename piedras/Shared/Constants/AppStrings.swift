@@ -62,6 +62,10 @@ struct AppStringTable {
     var myNotes: String { isChinese ? "我的笔记" : "My notes" }
     var writeHere: String { isChinese ? "在此书写。" : "Write here." }
     var writeMarkdownHere: String { isChinese ? "在此写 Markdown。" : "Write markdown here." }
+    var renameTitlePrompt: String { isChinese ? "输入新的笔记标题" : "Enter a new title for the note" }
+    var notesTeaserEmpty: String { isChinese ? "记下想法，会并入 AI 笔记" : "Capture thoughts to blend into AI notes" }
+    var notesTeaserContinue: String { isChinese ? "继续记录你的想法" : "Keep writing your thoughts" }
+    var notesMergeHint: String { isChinese ? "这些随手笔记会在下次生成或刷新 AI 笔记时并入。" : "These notes will be blended into AI Notes the next time you generate or refresh them." }
     var notRecordedYet: String { isChinese ? "未录音" : "Not recorded yet" }
     var recording_suffix: String { isChinese ? "录音" : "recording" }
     var back: String { isChinese ? "返回" : "Back" }

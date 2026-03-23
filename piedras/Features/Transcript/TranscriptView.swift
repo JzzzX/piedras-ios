@@ -40,7 +40,7 @@ struct TranscriptView: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Text(sentence.timeLabel)
-                    .font(.system(size: 11, weight: .bold, design: .monospaced))
+                    .font(AppTheme.dataFont(size: 11, weight: .bold))
                     .foregroundStyle(AppTheme.subtleInk)
                     .accessibilityIdentifier("TranscriptTimestamp")
 
@@ -50,13 +50,13 @@ struct TranscriptView: View {
                         .frame(width: 4, height: 4)
 
                     Text("LIVE")
-                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .font(AppTheme.dataFont(size: 11, weight: .bold))
                         .foregroundStyle(AppTheme.highlight)
                 }
             }
 
             Text(sentence.text)
-                .font(.system(size: 16, weight: .regular, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 16))
                 .lineSpacing(AppTheme.editorialBodyLineSpacing)
                 .foregroundStyle(AppTheme.ink.opacity(sentence.isLive ? 0.84 : 1))
                 .fixedSize(horizontal: false, vertical: true)

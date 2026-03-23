@@ -128,7 +128,7 @@ struct MeetingListView: View {
                         }
                     } header: {
                         Text(section.title.uppercased())
-                            .font(.system(size: 12, weight: .bold, design: .monospaced))
+                            .font(AppTheme.bodyFont(size: 12, weight: .semibold))
                             .foregroundStyle(AppTheme.subtleInk)
                             .textCase(nil)
                     }
@@ -149,11 +149,11 @@ struct MeetingListView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(AppStrings.current.noNotesYet)
-                    .font(.system(size: 20, weight: .bold, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 20, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
 
                 Text(AppStrings.current.tapMicToCapture)
-                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 13))
                     .foregroundStyle(AppTheme.subtleInk)
             }
         }
@@ -162,10 +162,9 @@ struct MeetingListView: View {
         .background(AppTheme.surface)
         .overlay(
             Rectangle()
-                .stroke(style: StrokeStyle(lineWidth: 2, dash: [8, 4]))
-                .foregroundStyle(AppTheme.border)
+                .stroke(style: StrokeStyle(lineWidth: AppTheme.subtleBorderWidth, dash: [8, 4]))
+                .foregroundStyle(AppTheme.subtleBorderColor)
         )
-        .retroHardShadow()
     }
 
     private var bottomDock: some View {
@@ -198,14 +197,14 @@ struct MeetingListView: View {
             )
 
             Rectangle()
-                .fill(AppTheme.border)
-                .frame(width: AppTheme.retroBorderWidth, height: 28)
+                .fill(AppTheme.subtleBorderColor)
+                .frame(width: AppTheme.subtleBorderWidth, height: 28)
 
             recordingButton(size: 58)
 
             Rectangle()
-                .fill(AppTheme.border)
-                .frame(width: AppTheme.retroBorderWidth, height: 28)
+                .fill(AppTheme.subtleBorderColor)
+                .frame(width: AppTheme.subtleBorderWidth, height: 28)
 
             HStack(spacing: 10) {
                 Image(systemName: "bubble.left.and.text.bubble.right")
@@ -214,7 +213,7 @@ struct MeetingListView: View {
 
                 TextField(AppStrings.current.chatWithNotes, text: $homeChatInput)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 14, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 14))
                     .foregroundStyle(AppTheme.ink)
                     .focused($isHomeChatFocused)
                     .submitLabel(.send)
@@ -244,12 +243,11 @@ struct MeetingListView: View {
         .background(
             Rectangle()
                 .fill(AppTheme.dockSurface)
-                .shadow(color: AppTheme.border.opacity(0.18), radius: 12, x: 0, y: -4)
-                .shadow(color: AppTheme.border.opacity(0.18), radius: 12, x: 0, y: 4)
+                .shadow(color: AppTheme.border.opacity(0.08), radius: 10, x: 0, y: 3)
         )
         .overlay(
             Rectangle()
-                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
         )
     }
 
@@ -334,6 +332,7 @@ struct MeetingListView: View {
                 .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
         )
         .retroHardShadow()
+        .accessibilityIdentifier("HomeErrorBanner")
     }
 
     // MARK: - Data

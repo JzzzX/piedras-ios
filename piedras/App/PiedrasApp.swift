@@ -3,8 +3,10 @@ import SwiftUI
 
 @main
 struct PiedrasApp: App {
+    private static let isXCTestRuntime = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+
     @State private var appContainer = AppContainer(
-        inMemory: ProcessInfo.processInfo.arguments.contains("UITEST_IN_MEMORY")
+        inMemory: Self.isXCTestRuntime || ProcessInfo.processInfo.arguments.contains("UITEST_IN_MEMORY")
     )
 
     var body: some Scene {

@@ -1,6 +1,11 @@
 import SwiftUI
 import UIKit
 
+enum EditorialDocumentEditorStyle {
+    case editorial
+    case body
+}
+
 struct EditorialDocumentEditor: View {
     @Binding var text: String
 
@@ -8,6 +13,7 @@ struct EditorialDocumentEditor: View {
     var minHeight: CGFloat = 320
     var fontSize: CGFloat = 17
     var lineSpacing: CGFloat = AppTheme.editorialBodyLineSpacing
+    var style: EditorialDocumentEditorStyle = .editorial
     var autocapitalization: UITextAutocapitalizationType = .sentences
     var usesSmartDashes = true
     var usesSmartQuotes = true
@@ -17,7 +23,7 @@ struct EditorialDocumentEditor: View {
         ZStack(alignment: .topLeading) {
             if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 Text(placeholder)
-                    .font(AppTheme.editorialFont(size: fontSize))
+                    .font(swiftUIFont)
                     .foregroundStyle(AppTheme.subtleInk)
                     .allowsHitTesting(false)
                     .padding(.top, 2)
@@ -25,7 +31,7 @@ struct EditorialDocumentEditor: View {
 
             EditorialTextView(
                 text: $text,
-                font: AppTheme.editorialUIFont(size: fontSize, weight: .regular),
+                font: uiFont,
                 textColor: UIColor(AppTheme.ink),
                 tintColor: UIColor(AppTheme.accent),
                 lineSpacing: lineSpacing,
@@ -36,6 +42,24 @@ struct EditorialDocumentEditor: View {
             )
         }
         .frame(minHeight: minHeight, alignment: .topLeading)
+    }
+
+    private var swiftUIFont: Font {
+        switch style {
+        case .editorial:
+            return AppTheme.editorialFont(size: fontSize)
+        case .body:
+            return AppTheme.bodyFont(size: fontSize)
+        }
+    }
+
+    private var uiFont: UIFont {
+        switch style {
+        case .editorial:
+            return AppTheme.editorialUIFont(size: fontSize, weight: .regular)
+        case .body:
+            return AppTheme.bodyUIFont(size: fontSize, weight: .regular)
+        }
     }
 }
 
@@ -72,6 +96,7 @@ private struct EditorialTextView: UIViewRepresentable {
         textView.smartQuotesType = usesSmartQuotes ? .yes : .no
         textView.tintColor = tintColor
         textView.accessibilityIdentifier = accessibilityIdentifier
+        textView.accessibilityValue = text
         applyStyle(to: textView, text: text)
         return textView
     }
@@ -82,6 +107,7 @@ private struct EditorialTextView: UIViewRepresentable {
         textView.smartDashesType = usesSmartDashes ? .yes : .no
         textView.smartQuotesType = usesSmartQuotes ? .yes : .no
         textView.accessibilityIdentifier = accessibilityIdentifier
+        textView.accessibilityValue = text
 
         guard textView.text != text || textView.font != font else {
             textView.typingAttributes = typingAttributes
@@ -107,6 +133,7 @@ private struct EditorialTextView: UIViewRepresentable {
             attributes: typingAttributes
         )
         textView.typingAttributes = typingAttributes
+        textView.accessibilityValue = text
     }
 
     private var typingAttributes: [NSAttributedString.Key: Any] {

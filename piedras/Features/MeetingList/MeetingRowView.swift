@@ -28,7 +28,7 @@ struct MeetingRowView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 10) {
                         Text(snapshot.title)
-                            .font(.system(size: 16, weight: .bold, design: .monospaced))
+                            .font(AppTheme.bodyFont(size: 16, weight: .semibold))
                             .foregroundStyle(AppTheme.ink)
                             .lineLimit(2)
 
@@ -44,7 +44,7 @@ struct MeetingRowView: View {
                     }
 
                     Text(snapshot.metadataLine)
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        .font(AppTheme.dataFont(size: 12))
                         .foregroundStyle(AppTheme.subtleInk)
                         .lineLimit(1)
                 }
@@ -52,15 +52,10 @@ struct MeetingRowView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppTheme.surface)
-            .overlay(
-                Rectangle()
-                    .stroke(
-                        snapshot.isRecording ? AppTheme.highlight : AppTheme.border,
-                        lineWidth: AppTheme.retroBorderWidth
-                    )
+            .softCard(
+                borderColor: snapshot.isRecording ? AppTheme.highlight : AppTheme.subtleBorderColor,
+                lineWidth: snapshot.isRecording ? 1.5 : AppTheme.subtleBorderWidth
             )
-            .retroHardShadow()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -69,7 +64,7 @@ struct MeetingRowView: View {
 
     private var leadingIcon: some View {
         ZStack(alignment: .topTrailing) {
-            RetroIconBadge(systemName: "doc.text", size: 44, symbolSize: 16)
+            RetroIconBadge(systemName: "doc.text", size: AppTheme.compactIconSize, symbolSize: 12)
 
             if snapshot.isRecording {
                 Rectangle()

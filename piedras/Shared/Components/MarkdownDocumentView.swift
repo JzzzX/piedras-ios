@@ -23,7 +23,7 @@ struct MarkdownDocumentView: View {
                 }
             } else {
                 Text(placeholder)
-                    .font(AppTheme.editorialFont(size: 17))
+                    .font(AppTheme.bodyFont(size: 17))
                     .foregroundStyle(AppTheme.subtleInk)
                     .padding(.top, 2)
             }
@@ -39,7 +39,7 @@ struct MarkdownDocumentView: View {
         switch block.kind {
         case let .heading(level):
             Text(block.attributedText)
-                .font(level <= 1 ? AppTheme.editorialEmphasisFont(size: 24) : AppTheme.editorialEmphasisFont(size: 20))
+                .font(level <= 1 ? AppTheme.bodyFont(size: 24, weight: .bold) : AppTheme.bodyFont(size: 20, weight: .bold))
                 .foregroundStyle(AppTheme.ink)
                 .padding(.top, level <= 1 ? 4 : 2)
                 .padding(.bottom, 2)
@@ -47,7 +47,7 @@ struct MarkdownDocumentView: View {
 
         case .paragraph:
             Text(block.attributedText)
-                .font(AppTheme.editorialFont(size: 15))
+                .font(AppTheme.bodyFont(size: 15))
                 .lineSpacing(AppTheme.editorialBodyLineSpacing)
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
@@ -60,7 +60,7 @@ struct MarkdownDocumentView: View {
                     .padding(.top, 7)
 
                 Text(block.attributedText)
-                    .font(AppTheme.editorialFont(size: 15))
+                    .font(AppTheme.bodyFont(size: 15))
                     .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -79,7 +79,7 @@ struct MarkdownDocumentView: View {
                     .padding(.top, 3)
 
                 Text(block.attributedText)
-                    .font(AppTheme.editorialFont(size: 15))
+                    .font(AppTheme.bodyFont(size: 15))
                     .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,7 +93,7 @@ struct MarkdownDocumentView: View {
                     .frame(width: 3)
 
                 Text(block.attributedText)
-                    .font(AppTheme.editorialFont(size: 14))
+                    .font(AppTheme.bodyFont(size: 14))
                     .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.mutedInk)
                     .frame(maxWidth: .infinity, alignment: .leading)

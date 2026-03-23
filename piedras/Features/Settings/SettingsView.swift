@@ -15,39 +15,27 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     header
 
-                    // Language picker
-                    VStack(spacing: 0) {
-                        RetroTitleBar(label: AppStrings.current.languageLabel)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel(title: AppStrings.current.languageLabel)
 
                         VStack(spacing: 12) {
                             languagePicker
                         }
                         .padding(16)
+                        .softCard()
                     }
-                    .background(AppTheme.surface)
-                    .overlay(
-                        Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                    )
-                    .retroHardShadow()
 
-                    // About section
-                    VStack(spacing: 0) {
-                        RetroTitleBar(label: AppStrings.current.about)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel(title: AppStrings.current.about)
 
                         VStack(spacing: 0) {
                             aboutRow(title: AppStrings.current.version, value: AppEnvironment.versionDescription)
-                            RetroDivider(inset: 0)
+                            ThinDivider(inset: 0)
                             aboutRow(title: AppStrings.current.serviceMode, value: settingsStore.serviceModeLabel)
                         }
                         .padding(16)
+                        .softCard()
                     }
-                    .background(AppTheme.surface)
-                    .overlay(
-                        Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                    )
-                    .retroHardShadow()
 
                     // Developer mode navigation
                     NavigationLink(destination: DeveloperSettingsView()) {
@@ -56,11 +44,11 @@ struct SettingsView: View {
 
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(AppStrings.current.developerMode)
-                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .font(AppTheme.bodyFont(size: 14, weight: .semibold))
                                     .foregroundStyle(AppTheme.ink)
 
                                 Text(AppStrings.current.developerDiagnostics)
-                                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                    .font(AppTheme.bodyFont(size: 12))
                                     .foregroundStyle(AppTheme.subtleInk)
                             }
 
@@ -71,12 +59,7 @@ struct SettingsView: View {
                                 .foregroundStyle(AppTheme.subtleInk)
                         }
                         .padding(16)
-                        .background(AppTheme.surface)
-                        .overlay(
-                            Rectangle()
-                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                        )
-                        .retroHardShadow()
+                        .softCard()
                     }
                     .buttonStyle(.plain)
                 }
@@ -92,7 +75,7 @@ struct SettingsView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.current.settingsTitle)
-                    .font(.system(size: 28, weight: .bold, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 28, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
             }
 
@@ -115,7 +98,7 @@ struct SettingsView: View {
                     }
                 } label: {
                     Text(lang.displayName)
-                        .font(.system(size: 15, weight: .bold, design: .monospaced))
+                        .font(AppTheme.bodyFont(size: 15, weight: .semibold))
                         .foregroundStyle(settingsStore.appLanguage == lang ? AppTheme.surface : AppTheme.ink)
                         .frame(maxWidth: .infinity)
                         .frame(height: 40)
@@ -126,20 +109,20 @@ struct SettingsView: View {
         }
         .overlay(
             Rectangle()
-                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
         )
     }
 
     private func aboutRow(title: String, value: String) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 14, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
 
             Spacer()
 
             Text(value)
-                .font(.system(size: 13, weight: .regular, design: .monospaced))
+                .font(AppTheme.dataFont(size: 13))
                 .foregroundStyle(AppTheme.subtleInk)
                 .multilineTextAlignment(.trailing)
         }

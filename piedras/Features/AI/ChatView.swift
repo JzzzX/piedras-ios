@@ -61,13 +61,13 @@ struct ChatView: View {
                 HStack(spacing: 4) {
                     RetroBlinkingCursor()
                     Text(AppStrings.current.processing)
-                        .font(.system(size: 14, weight: .regular, design: .monospaced))
+                        .font(AppTheme.bodyFont(size: 14))
                         .foregroundStyle(AppTheme.subtleInk)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
                 Text(message.content)
-                    .font(.system(size: 16, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 16))
                     .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,7 +86,7 @@ struct ChatView: View {
 
                 TextField(AppStrings.current.chatWithNote, text: $input)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 15, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 15))
                     .foregroundStyle(AppTheme.ink)
                     .focused($isInputFocused)
                     .submitLabel(.send)

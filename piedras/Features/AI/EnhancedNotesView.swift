@@ -33,7 +33,7 @@ struct EnhancedNotesView: View {
 
                 HStack(spacing: 4) {
                     Text(AppStrings.current.generatingNotesShort)
-                        .font(.system(size: 14, weight: .regular, design: .monospaced))
+                        .font(AppTheme.bodyFont(size: 14))
                         .foregroundStyle(AppTheme.ink)
 
                     RetroBlinkingCursor()

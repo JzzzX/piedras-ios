@@ -280,7 +280,7 @@ struct TranscriptAudioControlBar: View {
 
                 if let error = playbackController.errorMessage, !error.isEmpty {
                     Text(error)
-                        .font(.system(size: 12, weight: .regular, design: .monospaced))
+                        .font(AppTheme.bodyFont(size: 12))
                         .foregroundStyle(AppTheme.danger)
                 }
             }

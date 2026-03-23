@@ -104,11 +104,29 @@ enum AppTheme {
         UIFont.monospacedSystemFont(ofSize: size, weight: weight)
     }
 
+    /// System sans-serif body font for natural language content.
+    static func bodyFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .default)
+    }
+
+    /// Monospaced font for timestamps, versions, and technical data.
+    static func dataFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .monospaced)
+    }
+
+    /// UIKit bridge for natural language content.
+    static func bodyUIFont(size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+        UIFont.systemFont(ofSize: size, weight: weight)
+    }
+
     // ── Retro Dimensions ──────────────────────────────────────────
     static let retroBorderWidth: CGFloat = 2
     static let retroCornerRadius: CGFloat = 0
     static let retroShadowOffset: CGFloat = 4
     static let retroTitleBarHeight: CGFloat = 24
+    static let subtleBorderWidth: CGFloat = 1
+    static let subtleBorderColor: Color = Color(hex: 0x111111).opacity(0.13)
+    static let compactIconSize: CGFloat = 32
 }
 
 // MARK: - Color Hex Initializer
@@ -154,6 +172,14 @@ extension View {
         ))
     }
 
+    func softCard(
+        fill: Color = AppTheme.surface,
+        borderColor: Color = AppTheme.subtleBorderColor,
+        lineWidth: CGFloat = AppTheme.subtleBorderWidth
+    ) -> some View {
+        modifier(SoftCardModifier(fill: fill, borderColor: borderColor, lineWidth: lineWidth))
+    }
+
     /// Hard pixel-perfect drop shadow that does NOT ghost text.
     /// Uses a background offset rectangle instead of `.shadow()`.
     func retroHardShadow(
@@ -166,6 +192,21 @@ extension View {
                 .fill(color)
                 .offset(x: x, y: y)
         }
+    }
+}
+
+struct SoftCardModifier: ViewModifier {
+    var fill: Color = AppTheme.surface
+    var borderColor: Color = AppTheme.subtleBorderColor
+    var lineWidth: CGFloat = AppTheme.subtleBorderWidth
+
+    func body(content: Content) -> some View {
+        content
+            .background(fill)
+            .overlay(
+                Rectangle()
+                    .stroke(borderColor, lineWidth: lineWidth)
+            )
     }
 }
 
@@ -378,6 +419,29 @@ struct RetroDivider: View {
             .fill(AppTheme.border)
             .frame(height: AppTheme.retroBorderWidth)
             .padding(.leading, inset)
+    }
+}
+
+struct ThinDivider: View {
+    var inset: CGFloat = 0
+
+    var body: some View {
+        Rectangle()
+            .fill(AppTheme.subtleBorderColor)
+            .frame(height: AppTheme.subtleBorderWidth)
+            .padding(.leading, inset)
+    }
+}
+
+struct SectionLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title.uppercased())
+            .font(AppTheme.bodyFont(size: 12, weight: .semibold))
+            .foregroundStyle(AppTheme.subtleInk)
+            .tracking(0.6)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

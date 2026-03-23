@@ -135,10 +135,10 @@ final class RecordingFlowUITests: XCTestCase {
         moreButton.tap()
 
         XCTAssertTrue(app.otherElements["MeetingDetailActionMenu"].waitForExistence(timeout: 2), "详情页操作菜单未出现。")
-        XCTAssertTrue(app.buttons["MeetingDetailActionEditTitle"].exists, "缺少 Edit title 动作。")
         XCTAssertTrue(app.buttons["MeetingDetailActionEditAINotes"].exists, "缺少 Edit AI notes 动作。")
-        XCTAssertTrue(app.buttons["MeetingDetailActionShowMyNotes"].exists, "缺少 Show my notes 动作。")
         XCTAssertTrue(app.buttons["MeetingDetailActionCopyNotes"].exists, "缺少 Copy notes 动作。")
+        XCTAssertFalse(app.buttons["MeetingDetailActionEditTitle"].exists, "Edit title 不应再出现在菜单里。")
+        XCTAssertFalse(app.buttons["MeetingDetailActionShowMyNotes"].exists, "Show my notes 不应再出现在菜单里。")
         XCTAssertFalse(app.buttons["MeetingDetailActionViewAINotes"].exists, "AI Notes 菜单不应再出现 View AI notes。")
 
         app.buttons["MeetingDetailActionEditAINotes"].tap()
@@ -148,6 +148,40 @@ final class RecordingFlowUITests: XCTestCase {
 
         app.buttons["EnhancedNotesEditorCancelButton"].tap()
         XCTAssertTrue(app.otherElements["EnhancedNotesRenderedView"].waitForExistence(timeout: 3), "取消后应返回渲染态 AI Notes。")
+    }
+
+    @MainActor
+    func testMeetingDetailSummaryTitleRenamesFromInlineDialog() throws {
+        let app = launchApp()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        app.buttons["MeetingModeSummaryTab"].tap()
+
+        let titleTrigger = app.buttons["MeetingDetailTitleButton"]
+        XCTAssertTrue(titleTrigger.waitForExistence(timeout: 3), "AI Notes 页标题区域应支持直接改名。")
+        let initialTitle = app.staticTexts["MeetingDetailTitleText"].label
+        titleTrigger.tap()
+
+        XCTAssertTrue(app.otherElements["TitleRenameDialog"].waitForExistence(timeout: 3), "点击标题后应打开轻量重命名弹窗。")
+
+        let field = app.textFields["TitleRenameField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 2), "重命名弹窗缺少输入框。")
+        field.tap()
+        field.typeText(" Draft")
+
+        let saveButton = app.buttons["TitleRenameSaveButton"]
+        XCTAssertTrue(saveButton.exists, "重命名弹窗缺少保存按钮。")
+        saveButton.tap()
+
+        let updatedTitle = app.staticTexts["MeetingDetailTitleText"]
+        XCTAssertTrue(updatedTitle.waitForExistence(timeout: 3), "保存后标题文本应继续存在。")
+        let titleUpdated = NSPredicate(format: "label CONTAINS %@ AND label != %@", "Draft", initialTitle)
+        expectation(for: titleUpdated, evaluatedWith: updatedTitle)
+        waitForExpectations(timeout: 3)
+        XCTAssertFalse(app.otherElements["TitleRenameDialog"].exists, "保存后弹窗应关闭。")
     }
 
     @MainActor
@@ -179,23 +213,42 @@ final class RecordingFlowUITests: XCTestCase {
     }
 
     @MainActor
-    func testMyNotesSheetUsesSecondarySheetChrome() throws {
+    func testTranscriptNotesTeaserOpensDrawerAndPersistsDraft() throws {
         let app = launchApp()
 
         let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
         XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
         firstRow.tap()
 
-        let moreButton = app.buttons["MeetingDetailMoreButton"]
-        XCTAssertTrue(moreButton.waitForExistence(timeout: 5), "详情页更多按钮未出现。")
-        moreButton.tap()
+        let transcriptTab = app.buttons["MeetingModeTranscriptTab"]
+        XCTAssertTrue(transcriptTab.waitForExistence(timeout: 3), "详情页未正常打开。")
+        transcriptTab.tap()
 
-        let showMyNotesButton = app.buttons["MeetingDetailActionShowMyNotes"]
-        XCTAssertTrue(showMyNotesButton.waitForExistence(timeout: 2), "缺少 Show my notes 动作。")
-        showMyNotesButton.tap()
+        let teaser = app.buttons["MeetingTranscriptNotesTeaser"]
+        XCTAssertTrue(teaser.waitForExistence(timeout: 3), "Transcript 页应显示我的笔记预览入口。")
+        teaser.tap()
 
-        XCTAssertTrue(app.otherElements["SecondarySheetPanel"].waitForExistence(timeout: 3), "我的笔记页应显示统一矩形面板。")
-        XCTAssertTrue(app.otherElements["SecondarySheetHeaderBar"].exists, "我的笔记页应显示统一顶部标题栏。")
+        let drawer = app.otherElements["MeetingNotesDrawer"]
+        XCTAssertTrue(drawer.waitForExistence(timeout: 3), "点击 teaser 后应打开半屏笔记抽屉。")
+        XCTAssertTrue(app.staticTexts["MeetingNotesMergeHint"].exists, "抽屉里应提示笔记会并入 AI Notes。")
+
+        let editor = app.textViews["MeetingNotesEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 2), "笔记抽屉缺少输入框。")
+        editor.tap()
+        editor.typeText("temp note")
+
+        let closeButton = app.buttons["MeetingNotesDrawerCloseButton"]
+        XCTAssertTrue(closeButton.exists, "笔记抽屉缺少关闭按钮。")
+        closeButton.tap()
+
+        XCTAssertFalse(drawer.exists, "关闭后抽屉应消失。")
+
+        teaser.tap()
+        XCTAssertTrue(drawer.waitForExistence(timeout: 3), "再次点击 teaser 应能重新打开抽屉。")
+        XCTAssertTrue(editor.waitForExistence(timeout: 2), "再次打开后输入框应仍存在。")
+        let editorRetainsDraft = NSPredicate(format: "value CONTAINS %@", "temp note")
+        expectation(for: editorRetainsDraft, evaluatedWith: editor)
+        waitForExpectations(timeout: 3)
     }
 
     private func launchApp() -> XCUIApplication {

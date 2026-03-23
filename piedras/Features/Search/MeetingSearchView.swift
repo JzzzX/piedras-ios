@@ -48,11 +48,11 @@ struct MeetingSearchView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.current.search)
-                    .font(.system(size: 28, weight: .bold, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 28, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
 
                 Text(AppStrings.current.notes)
-                    .font(.system(size: 14, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 14))
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
@@ -71,7 +71,7 @@ struct MeetingSearchView: View {
 
             TextField(AppStrings.current.searchNotesAndTranscript, text: $query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 15, weight: .regular, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 15))
                 .foregroundStyle(AppTheme.ink)
                 .focused($isSearchFocused)
 
@@ -99,7 +99,7 @@ struct MeetingSearchView: View {
         .background(AppTheme.surface)
         .overlay(
             Rectangle()
-                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
         )
     }
 
@@ -110,17 +110,12 @@ struct MeetingSearchView: View {
                 .foregroundStyle(AppTheme.subtleInk)
 
             Text(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? AppStrings.current.startTyping : AppStrings.current.noMatch)
-                .font(.system(size: 15, weight: .regular, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 15))
                 .foregroundStyle(AppTheme.mutedInk)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.surface)
-        .overlay(
-            Rectangle()
-                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-        )
-        .retroHardShadow()
+        .softCard()
     }
 
     private var searchResults: [Meeting] {

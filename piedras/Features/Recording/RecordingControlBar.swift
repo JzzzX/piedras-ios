@@ -81,6 +81,7 @@ struct RecordingControlBar: View {
                         .accessibilityIdentifier("PauseRecordingButton")
                 }
                 .buttonStyle(.plain)
+                .disabled(recordingSessionStore.phase == .stopping)
                 .accessibilityElement(children: .ignore)
                 .accessibilityIdentifier("PauseRecordingButton")
 
@@ -105,13 +106,14 @@ struct RecordingControlBar: View {
                         .accessibilityIdentifier("StopRecordingButton")
                 }
                 .buttonStyle(.plain)
+                .disabled(recordingSessionStore.phase == .stopping)
                 .accessibilityElement(children: .ignore)
                 .accessibilityIdentifier("StopRecordingButton")
             }
 
             if let info = currentBannerMessage {
                 Text(info)
-                    .font(.system(size: 12, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 12))
                     .foregroundStyle(AppTheme.subtleInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -129,7 +131,7 @@ struct RecordingControlBar: View {
                 .foregroundStyle(AppTheme.highlight)
 
             Text(AppStrings.current.anotherMeetingRecording)
-                .font(.system(size: 13, weight: .regular, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 13))
                 .foregroundStyle(AppTheme.subtleInk)
 
             Spacer()
@@ -142,7 +144,7 @@ struct RecordingControlBar: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(meeting.audioLocalPath == nil ? AppStrings.current.ready : AppStrings.current.resume)
-                    .font(.system(size: 17, weight: .bold, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 17, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
 
                 Text(meeting.durationLabel)
@@ -191,7 +193,7 @@ struct RecordingControlBar: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(recordingSessionStore.sourceAudioDisplayName ?? AppStrings.current.source)
-                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 13, weight: .semibold))
                     .foregroundStyle(AppTheme.ink)
                     .lineLimit(1)
 

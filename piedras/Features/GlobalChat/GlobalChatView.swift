@@ -86,11 +86,11 @@ struct GlobalChatView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.current.ask)
-                    .font(.system(size: 28, weight: .bold, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 28, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
 
                 Text(AppStrings.current.allNotes)
-                    .font(.system(size: 14, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 14))
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
@@ -113,7 +113,7 @@ struct GlobalChatView: View {
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(AppStrings.current.askFromTranscript)
-                .font(.system(size: 15, weight: .regular, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 15))
                 .foregroundStyle(AppTheme.mutedInk)
 
             HStack(spacing: 10) {
@@ -123,12 +123,7 @@ struct GlobalChatView: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.surface)
-        .overlay(
-            Rectangle()
-                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-        )
-        .retroHardShadow()
+        .softCard()
     }
 
     private var messageList: some View {
@@ -158,12 +153,13 @@ struct GlobalChatView: View {
                 HStack(spacing: 4) {
                     RetroBlinkingCursor()
                     Text(AppStrings.current.processing)
-                        .font(.system(size: 14, weight: .regular, design: .monospaced))
+                        .font(AppTheme.bodyFont(size: 14))
                         .foregroundStyle(AppTheme.subtleInk)
                 }
             } else {
                 Text(message.content)
-                    .font(.system(size: 15, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 15))
+                    .lineSpacing(AppTheme.editorialBodyLineSpacing)
                     .foregroundStyle(isUser ? .white : AppTheme.ink)
                     .textSelection(.enabled)
             }
@@ -182,7 +178,7 @@ struct GlobalChatView: View {
             input = text
         } label: {
             Text(text)
-                .font(.system(size: 12, weight: .bold, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 12, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -205,7 +201,7 @@ struct GlobalChatView: View {
 
                 TextField(AppStrings.current.askAcrossMeetings, text: $input)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 15, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 15))
                     .foregroundStyle(AppTheme.ink)
                     .focused($isInputFocused)
                     .submitLabel(.send)
@@ -248,7 +244,7 @@ struct GlobalChatView: View {
                 .foregroundStyle(AppTheme.subtleInk)
 
             Text(message)
-                .font(.system(size: 13, weight: .regular, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 13))
                 .foregroundStyle(AppTheme.mutedInk)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -256,7 +252,7 @@ struct GlobalChatView: View {
                 router.showSettings()
             }
             .buttonStyle(.plain)
-            .font(.system(size: 13, weight: .bold, design: .monospaced))
+            .font(AppTheme.bodyFont(size: 13, weight: .semibold))
             .foregroundStyle(AppTheme.ink)
         }
         .padding(.horizontal, 14)
@@ -271,7 +267,7 @@ struct GlobalChatView: View {
 
     private func errorBanner(_ message: String) -> some View {
         Text(message)
-            .font(.system(size: 13, weight: .regular, design: .monospaced))
+            .font(AppTheme.bodyFont(size: 13))
             .foregroundStyle(AppTheme.danger)
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)

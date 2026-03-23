@@ -4,6 +4,9 @@ struct DeveloperSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(MeetingStore.self) private var meetingStore
+    #if DEBUG
+    @State private var debugBackendDraft = ""
+    #endif
 
     var body: some View {
         ZStack {
@@ -13,39 +16,32 @@ struct DeveloperSettingsView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     header
 
-                    // General window
-                    VStack(spacing: 0) {
-                        RetroTitleBar(label: AppStrings.current.general)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel(title: AppStrings.current.general)
 
                         VStack(spacing: 0) {
                             settingsRow(systemName: "network", title: AppStrings.current.service, value: settingsStore.serviceModeLabel)
-                            RetroDivider(inset: 42)
+                            ThinDivider(inset: 42)
                             settingsRow(systemName: "mic.fill", title: AppStrings.current.recordingQuality, value: "16 kHz")
-                            RetroDivider(inset: 42)
+                            ThinDivider(inset: 42)
                             settingsRow(systemName: "internaldrive", title: AppStrings.current.storage, value: AppStrings.current.onDevice)
-                            RetroDivider(inset: 42)
+                            ThinDivider(inset: 42)
                             settingsRow(systemName: "app.badge", title: AppStrings.current.version, value: AppEnvironment.versionDescription)
                         }
                         .padding(16)
+                        .softCard()
                     }
-                    .background(AppTheme.surface)
-                    .overlay(
-                        Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                    )
-                    .retroHardShadow()
 
-                    // Cloud window
-                    VStack(spacing: 0) {
-                        RetroTitleBar(label: AppStrings.current.cloud)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel(title: AppStrings.current.cloud)
 
                         VStack(alignment: .leading, spacing: 12) {
                             Text(AppEnvironment.cloudName)
-                                .font(.system(size: 17, weight: .bold, design: .monospaced))
+                                .font(AppTheme.bodyFont(size: 17, weight: .semibold))
                                 .foregroundStyle(AppTheme.ink)
 
                             Text(settingsStore.backendDisplayURLString)
-                                .font(.system(size: 13, weight: .regular, design: .monospaced))
+                                .font(AppTheme.dataFont(size: 13))
                                 .foregroundStyle(AppTheme.subtleInk)
                                 .textSelection(.enabled)
 
@@ -55,7 +51,7 @@ struct DeveloperSettingsView: View {
                                 }
                             } label: {
                                 Text(settingsStore.isCheckingHealth ? AppStrings.current.checking : AppStrings.current.refreshStatus)
-                                    .font(.system(size: 14, weight: .bold, design: .monospaced))
+                                    .font(AppTheme.bodyFont(size: 14, weight: .semibold))
                                     .foregroundStyle(settingsStore.isCheckingHealth ? AppTheme.subtleInk : AppTheme.surface)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 42)
@@ -70,50 +66,77 @@ struct DeveloperSettingsView: View {
                             .disabled(settingsStore.isCheckingHealth)
 
                             Text(cloudHelpText)
-                                .font(.system(size: 12, weight: .regular, design: .monospaced))
+                                .font(AppTheme.bodyFont(size: 12))
                                 .foregroundStyle(AppTheme.subtleInk)
 
                             #if DEBUG
-                            if settingsStore.isUsingDebugBackendOverride {
-                                Button(AppStrings.current.useCloudDefault) {
-                                    settingsStore.clearDebugBackendOverride()
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Debug backend override")
+                                    .font(AppTheme.bodyFont(size: 12, weight: .semibold))
+                                    .foregroundStyle(AppTheme.subtleInk)
+
+                                TextField("https://api.example.com", text: $debugBackendDraft)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .keyboardType(.URL)
+                                    .font(AppTheme.dataFont(size: 13))
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 40)
+                                    .background(AppTheme.surface)
+                                    .overlay(
+                                        Rectangle()
+                                            .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                                    )
+
+                                HStack(spacing: 10) {
+                                    Button("应用地址") {
+                                        settingsStore.applyDebugBackendOverride(debugBackendDraft)
+                                        Task {
+                                            await meetingStore.checkBackendHealth(force: true)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .font(AppTheme.bodyFont(size: 13, weight: .semibold))
+                                    .foregroundStyle(AppTheme.ink)
+
+                                    if settingsStore.isUsingDebugBackendOverride {
+                                        Button(AppStrings.current.useCloudDefault) {
+                                            debugBackendDraft = AppEnvironment.productionBackendBaseURLString
+                                            settingsStore.clearDebugBackendOverride()
+                                        }
+                                        .buttonStyle(.plain)
+                                        .font(AppTheme.bodyFont(size: 13, weight: .semibold))
+                                        .foregroundStyle(AppTheme.ink)
+                                    }
                                 }
-                                .buttonStyle(.plain)
-                                .font(.system(size: 13, weight: .bold, design: .monospaced))
-                                .foregroundStyle(AppTheme.ink)
+                            }
+
+                            if settingsStore.isUsingDebugBackendOverride {
+                                Text("Using override: \(settingsStore.backendDisplayURLString)")
+                                    .font(AppTheme.dataFont(size: 12))
+                                    .foregroundStyle(AppTheme.subtleInk)
                             }
                             #endif
                         }
                         .padding(16)
+                        .softCard()
                     }
-                    .background(AppTheme.surface)
-                    .overlay(
-                        Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                    )
-                    .retroHardShadow()
 
-                    // Status window
-                    VStack(spacing: 0) {
-                        RetroTitleBar(label: AppStrings.current.status)
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel(title: AppStrings.current.status)
 
                         VStack(spacing: 0) {
                             statusRow(title: AppStrings.current.backend, value: backendStateLabel)
-                            RetroDivider()
+                            ThinDivider()
                             statusRow(title: AppStrings.current.asr, value: asrStateLabel)
-                            RetroDivider()
+                            ThinDivider()
                             statusRow(title: AppStrings.current.ai, value: llmStateLabel)
-                            RetroDivider()
+                            ThinDivider()
                             statusRow(title: AppStrings.current.sync, value: syncValue)
                         }
                         .padding(16)
+                        .softCard()
                     }
-                    .background(AppTheme.surface)
-                    .overlay(
-                        Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                    )
-                    .retroHardShadow()
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -122,6 +145,13 @@ struct DeveloperSettingsView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .task {
+            #if DEBUG
+            if debugBackendDraft.isEmpty {
+                debugBackendDraft = settingsStore.isUsingDebugBackendOverride
+                    ? settingsStore.debugBackendBaseURLString
+                    : AppEnvironment.productionBackendBaseURLString
+            }
+            #endif
             await meetingStore.checkBackendHealth(force: false)
         }
     }
@@ -130,11 +160,11 @@ struct DeveloperSettingsView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.current.devSettingsTitle)
-                    .font(.system(size: 28, weight: .bold, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 28, weight: .bold))
                     .foregroundStyle(AppTheme.ink)
 
                 Text(AppStrings.current.developerDiagnostics)
-                    .font(.system(size: 13, weight: .regular, design: .monospaced))
+                    .font(AppTheme.bodyFont(size: 13))
                     .foregroundStyle(AppTheme.subtleInk)
             }
 
@@ -151,13 +181,13 @@ struct DeveloperSettingsView: View {
             RetroIconBadge(systemName: systemName, size: 28, symbolSize: 11)
 
             Text(title)
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 14, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
 
             Spacer()
 
             Text(value)
-                .font(.system(size: 13, weight: .regular, design: .monospaced))
+                .font(AppTheme.dataFont(size: 13))
                 .foregroundStyle(AppTheme.subtleInk)
                 .multilineTextAlignment(.trailing)
         }
@@ -167,13 +197,13 @@ struct DeveloperSettingsView: View {
     private func statusRow(title: String, value: String) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 14, weight: .bold, design: .monospaced))
+                .font(AppTheme.bodyFont(size: 14, weight: .semibold))
                 .foregroundStyle(AppTheme.ink)
 
             Spacer()
 
             Text(value)
-                .font(.system(size: 13, weight: .regular, design: .monospaced))
+                .font(AppTheme.dataFont(size: 13))
                 .foregroundStyle(AppTheme.subtleInk)
                 .multilineTextAlignment(.trailing)
         }

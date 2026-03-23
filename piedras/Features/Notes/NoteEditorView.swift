@@ -6,6 +6,8 @@ struct NoteEditorView: View {
     var title = "Notes"
     var placeholder = "Write here."
     var minHeight: CGFloat = 260
+    var usesBodyStyle = false
+    var accessibilityIdentifier: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -16,7 +18,7 @@ struct NoteEditorView: View {
                         .foregroundStyle(AppTheme.mutedInk)
 
                     Text(title)
-                        .font(AppTheme.editorialEmphasisFont(size: 20))
+                        .font(usesBodyStyle ? AppTheme.bodyFont(size: 20, weight: .bold) : AppTheme.editorialEmphasisFont(size: 20))
                         .foregroundStyle(AppTheme.ink)
 
                     Spacer()
@@ -28,7 +30,9 @@ struct NoteEditorView: View {
                     text: $text,
                     placeholder: placeholder,
                     minHeight: minHeight,
-                    fontSize: 17
+                    fontSize: 17,
+                    style: usesBodyStyle ? .body : .editorial,
+                    accessibilityIdentifier: accessibilityIdentifier
                 )
             }
         }

@@ -74,6 +74,7 @@ struct AppGlassCard<Content: View>: View {
     var style: AppGlassStyle = .regular
     var padding: CGFloat = 20
     var shadowOpacity: Double = 1.0
+    var subtle = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -83,11 +84,14 @@ struct AppGlassCard<Content: View>: View {
             .background(AppTheme.surface)
             .overlay(
                 Rectangle()
-                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                    .stroke(
+                        subtle ? AppTheme.subtleBorderColor : AppTheme.border,
+                        lineWidth: subtle ? AppTheme.subtleBorderWidth : AppTheme.retroBorderWidth
+                    )
             )
             .retroHardShadow(
-                x: shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0,
-                y: shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0
+                x: !subtle && shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0,
+                y: !subtle && shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0
             )
     }
 }
@@ -148,6 +152,7 @@ struct PaperCard<Content: View>: View {
     var border: Color = AppTheme.border
     var padding: CGFloat = 18
     var shadowOpacity: Double = 1.0
+    var subtle = false
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -157,11 +162,14 @@ struct PaperCard<Content: View>: View {
             .background(fill)
             .overlay(
                 Rectangle()
-                    .stroke(border, lineWidth: AppTheme.retroBorderWidth)
+                    .stroke(
+                        subtle ? AppTheme.subtleBorderColor : border,
+                        lineWidth: subtle ? AppTheme.subtleBorderWidth : AppTheme.retroBorderWidth
+                    )
             )
             .retroHardShadow(
-                x: shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0,
-                y: shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0
+                x: !subtle && shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0,
+                y: !subtle && shadowOpacity > 0.05 ? AppTheme.retroShadowOffset : 0
             )
     }
 }
@@ -210,7 +218,7 @@ struct AppGlassCircleButton: View {
                     )
 
                 Image(systemName: systemName)
-                    .font(.system(size: 17, weight: .bold, design: .monospaced))
+                    .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(prominent ? AppTheme.surface : AppTheme.ink)
             }
             .frame(width: size, height: size)
