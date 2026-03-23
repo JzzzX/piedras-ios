@@ -36,9 +36,7 @@ struct MeetingListView: View {
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
     @Environment(SettingsStore.self) private var settingsStore
 
-    @State private var homeChatInput = ""
     @State private var isImportingSourceAudio = false
-    @FocusState private var isHomeChatFocused: Bool
 
     var body: some View {
         ZStack {
@@ -52,7 +50,6 @@ struct MeetingListView: View {
                 feedList
             }
         }
-        .dismissKeyboardOnTap(isFocused: $isHomeChatFocused)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
             bottomDock
@@ -206,37 +203,7 @@ struct MeetingListView: View {
                 .fill(AppTheme.subtleBorderColor)
                 .frame(width: AppTheme.subtleBorderWidth, height: 28)
 
-            HStack(spacing: 10) {
-                Image(systemName: "bubble.left.and.text.bubble.right")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppTheme.subtleInk)
-
-                TextField(AppStrings.current.chatWithNotes, text: $homeChatInput)
-                    .textFieldStyle(.plain)
-                    .font(AppTheme.bodyFont(size: 14))
-                    .foregroundStyle(AppTheme.ink)
-                    .focused($isHomeChatFocused)
-                    .submitLabel(.send)
-                    .onSubmit(sendHomeQuestion)
-                    .accessibilityIdentifier("HomeGlobalChatField")
-
-                if !trimmedHomeChatInput.isEmpty {
-                    Button(action: sendHomeQuestion) {
-                        Image(systemName: "arrow.up")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(AppTheme.surface)
-                            .frame(width: 30, height: 30)
-                            .background(AppTheme.ink)
-                            .overlay(
-                                Rectangle()
-                                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("HomeGlobalChatSendButton")
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            homeChatLauncher
         }
         .padding(.horizontal, 16)
         .frame(height: 74)
@@ -249,6 +216,27 @@ struct MeetingListView: View {
             Rectangle()
                 .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
         )
+    }
+
+    private var homeChatLauncher: some View {
+        Button(action: openGlobalChat) {
+            HStack(spacing: 10) {
+                Image(systemName: "bubble.left.and.text.bubble.right")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(AppTheme.subtleInk)
+
+                Text(AppStrings.current.chatWithNotes)
+                    .font(AppTheme.bodyFont(size: 14))
+                    .foregroundStyle(AppTheme.subtleInk)
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(AppStrings.current.chatWithNotes)
+        .accessibilityIdentifier("HomeGlobalChatLauncher")
     }
 
     private func dockIconButton(
@@ -369,10 +357,6 @@ struct MeetingListView: View {
             .joined(separator: "|")
     }
 
-    private var trimmedHomeChatInput: String {
-        homeChatInput.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
     private func sectionBucket(for meeting: Meeting, calendar: Calendar) -> MeetingHomeBucket {
         if isMeetingProcessing(meeting) {
             return .processing
@@ -419,24 +403,14 @@ struct MeetingListView: View {
     }
 
     private func openUploadAudio() {
-        isHomeChatFocused = false
-        hideKeyboard()
         isImportingSourceAudio = true
     }
 
-    private func sendHomeQuestion() {
-        let question = trimmedHomeChatInput
-        guard !question.isEmpty else { return }
-
-        isHomeChatFocused = false
-        hideKeyboard()
-        homeChatInput = ""
-        router.showGlobalChat(initialQuestion: question)
+    private func openGlobalChat() {
+        router.showGlobalChat()
     }
 
     private func startMicrophoneRecording() {
-        isHomeChatFocused = false
-        hideKeyboard()
         guard let meeting = meetingStore.createMeeting() else { return }
         router.showMeeting(id: meeting.id)
         Task {
@@ -447,8 +421,6 @@ struct MeetingListView: View {
     private func handleSourceAudioSelection(_ result: Result<[URL], Error>) {
         switch result {
         case let .success(urls):
-            isHomeChatFocused = false
-            hideKeyboard()
             guard let sourceURL = urls.first else { return }
             guard let meeting = meetingStore.createMeeting() else { return }
             router.showMeeting(id: meeting.id)
