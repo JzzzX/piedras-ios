@@ -116,6 +116,26 @@ struct AppStringTable {
     var chatHistoryTitle: String { isChinese ? "历史对话" : "Chat History" }
     var chatHistoryDrawerEmpty: String { isChinese ? "暂无历史对话" : "No chat history" }
 
+    func chatHistoryCountSummary(_ count: Int) -> String {
+        let normalizedCount = max(count, 0)
+
+        if normalizedCount > 9 {
+            return isChinese ? "9 条以上" : "9 or more chats"
+        }
+
+        if isChinese {
+            return "\(normalizedCount) 条"
+        }
+
+        let noun = normalizedCount == 1 ? "chat" : "chats"
+        return "\(normalizedCount) \(noun)"
+    }
+
+    func chatHistoryButtonAccessibilityLabel(baseLabel: String, count: Int) -> String {
+        let separator = isChinese ? "，" : ", "
+        return "\(baseLabel)\(separator)\(chatHistoryCountSummary(count))"
+    }
+
     // ── ChatView ─────────────────────────────────────────────────
 
     var processing: String { isChinese ? "处理中..." : "Processing..." }

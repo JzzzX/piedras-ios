@@ -93,7 +93,7 @@ struct ChatView: View {
                 ZStack(alignment: .topTrailing) {
                     AppGlassCircleButton(
                         systemName: "clock.arrow.circlepath",
-                        accessibilityLabel: AppStrings.current.chatHistoryTitle,
+                        accessibilityLabel: historyButtonAccessibilityLabel,
                         size: 36
                     ) {
                         withAnimation(.easeOut(duration: 0.25)) {
@@ -102,7 +102,7 @@ struct ChatView: View {
                     }
                     .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
 
-                    SessionCountBadge(count: meetingStore.chatSessions(for: meeting.id).count)
+                    SessionCountBadge(count: historySessions.count)
                 }
             }
         }
@@ -192,11 +192,22 @@ struct ChatView: View {
     }
 
     private var historySections: [ChatSessionHistorySection] {
-        ChatSessionHistorySection.makeSections(from: meetingStore.chatSessions(for: meeting.id))
+        ChatSessionHistorySection.makeSections(from: historySessions)
     }
 
     private var currentMessages: [ChatMessage] {
         meetingStore.chatMessages(for: meeting.id)
+    }
+
+    private var historySessions: [ChatSession] {
+        meetingStore.chatSessions(for: meeting.id)
+    }
+
+    private var historyButtonAccessibilityLabel: String {
+        SessionCountBadge.historyButtonAccessibilityLabel(
+            baseLabel: AppStrings.current.chatHistoryTitle,
+            count: historySessions.count
+        )
     }
 
     private func sendCurrentInput() {

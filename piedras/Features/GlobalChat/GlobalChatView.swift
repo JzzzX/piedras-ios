@@ -125,7 +125,7 @@ struct GlobalChatView: View {
                 ZStack(alignment: .topTrailing) {
                     AppGlassCircleButton(
                         systemName: "clock.arrow.circlepath",
-                        accessibilityLabel: AppStrings.current.chatHistoryTitle,
+                        accessibilityLabel: historyButtonAccessibilityLabel,
                         size: 36
                     ) {
                         withAnimation(.easeOut(duration: 0.25)) {
@@ -134,7 +134,7 @@ struct GlobalChatView: View {
                     }
                     .disabled(globalChatStore.phase != .idle)
 
-                    SessionCountBadge(count: globalChatStore.sessions.count)
+                    SessionCountBadge(count: historySessionCount)
                 }
 
                 AppGlassCircleButton(
@@ -300,6 +300,17 @@ struct GlobalChatView: View {
         .overlay(
             Rectangle()
                 .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+    }
+
+    private var historySessionCount: Int {
+        globalChatStore.sessions.count
+    }
+
+    private var historyButtonAccessibilityLabel: String {
+        SessionCountBadge.historyButtonAccessibilityLabel(
+            baseLabel: AppStrings.current.chatHistoryTitle,
+            count: historySessionCount
         )
     }
 

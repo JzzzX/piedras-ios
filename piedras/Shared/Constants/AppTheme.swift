@@ -516,19 +516,52 @@ struct RetroSquareButton: View {
 
 // MARK: - Session Count Badge
 
-/// Small red badge showing a count, positioned at the top-right of its parent.
+/// Small built-in corner count indicator for history buttons.
 struct SessionCountBadge: View {
     let count: Int
 
     var body: some View {
-        if count > 0 {
-            Text("\(count)")
+        if let text = Self.displayText(for: count) {
+            Text(text)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 4)
+                .foregroundStyle(AppTheme.ink)
+                .padding(.horizontal, 3)
                 .frame(minWidth: 16, minHeight: 16)
-                .background(AppTheme.highlight)
+                .background(AppTheme.backgroundSecondary)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(AppTheme.border)
+                        .frame(width: AppTheme.retroBorderWidth)
+                }
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill(AppTheme.border)
+                        .frame(height: AppTheme.retroBorderWidth)
+                }
+                .padding(.top, 1)
+                .padding(.trailing, 1)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
+    }
+
+    static func displayText(for count: Int) -> String? {
+        let normalizedCount = max(count, 0)
+        guard normalizedCount > 0 else { return nil }
+
+        if normalizedCount > 9 {
+            return "9+"
+        }
+
+        return "\(normalizedCount)"
+    }
+
+    static func historyButtonAccessibilityLabel(
+        baseLabel: String,
+        count: Int,
+        strings: AppStringTable = AppStrings.current
+    ) -> String {
+        strings.chatHistoryButtonAccessibilityLabel(baseLabel: baseLabel, count: count)
     }
 }
 
