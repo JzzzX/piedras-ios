@@ -15,12 +15,15 @@ final class AppContainer {
     let audioRecorderService: AudioRecorderService
     let audioFileTranscriptionService: AudioFileTranscriptionService
     let meetingRepository: MeetingRepository
+    let chatSessionRepository: ChatSessionRepository
     let apiClient: APIClient
     let asrService: ASRService
     let workspaceBootstrapService: WorkspaceBootstrapService
     let meetingSyncService: MeetingSyncService
     let meetingStore: MeetingStore
     let globalChatStore: GlobalChatStore
+    let annotationRepository: AnnotationRepository
+    let annotationStore: AnnotationStore
 
     init(inMemory: Bool = false) {
         let processArguments = ProcessInfo.processInfo.arguments
@@ -51,6 +54,7 @@ final class AppContainer {
         audioSessionCoordinator = AudioSessionCoordinator()
         audioRecorderService = AudioRecorderService(sessionCoordinator: audioSessionCoordinator)
         meetingRepository = MeetingRepository(modelContext: modelContainer.mainContext)
+        chatSessionRepository = ChatSessionRepository(modelContext: modelContainer.mainContext)
         apiClient = APIClient(settingsStore: settingsStore)
         audioFileTranscriptionService = AudioFileTranscriptionService(apiClient: apiClient)
         asrService = ASRService(apiClient: apiClient)
@@ -65,6 +69,7 @@ final class AppContainer {
         )
         meetingStore = MeetingStore(
             repository: meetingRepository,
+            chatSessionRepository: chatSessionRepository,
             settingsStore: settingsStore,
             recordingSessionStore: recordingSessionStore,
             appActivityCoordinator: appActivityCoordinator,
@@ -78,8 +83,11 @@ final class AppContainer {
         globalChatStore = GlobalChatStore(
             apiClient: apiClient,
             settingsStore: settingsStore,
-            workspaceBootstrapService: workspaceBootstrapService
+            workspaceBootstrapService: workspaceBootstrapService,
+            chatSessionRepository: chatSessionRepository
         )
+        annotationRepository = AnnotationRepository(modelContext: modelContainer.mainContext)
+        annotationStore = AnnotationStore(repository: annotationRepository)
 
         if Self.isXCTestRuntime {
             Self.currentXCTestInstance = self

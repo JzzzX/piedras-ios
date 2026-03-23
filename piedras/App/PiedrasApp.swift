@@ -18,6 +18,7 @@ struct PiedrasApp: App {
                 .environment(appContainer.recordingSessionStore)
                 .environment(appContainer.meetingStore)
                 .environment(appContainer.globalChatStore)
+                .environment(appContainer.annotationStore)
         }
     }
 }

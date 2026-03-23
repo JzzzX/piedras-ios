@@ -1443,6 +1443,9 @@ final class MeetingStore {
         generatingTitleMeetingIDs.remove(meeting.id)
         streamingChatMeetingIDs.remove(meeting.id)
 
+        // Clean up annotation images on disk (SwiftData cascade handles the model)
+        AnnotationImageStorage.deleteAllAnnotations(meetingID: meeting.id)
+
         if selectedMeetingID == meeting.id {
             selectedMeetingID = nil
         }

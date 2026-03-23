@@ -8,6 +8,8 @@ enum ModelContainerFactory {
             Meeting.self,
             TranscriptSegment.self,
             ChatMessage.self,
+            ChatSession.self,
+            SegmentAnnotation.self,
         ])
 
         let configuration = ModelConfiguration(

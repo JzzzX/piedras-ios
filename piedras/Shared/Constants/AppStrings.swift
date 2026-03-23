@@ -120,6 +120,15 @@ struct AppStringTable {
 
     var processing: String { isChinese ? "处理中..." : "Processing..." }
 
+    // ── Transcript Annotations ────────────────────────────────────
+
+    var annotationAddComment: String { isChinese ? "添加评论" : "Add comment" }
+    var annotationTakePhoto: String { isChinese ? "拍照" : "Take photo" }
+    var annotationAddImage: String { isChinese ? "添加图片" : "Add image" }
+    var annotationCommentPlaceholder: String { isChinese ? "输入评论..." : "Write a comment..." }
+    var annotationDeleteImage: String { isChinese ? "删除图片" : "Delete image" }
+    var annotationDeleteAll: String { isChinese ? "删除标注" : "Delete annotation" }
+
     // ── EnhancedNotesView ────────────────────────────────────────
 
     var noAINotesYet: String { isChinese ? "暂无 AI 笔记。" : "No AI notes yet." }

@@ -13,6 +13,9 @@ final class TranscriptSegment {
     var confidence: Double?
     var meeting: Meeting?
 
+    @Relationship(deleteRule: .cascade, inverse: \SegmentAnnotation.segment)
+    var annotation: SegmentAnnotation?
+
     init(
         id: String = UUID().uuidString.lowercased(),
         speaker: String,

@@ -67,6 +67,7 @@ struct MeetingDetailView: View {
     @Environment(MeetingStore.self) private var meetingStore
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
     @Environment(SettingsStore.self) private var settingsStore
+    @Environment(AnnotationStore.self) private var annotationStore
 
     let meetingID: String
 
@@ -166,7 +167,9 @@ struct MeetingDetailView: View {
         .toolbar(.hidden, for: .navigationBar)
         .background(InteractivePopGestureEnabler())
         .safeAreaInset(edge: .bottom) {
-            bottomStack(for: meeting)
+            if annotationStore.activeSegmentID == nil {
+                bottomStack(for: meeting)
+            }
         }
         .overlay {
             if showsActionMenu {
@@ -676,6 +679,11 @@ struct MeetingDetailView: View {
     }
 
     private func contentBottomPadding(for meeting: Meeting) -> CGFloat {
+        // When annotation editor is active, bottom stack is hidden — minimal padding
+        if annotationStore.activeSegmentID != nil {
+            return 20
+        }
+
         if recordingSessionStore.phase != .idle {
             return selectedMode == .transcript ? 296 : 210
         }
