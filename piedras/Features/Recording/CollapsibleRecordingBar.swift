@@ -5,6 +5,7 @@ struct CollapsibleRecordingBar: View {
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
 
     let meeting: Meeting
+    var onRequestTranscriptDrawer: (() -> Void)? = nil
 
     @State private var isExpanded = false
 
@@ -87,6 +88,30 @@ struct CollapsibleRecordingBar: View {
                     .foregroundStyle(AppTheme.subtleInk)
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if let onRequestTranscriptDrawer {
+                HStack(spacing: 8) {
+                    Image(systemName: "text.justify.left")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(AppStrings.current.liveTranscriptHint)
+                        .font(AppTheme.bodyFont(size: 11))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(AppTheme.subtleInk)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .background(AppTheme.background.opacity(0.72))
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                )
+                .contentShape(Rectangle())
+                .onLongPressGesture(minimumDuration: 0.35, perform: onRequestTranscriptDrawer)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityLabel(AppStrings.current.liveTranscriptHint)
+                .accessibilityIdentifier("CollapsibleTranscriptDrawerTrigger")
             }
 
             // Control buttons

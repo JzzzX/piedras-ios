@@ -9,6 +9,11 @@ enum RecordingPhase: String {
     case stopping
 }
 
+enum RecordingPauseReason: String {
+    case user
+    case systemInterruption
+}
+
 enum ASRConnectionState: String {
     case idle
     case connecting
@@ -36,6 +41,7 @@ enum RecordingInputMode: String {
 final class RecordingSessionStore {
     var meetingID: String?
     var phase: RecordingPhase = .idle
+    var pauseReason: RecordingPauseReason?
     var inputMode: RecordingInputMode = .microphone
     var durationSeconds = 0
     var audioLevel: Double = 0
@@ -55,11 +61,15 @@ final class RecordingSessionStore {
     var sourceAudioCurrentTime: TimeInterval = 0
     var sourceAudioDuration: TimeInterval = 0
     var isSourceAudioPlaying = false
+    var backgroundTranscriptGapStartTimeMS: Double?
+    var backgroundTranscriptGapEndTimeMS: Double?
+    var isBackfillingBackgroundTranscript = false
     var needsTranscriptRepairAfterStop = false
 
     func reset() {
         meetingID = nil
         phase = .idle
+        pauseReason = nil
         inputMode = .microphone
         durationSeconds = 0
         audioLevel = 0
@@ -79,6 +89,9 @@ final class RecordingSessionStore {
         sourceAudioCurrentTime = 0
         sourceAudioDuration = 0
         isSourceAudioPlaying = false
+        backgroundTranscriptGapStartTimeMS = nil
+        backgroundTranscriptGapEndTimeMS = nil
+        isBackfillingBackgroundTranscript = false
         needsTranscriptRepairAfterStop = false
     }
 
@@ -109,6 +122,10 @@ final class RecordingSessionStore {
         self.sourceAudioCurrentTime = 0
         self.sourceAudioDuration = sourceAudioDuration
         isSourceAudioPlaying = false
+        pauseReason = nil
+        backgroundTranscriptGapStartTimeMS = nil
+        backgroundTranscriptGapEndTimeMS = nil
+        isBackfillingBackgroundTranscript = false
         needsTranscriptRepairAfterStop = false
     }
 
@@ -132,5 +149,30 @@ final class RecordingSessionStore {
 
     func markTranscriptCoverageGap() {
         needsTranscriptRepairAfterStop = true
+    }
+
+    var hasBackgroundTranscriptGap: Bool {
+        backgroundTranscriptGapStartTimeMS != nil
+    }
+
+    var isCapturingBackgroundTranscriptGapAudio: Bool {
+        backgroundTranscriptGapStartTimeMS != nil && backgroundTranscriptGapEndTimeMS == nil
+    }
+
+    func beginBackgroundTranscriptGap(at startTimeMS: Double) {
+        guard backgroundTranscriptGapStartTimeMS == nil else { return }
+        backgroundTranscriptGapStartTimeMS = max(0, startTimeMS)
+        backgroundTranscriptGapEndTimeMS = nil
+    }
+
+    func endBackgroundTranscriptGap(at endTimeMS: Double) {
+        guard let startTimeMS = backgroundTranscriptGapStartTimeMS else { return }
+        backgroundTranscriptGapEndTimeMS = max(endTimeMS, startTimeMS)
+    }
+
+    func clearBackgroundTranscriptGap() {
+        backgroundTranscriptGapStartTimeMS = nil
+        backgroundTranscriptGapEndTimeMS = nil
+        isBackfillingBackgroundTranscript = false
     }
 }

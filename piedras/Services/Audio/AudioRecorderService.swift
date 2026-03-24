@@ -21,12 +21,46 @@ struct RecordingStartArtifact {
     let sourceAudioDurationSeconds: Int
 }
 
+struct RecordingSnapshotArtifact {
+    let fileURL: URL
+    let mimeType: String
+    let durationSeconds: Int
+}
+
+enum AudioRecorderForegroundRecoveryResult: Equatable {
+    case healthy
+    case recovered
+    case needsUserResume(String)
+}
+
 @MainActor
-final class AudioRecorderService: NSObject {
+protocol AudioRecorderServicing: AnyObject {
+    var onProgress: ((Double, Int) -> Void)? { get set }
+    var onPCMData: ((Data) -> Void)? { get set }
+    var onCaptureStateChange: ((String) -> Void)? { get set }
+    var onSourcePlaybackUpdate: ((TimeInterval, TimeInterval, Bool, String?) -> Void)? { get set }
+    var onLifecycleEvent: ((AudioSessionLifecycleEvent) -> Void)? { get set }
+
+    func startRecording(
+        meetingID: String,
+        sourceAudio: SourceAudioAsset?
+    ) async throws -> RecordingStartArtifact
+    func pauseRecording() throws
+    func resumeRecording() throws
+    func stopRecording() throws -> LocalAudioArtifact
+    func toggleSourceAudioPlayback() throws
+    func reconcileForegroundRecording() -> AudioRecorderForegroundRecoveryResult
+    func currentRecordingDurationSeconds() -> Int
+    func makeRecordingSnapshot() throws -> RecordingSnapshotArtifact?
+}
+
+@MainActor
+final class AudioRecorderService: NSObject, AudioRecorderServicing {
     var onProgress: ((Double, Int) -> Void)?
     var onPCMData: ((Data) -> Void)?
     var onCaptureStateChange: ((String) -> Void)?
     var onSourcePlaybackUpdate: ((TimeInterval, TimeInterval, Bool, String?) -> Void)?
+    var onLifecycleEvent: ((AudioSessionLifecycleEvent) -> Void)?
 
     private let sessionCoordinator: AudioSessionCoordinator
     private var recorder: AVAudioRecorder?
@@ -55,6 +89,10 @@ final class AudioRecorderService: NSObject {
 
     init(sessionCoordinator: AudioSessionCoordinator) {
         self.sessionCoordinator = sessionCoordinator
+        super.init()
+        self.sessionCoordinator.onLifecycleEvent = { [weak self] event in
+            self?.handleSessionLifecycleEvent(event)
+        }
     }
 
     func startRecording(
@@ -110,6 +148,52 @@ final class AudioRecorderService: NSObject {
         } else {
             try playSourceAudioFromCurrentPosition(resetIfNeeded: true)
         }
+    }
+
+    func reconcileForegroundRecording() -> AudioRecorderForegroundRecoveryResult {
+        switch captureMode {
+        case .microphone:
+            return reconcileMicrophoneRecordingAfterForeground()
+        case .fileMix:
+            return reconcileMixedRecordingAfterForeground()
+        }
+    }
+
+    func currentRecordingDurationSeconds() -> Int {
+        switch captureMode {
+        case .microphone:
+            let recorderDuration = recorder.map { Int($0.currentTime.rounded()) } ?? 0
+            return max(Int(currentDuration().rounded()), recorderDuration)
+        case .fileMix:
+            return Int(currentDuration().rounded())
+        }
+    }
+
+    func makeRecordingSnapshot() throws -> RecordingSnapshotArtifact? {
+        guard let recordingURL else { return nil }
+
+        let ext = recordingURL.pathExtension.isEmpty
+            ? (captureMode == .microphone ? "m4a" : "wav")
+            : recordingURL.pathExtension
+        let snapshotDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("piedras-recording-snapshots", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: snapshotDirectory,
+            withIntermediateDirectories: true
+        )
+
+        let snapshotURL = snapshotDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(ext)
+
+        let data = try Data(contentsOf: recordingURL)
+        try data.write(to: snapshotURL, options: .atomic)
+
+        return RecordingSnapshotArtifact(
+            fileURL: snapshotURL,
+            mimeType: captureMode == .microphone ? "audio/m4a" : "audio/wav",
+            durationSeconds: currentRecordingDurationSeconds()
+        )
     }
 
     private func startMicrophoneRecording(meetingID: String) throws -> RecordingStartArtifact {
@@ -342,6 +426,74 @@ final class AudioRecorderService: NSObject {
 
     private func currentDuration() -> TimeInterval {
         accumulatedDuration + (recordingStartedAt.map { Date().timeIntervalSince($0) } ?? 0)
+    }
+
+    private func reconcileMicrophoneRecordingAfterForeground() -> AudioRecorderForegroundRecoveryResult {
+        guard let recorder, recordingURL != nil else {
+            return .needsUserResume("录音在后台被系统打断，请返回应用后继续。")
+        }
+
+        var recovered = false
+
+        do {
+            try sessionCoordinator.configureForRecording()
+
+            if !recorder.isRecording {
+                guard recorder.record() else {
+                    return .needsUserResume("录音在后台被系统打断，请返回应用后继续。")
+                }
+                recordingStartedAt = .now
+                recovered = true
+            }
+
+            if !audioEngine.isRunning || !isInputTapInstalled {
+                try startPCMStreaming()
+                recovered = true
+            }
+
+            startMetering()
+            recorder.updateMeters()
+            onProgress?(normalizedPower(from: recorder), currentRecordingDurationSeconds())
+            onCaptureStateChange?(recovered ? "麦克风已恢复" : "麦克风运行中")
+            return recovered ? .recovered : .healthy
+        } catch {
+            return .needsUserResume("录音在后台被系统打断，请返回应用后继续。")
+        }
+    }
+
+    private func reconcileMixedRecordingAfterForeground() -> AudioRecorderForegroundRecoveryResult {
+        guard recordingURL != nil else {
+            return .needsUserResume("录音在后台被系统打断，请返回应用后继续。")
+        }
+
+        var recovered = false
+
+        do {
+            try sessionCoordinator.configureForRecording(allowsFilePlayback: true)
+
+            if !audioEngine.isRunning {
+                try audioEngine.start()
+                recovered = true
+            }
+
+            if recordingStartedAt == nil {
+                recordingStartedAt = .now
+                recovered = true
+            }
+
+            if isSourceAudioPlaying || shouldResumeSourceAfterRecordingPause {
+                try playSourceAudioFromCurrentPosition(resetIfNeeded: true)
+                shouldResumeSourceAfterRecordingPause = false
+            } else {
+                publishSourcePlaybackUpdate()
+            }
+
+            onProgress?(0, currentRecordingDurationSeconds())
+            onCaptureStateChange?(recovered ? "混录已恢复" : "混录运行中")
+            return recovered ? .recovered : .healthy
+        } catch {
+            return .needsUserResume("录音在后台被系统打断，请返回应用后继续。")
+        }
     }
 
     private func startMetering() {
@@ -624,5 +776,28 @@ final class AudioRecorderService: NSObject {
         isSourceAudioPlaying = false
         shouldResumeSourceAfterRecordingPause = false
         onSourcePlaybackUpdate?(0, 0, false, nil)
+    }
+
+    private func handleSessionLifecycleEvent(_ event: AudioSessionLifecycleEvent) {
+        switch event {
+        case .interruptionBegan:
+            stopMetering()
+            if captureMode == .fileMix {
+                shouldResumeSourceAfterRecordingPause = isSourceAudioPlaying
+            }
+            onCaptureStateChange?("录音被系统打断")
+        case let .interruptionEnded(shouldResume, _):
+            onCaptureStateChange?(shouldResume ? "系统中断已结束" : "录音等待恢复")
+        case .routeChanged:
+            stopMetering()
+            onCaptureStateChange?("音频路由已切换")
+        case .mediaServicesWereLost:
+            stopMetering()
+            onCaptureStateChange?("音频服务已丢失")
+        case .mediaServicesWereReset:
+            onCaptureStateChange?("音频服务已重置")
+        }
+
+        onLifecycleEvent?(event)
     }
 }

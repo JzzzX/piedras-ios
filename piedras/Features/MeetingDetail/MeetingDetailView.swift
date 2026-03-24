@@ -368,7 +368,13 @@ struct MeetingDetailView: View {
     private func documentPage(meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if isRecordingThisMeeting {
-                CollapsibleRecordingBar(meeting: meeting)
+                CollapsibleRecordingBar(
+                    meeting: meeting,
+                    onRequestTranscriptDrawer: {
+                        annotationStore.dismissEditor()
+                        showsTranscriptSheet = true
+                    }
+                )
                     .padding(.bottom, 14)
 
                 NoteEditorView(

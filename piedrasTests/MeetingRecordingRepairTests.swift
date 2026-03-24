@@ -51,9 +51,63 @@ private final class StubASRService: ASRServicing {
     var onTransportEvent: ((String) -> Void)?
     var onPCMChunkSent: ((Int) -> Void)?
 
-    func startStreaming(workspaceID: String?) async throws {}
+    private(set) var startCalls = 0
+    private(set) var stopCalls = 0
+
+    func startStreaming(workspaceID: String?) async throws {
+        startCalls += 1
+    }
+
     func enqueuePCM(_ data: Data) {}
-    func stopStreaming() async {}
+
+    func stopStreaming() async {
+        stopCalls += 1
+    }
+}
+
+@MainActor
+private final class StubAudioRecorderService: AudioRecorderServicing {
+    var onProgress: ((Double, Int) -> Void)?
+    var onPCMData: ((Data) -> Void)?
+    var onCaptureStateChange: ((String) -> Void)?
+    var onSourcePlaybackUpdate: ((TimeInterval, TimeInterval, Bool, String?) -> Void)?
+    var onLifecycleEvent: ((AudioSessionLifecycleEvent) -> Void)?
+
+    var reconcileResult: AudioRecorderForegroundRecoveryResult = .healthy
+    var currentDurationSecondsValue = 0
+    var snapshotArtifact: RecordingSnapshotArtifact?
+
+    func startRecording(
+        meetingID: String,
+        sourceAudio: SourceAudioAsset?
+    ) async throws -> RecordingStartArtifact {
+        throw AudioSessionError.recorderUnavailable
+    }
+
+    func pauseRecording() throws {}
+    func resumeRecording() throws {}
+
+    func stopRecording() throws -> LocalAudioArtifact {
+        throw AudioSessionError.recorderUnavailable
+    }
+
+    func toggleSourceAudioPlayback() throws {}
+
+    func reconcileForegroundRecording() -> AudioRecorderForegroundRecoveryResult {
+        reconcileResult
+    }
+
+    func currentRecordingDurationSeconds() -> Int {
+        currentDurationSecondsValue
+    }
+
+    func makeRecordingSnapshot() throws -> RecordingSnapshotArtifact? {
+        snapshotArtifact
+    }
+
+    func emitPCM(_ data: Data) {
+        onPCMData?(data)
+    }
 }
 
 @MainActor
@@ -86,7 +140,7 @@ private final class StubMeetingSyncService: MeetingSyncServicing {
 struct MeetingRecordingRepairTests {
     @MainActor
     @Test
-    func backgroundingActiveRecordingMarksTranscriptForRepair() async throws {
+    func backgroundingActiveRecordingKeepsRepairDeferredUntilAsrActuallyDrops() async throws {
         let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
         let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
         fixture.meetingStore.loadMeetings()
@@ -96,7 +150,95 @@ struct MeetingRecordingRepairTests {
 
         fixture.meetingStore.handleScenePhaseChange(.background)
 
-        #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop)
+        #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop == false)
+        #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == nil)
+    }
+
+    @MainActor
+    @Test
+    func foregroundRecoveryBackfillsOnlyBackgroundGapAndRestartsAsr() async throws {
+        let transcribedResults = [
+            ASRFinalResult(text: "前台已有", startTime: 500, endTime: 900),
+            ASRFinalResult(text: "后台缺口补齐", startTime: 1_500, endTime: 2_200),
+            ASRFinalResult(text: "前台恢复后已有", startTime: 3_400, endTime: 3_800),
+        ]
+        let fixture = try makeFixture(transcriptionBehavior: .succeed(transcribedResults))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        meeting.audioLocalPath = "/tmp/live-recording.m4a"
+        meeting.audioMimeType = "audio/m4a"
+        meeting.segments = [
+            TranscriptSegment(
+                speaker: "麦克风",
+                text: "前台已有",
+                startTime: 0,
+                endTime: 1_000,
+                orderIndex: 0
+            ),
+            TranscriptSegment(
+                speaker: "麦克风",
+                text: "前台恢复后已有",
+                startTime: 3_200,
+                endTime: 4_000,
+                orderIndex: 1
+            ),
+        ]
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.durationSeconds = 1
+        fixture.recorder.currentDurationSecondsValue = 1
+        fixture.recorder.snapshotArtifact = RecordingSnapshotArtifact(
+            fileURL: try makeTemporaryAudioFile(named: "background-gap-snapshot.m4a"),
+            mimeType: "audio/m4a",
+            durationSeconds: 4
+        )
+
+        fixture.meetingStore.handleScenePhaseChange(.background)
+        fixture.asrService.onError?("socket closed")
+
+        #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == 1_000)
+
+        fixture.recorder.currentDurationSecondsValue = 4
+        fixture.meetingStore.handleScenePhaseChange(.active)
+        try await waitUntil { fixture.transcriber.transcribeCalls == 1 }
+
+        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.orderedSegments.map(\.text) == ["前台已有", "后台缺口补齐", "前台恢复后已有"])
+        #expect(refreshedMeeting.orderedSegments.map(\.startTime) == [0, 1_500, 3_200])
+        #expect(fixture.recordingSessionStore.isBackfillingBackgroundTranscript == false)
+        #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == nil)
+        #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop == false)
+        #expect(fixture.asrService.startCalls == 1)
+    }
+
+    @MainActor
+    @Test
+    func foregroundRecoveryFailurePausesMeetingAndStopsPretendingToRecord() async throws {
+        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.asrState = .degraded
+        fixture.recorder.reconcileResult = .needsUserResume("录音在后台被系统打断，请返回应用后继续。")
+
+        fixture.meetingStore.handleScenePhaseChange(.active)
+        try await waitUntil { fixture.recordingSessionStore.phase == .paused }
+
+        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.status == .paused)
+        #expect(fixture.recordingSessionStore.pauseReason == .systemInterruption)
+        #expect(fixture.recordingSessionStore.infoBanner == "录音在后台被系统打断，请返回应用后继续。")
+        #expect(fixture.asrService.stopCalls == 1)
+        #expect(fixture.asrService.startCalls == 0)
     }
 
     @MainActor
@@ -205,6 +347,8 @@ struct MeetingRecordingRepairTests {
         repository: MeetingRepository,
         settingsStore: SettingsStore,
         recordingSessionStore: RecordingSessionStore,
+        recorder: StubAudioRecorderService,
+        asrService: StubASRService,
         transcriber: StubAudioFileTranscriptionService,
         syncService: StubMeetingSyncService
     ) {
@@ -217,18 +361,20 @@ struct MeetingRecordingRepairTests {
         settingsStore.markBackendReachable()
         let recordingSessionStore = RecordingSessionStore()
         let apiClient = APIClient(settingsStore: settingsStore)
+        let recorder = StubAudioRecorderService()
         let transcriber = StubAudioFileTranscriptionService(behavior: transcriptionBehavior)
         let syncService = StubMeetingSyncService(repository: repository)
+        let asrService = StubASRService()
         let meetingStore = MeetingStore(
             repository: repository,
             chatSessionRepository: chatRepository,
             settingsStore: settingsStore,
             recordingSessionStore: recordingSessionStore,
             appActivityCoordinator: AppActivityCoordinator(),
-            audioRecorderService: AudioRecorderService(sessionCoordinator: AudioSessionCoordinator()),
+            audioRecorderService: recorder,
             audioFileTranscriptionService: transcriber,
             apiClient: apiClient,
-            asrService: StubASRService(),
+            asrService: asrService,
             workspaceBootstrapService: WorkspaceBootstrapService(
                 apiClient: apiClient,
                 settingsStore: settingsStore
@@ -241,6 +387,8 @@ struct MeetingRecordingRepairTests {
             repository,
             settingsStore,
             recordingSessionStore,
+            recorder,
+            asrService,
             transcriber,
             syncService
         )
@@ -267,5 +415,20 @@ struct MeetingRecordingRepairTests {
         )
         try Data("audio".utf8).write(to: url)
         return url
+    }
+
+    @MainActor
+    private func waitUntil(
+        timeoutNanoseconds: UInt64 = 1_000_000_000,
+        condition: @escaping @MainActor () -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now + .nanoseconds(timeoutNanoseconds)
+        while !condition() {
+            if ContinuousClock.now >= deadline {
+                Issue.record("Condition timed out")
+                throw CancellationError()
+            }
+            await Task.yield()
+        }
     }
 }

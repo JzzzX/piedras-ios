@@ -39,6 +39,13 @@ struct FileTranscriptionStatusSnapshot: Equatable {
     }
 }
 
+private struct BackgroundTranscriptBackfillSource {
+    let fileURL: URL
+    let mimeType: String
+    let durationSeconds: Int
+    let timestampsAreRelativeToGap: Bool
+}
+
 @MainActor
 @Observable
 final class MeetingStore {
@@ -47,7 +54,7 @@ final class MeetingStore {
     private let settingsStore: SettingsStore
     private let recordingSessionStore: RecordingSessionStore
     private let appActivityCoordinator: AppActivityCoordinator
-    private let audioRecorderService: AudioRecorderService
+    private let audioRecorderService: any AudioRecorderServicing
     private let audioFileTranscriptionService: any AudioFileTranscriptionServicing
     private let apiClient: APIClient
     private let asrService: any ASRServicing
@@ -75,6 +82,8 @@ final class MeetingStore {
     private var asrReconnectTask: Task<Void, Never>?
     private var scheduledSyncTasks: [String: Task<Void, Never>] = [:]
     private var fileTranscriptionTasks: [String: Task<Void, Never>] = [:]
+    private var backgroundTranscriptBackfillTask: Task<Void, Never>?
+    private var backgroundTranscriptPCMBuffer = Data()
     private var fileTranscriptionStatuses: [String: FileTranscriptionStatusSnapshot] = [:]
     private var fileTranscriptionPartials: [String: String] = [:]
     private let isUITestRuntime = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
@@ -86,7 +95,7 @@ final class MeetingStore {
         settingsStore: SettingsStore,
         recordingSessionStore: RecordingSessionStore,
         appActivityCoordinator: AppActivityCoordinator,
-        audioRecorderService: AudioRecorderService,
+        audioRecorderService: any AudioRecorderServicing,
         audioFileTranscriptionService: any AudioFileTranscriptionServicing,
         apiClient: APIClient,
         asrService: any ASRServicing,
@@ -121,16 +130,31 @@ final class MeetingStore {
         }
         self.audioRecorderService.onPCMData = { [weak self] data in
             self?.recordingSessionStore.registerCapturedPCM(bytes: data.count)
+            self?.bufferBackgroundTranscriptPCMIfNeeded(data)
             self?.handlePCMChunk(data)
+        }
+        self.audioRecorderService.onLifecycleEvent = { [weak self] event in
+            self?.handleAudioSessionLifecycleEvent(event)
         }
         self.asrService.onStateChange = { [weak self] state in
             guard let self else { return }
             self.recordingSessionStore.asrState = state
             if state == .connected {
                 self.cancelASRReconnect()
-                self.recordingSessionStore.infoBanner = nil
+                if self.recordingSessionStore.isAppInBackground,
+                   self.recordingSessionStore.isCapturingBackgroundTranscriptGapAudio {
+                    self.endBackgroundTranscriptGapIfNeeded()
+                }
+                if !self.recordingSessionStore.isBackfillingBackgroundTranscript,
+                   self.recordingSessionStore.pauseReason != .systemInterruption {
+                    self.recordingSessionStore.infoBanner = nil
+                }
                 self.recordingSessionStore.errorBanner = nil
                 self.settingsStore.markASRStreamSucceeded()
+            } else if self.recordingSessionStore.phase == .recording,
+                      self.recordingSessionStore.isAppInBackground,
+                      [.idle, .degraded, .disconnected].contains(state) {
+                self.beginBackgroundTranscriptGapIfNeeded()
             }
         }
         self.asrService.onTransportEvent = { [weak self] message in
@@ -148,9 +172,15 @@ final class MeetingStore {
         self.asrService.onError = { [weak self] message in
             guard let self else { return }
             if self.recordingSessionStore.phase == .recording {
-                self.recordingSessionStore.markTranscriptCoverageGap()
+                if self.recordingSessionStore.isAppInBackground {
+                    self.beginBackgroundTranscriptGapIfNeeded()
+                } else {
+                    self.recordingSessionStore.markTranscriptCoverageGap()
+                }
             }
-            self.recordingSessionStore.infoBanner = "实时转写暂时不可用，录音会继续。"
+            self.recordingSessionStore.infoBanner = self.recordingSessionStore.isAppInBackground
+                ? AppStrings.current.backgroundTranscriptWillCatchUp
+                : "实时转写暂时不可用，录音会继续。"
             self.recordingSessionStore.errorBanner = message
             self.settingsStore.markASRStreamFailed(message: message)
         }
@@ -367,6 +397,9 @@ final class MeetingStore {
 
         do {
             cancelASRReconnect()
+            backgroundTranscriptBackfillTask?.cancel()
+            backgroundTranscriptBackfillTask = nil
+            backgroundTranscriptPCMBuffer.removeAll(keepingCapacity: false)
             recordingSessionStore.errorBanner = nil
             recordingSessionStore.infoBanner = nil
             let inputMode: RecordingInputMode = sourceAudio == nil ? .microphone : .fileMix
@@ -383,6 +416,7 @@ final class MeetingStore {
                 sourceAudio: sourceAudio
             )
             recordingSessionStore.phase = .recording
+            recordingSessionStore.pauseReason = nil
             updateKeepScreenAwake()
             meeting.date = .now
             meeting.recordingMode = artifact.inputMode.meetingMode
@@ -416,11 +450,16 @@ final class MeetingStore {
 
         do {
             cancelASRReconnect()
+            backgroundTranscriptBackfillTask?.cancel()
+            backgroundTranscriptBackfillTask = nil
             try audioRecorderService.pauseRecording()
             await asrService.stopStreaming()
             recordingSessionStore.phase = .paused
+            recordingSessionStore.pauseReason = .user
             recordingSessionStore.currentPartial = ""
             recordingSessionStore.infoBanner = nil
+            recordingSessionStore.clearBackgroundTranscriptGap()
+            backgroundTranscriptPCMBuffer.removeAll(keepingCapacity: false)
             updateKeepScreenAwake()
             meeting.status = .paused
             meeting.markPending()
@@ -438,6 +477,7 @@ final class MeetingStore {
         do {
             try audioRecorderService.resumeRecording()
             recordingSessionStore.phase = .recording
+            recordingSessionStore.pauseReason = nil
             recordingSessionStore.asrState = .connecting
             recordingSessionStore.infoBanner = nil
             updateKeepScreenAwake()
@@ -457,6 +497,8 @@ final class MeetingStore {
 
         do {
             cancelASRReconnect()
+            backgroundTranscriptBackfillTask?.cancel()
+            backgroundTranscriptBackfillTask = nil
             recordingSessionStore.phase = .stopping
             recordingSessionStore.infoBanner = nil
             updateKeepScreenAwake()
@@ -486,18 +528,31 @@ final class MeetingStore {
         switch phase {
         case .background:
             if recordingSessionStore.phase == .recording {
-                recordingSessionStore.markTranscriptCoverageGap()
                 recordingSessionStore.currentPartial = ""
-                recordingSessionStore.infoBanner = "应用已切到后台，录音会继续；实时转写会在回到前台后自动恢复。"
+                recordingSessionStore.infoBanner = recordingSessionStore.hasBackgroundTranscriptGap
+                    ? AppStrings.current.backgroundTranscriptWillCatchUp
+                    : AppStrings.current.backgroundRecordingBestEffort
             }
         case .active:
-            if recordingSessionStore.phase == .recording,
-               [.idle, .degraded, .disconnected].contains(recordingSessionStore.asrState) {
-                recordingSessionStore.infoBanner = "已回到前台，正在恢复实时转写连接。"
-                Task { @MainActor [weak self] in
-                    await self?.startASRIfPossible(for: meetingID)
+            if recordingSessionStore.phase == .recording {
+                switch audioRecorderService.reconcileForegroundRecording() {
+                case .healthy, .recovered:
+                    endBackgroundTranscriptGapIfNeeded()
+                    scheduleBackgroundTranscriptBackfillIfNeeded(for: meetingID)
+                    if [.idle, .degraded, .disconnected].contains(recordingSessionStore.asrState) {
+                        if !recordingSessionStore.isBackfillingBackgroundTranscript {
+                            recordingSessionStore.infoBanner = "已回到前台，正在恢复实时转写连接。"
+                        }
+                        Task { @MainActor [weak self] in
+                            await self?.startASRIfPossible(for: meetingID)
+                        }
+                    }
+                case let .needsUserResume(message):
+                    Task { @MainActor [weak self] in
+                        await self?.pauseRecordingAfterForegroundInterruption(message: message)
+                    }
                 }
-            } else if recordingSessionStore.phase != .recording {
+            } else if recordingSessionStore.pauseReason != .systemInterruption {
                 recordingSessionStore.infoBanner = nil
             }
         case .inactive:
@@ -845,12 +900,17 @@ final class MeetingStore {
         }
 
         lastErrorMessage = nil
+        backgroundTranscriptBackfillTask?.cancel()
+        backgroundTranscriptBackfillTask = nil
         let needsTranscriptRepair = recordingSessionStore.needsTranscriptRepairAfterStop
+            || recordingSessionStore.hasBackgroundTranscriptGap
+            || recordingSessionStore.isBackfillingBackgroundTranscript
         fileTranscriptionTasks[meetingID]?.cancel()
         fileTranscriptionTasks[meetingID] = nil
         transcribingMeetingIDs.remove(meetingID)
         fileTranscriptionStatuses.removeValue(forKey: meetingID)
         fileTranscriptionPartials.removeValue(forKey: meetingID)
+        backgroundTranscriptPCMBuffer.removeAll(keepingCapacity: false)
 
         meeting.status = needsTranscriptRepair ? .transcribing : .ended
         meeting.audioLocalPath = artifact.fileURL.path
@@ -958,10 +1018,6 @@ final class MeetingStore {
                 )
             }
 
-            if let asrBlockingMessage = settingsStore.blockingMessage(for: .asr) {
-                throw APIClientError.requestFailed(asrBlockingMessage)
-            }
-
             let existingWorkspaceID = meeting(withID: meetingID)?.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
             let workspaceID: String?
             if let existingWorkspaceID {
@@ -1041,10 +1097,6 @@ final class MeetingStore {
                 throw APIClientError.requestFailed(
                     settingsStore.blockingMessage(for: .backend) ?? "\(AppEnvironment.cloudName) 暂时不可用。"
                 )
-            }
-
-            if let asrBlockingMessage = settingsStore.blockingMessage(for: .asr) {
-                throw APIClientError.requestFailed(asrBlockingMessage)
             }
 
             let existingWorkspaceID = meeting(withID: meetingID)?.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
@@ -1167,6 +1219,290 @@ final class MeetingStore {
     private func currentRecordingMeeting() -> Meeting? {
         guard let meetingID = recordingSessionStore.meetingID else { return nil }
         return meeting(withID: meetingID)
+    }
+
+    private func handleAudioSessionLifecycleEvent(_ event: AudioSessionLifecycleEvent) {
+        guard recordingSessionStore.phase == .recording else { return }
+
+        switch event {
+        case .interruptionBegan, .mediaServicesWereLost:
+            recordingSessionStore.currentPartial = ""
+            if recordingSessionStore.isAppInBackground {
+                beginBackgroundTranscriptGapIfNeeded()
+            } else {
+                recordingSessionStore.markTranscriptCoverageGap()
+            }
+        case let .interruptionEnded(shouldResume, _):
+            if !shouldResume, recordingSessionStore.isAppInBackground {
+                beginBackgroundTranscriptGapIfNeeded()
+            }
+        case .routeChanged, .mediaServicesWereReset:
+            if recordingSessionStore.isAppInBackground {
+                beginBackgroundTranscriptGapIfNeeded()
+            }
+        }
+    }
+
+    private func pauseRecordingAfterForegroundInterruption(message: String) async {
+        cancelASRReconnect()
+        backgroundTranscriptBackfillTask?.cancel()
+        backgroundTranscriptBackfillTask = nil
+        await asrService.stopStreaming()
+        recordingSessionStore.currentPartial = ""
+        recordingSessionStore.asrState = .idle
+        recordingSessionStore.errorBanner = nil
+        recordingSessionStore.infoBanner = message
+        recordingSessionStore.phase = .paused
+        recordingSessionStore.pauseReason = .systemInterruption
+        recordingSessionStore.clearBackgroundTranscriptGap()
+        backgroundTranscriptPCMBuffer.removeAll(keepingCapacity: false)
+        updateKeepScreenAwake()
+
+        guard let meeting = currentRecordingMeeting() else { return }
+        meeting.status = .paused
+        meeting.markPending()
+        try? repository.save()
+        loadMeetings()
+    }
+
+    private func currentRecordingDurationMilliseconds() -> Double {
+        let durationSeconds = max(
+            recordingSessionStore.durationSeconds,
+            audioRecorderService.currentRecordingDurationSeconds()
+        )
+        return Double(max(durationSeconds, 0)) * 1_000
+    }
+
+    private func beginBackgroundTranscriptGapIfNeeded() {
+        guard recordingSessionStore.phase == .recording,
+              recordingSessionStore.isAppInBackground else {
+            return
+        }
+
+        if !recordingSessionStore.hasBackgroundTranscriptGap {
+            recordingSessionStore.beginBackgroundTranscriptGap(at: currentRecordingDurationMilliseconds())
+            backgroundTranscriptPCMBuffer.removeAll(keepingCapacity: true)
+        }
+
+        recordingSessionStore.currentPartial = ""
+        recordingSessionStore.infoBanner = AppStrings.current.backgroundTranscriptWillCatchUp
+    }
+
+    private func endBackgroundTranscriptGapIfNeeded() {
+        guard recordingSessionStore.hasBackgroundTranscriptGap,
+              recordingSessionStore.backgroundTranscriptGapEndTimeMS == nil else {
+            return
+        }
+
+        recordingSessionStore.endBackgroundTranscriptGap(at: currentRecordingDurationMilliseconds())
+    }
+
+    private func bufferBackgroundTranscriptPCMIfNeeded(_ data: Data) {
+        guard recordingSessionStore.isCapturingBackgroundTranscriptGapAudio,
+              !data.isEmpty else {
+            return
+        }
+
+        backgroundTranscriptPCMBuffer.append(data)
+    }
+
+    private func scheduleBackgroundTranscriptBackfillIfNeeded(for meetingID: String) {
+        guard recordingSessionStore.hasBackgroundTranscriptGap else { return }
+        guard backgroundTranscriptBackfillTask == nil else { return }
+
+        backgroundTranscriptBackfillTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.backgroundTranscriptBackfillTask = nil }
+            await self.performBackgroundTranscriptBackfill(meetingID: meetingID)
+        }
+    }
+
+    private func performBackgroundTranscriptBackfill(meetingID: String) async {
+        guard let meeting = meeting(withID: meetingID),
+              let gapStartTimeMS = recordingSessionStore.backgroundTranscriptGapStartTimeMS else {
+            return
+        }
+
+        let gapEndTimeMS = max(
+            recordingSessionStore.backgroundTranscriptGapEndTimeMS ?? currentRecordingDurationMilliseconds(),
+            gapStartTimeMS
+        )
+
+        guard gapEndTimeMS > gapStartTimeMS else {
+            recordingSessionStore.clearBackgroundTranscriptGap()
+            backgroundTranscriptPCMBuffer.removeAll(keepingCapacity: false)
+            return
+        }
+
+        recordingSessionStore.isBackfillingBackgroundTranscript = true
+        recordingSessionStore.infoBanner = AppStrings.current.backfillingBackgroundTranscript
+
+        let workspaceID: String?
+
+        do {
+            await checkBackendHealth(force: false)
+
+            guard settingsStore.apiReachable else {
+                throw APIClientError.requestFailed(
+                    settingsStore.blockingMessage(for: .backend) ?? "\(AppEnvironment.cloudName) 暂时不可用。"
+                )
+            }
+
+            workspaceID = try await resolveWorkspaceID(for: meetingID)
+            let source = try makeBackgroundTranscriptBackfillSource(
+                meetingID: meetingID,
+                gapStartTimeMS: gapStartTimeMS,
+                gapEndTimeMS: gapEndTimeMS
+            )
+            defer { try? FileManager.default.removeItem(at: source.fileURL) }
+
+            var results: [ASRFinalResult] = []
+            try await audioFileTranscriptionService.transcribe(
+                fileURL: source.fileURL,
+                workspaceID: workspaceID,
+                onPhaseChange: { [weak self] _ in
+                    self?.recordingSessionStore.infoBanner = AppStrings.current.backfillingBackgroundTranscript
+                },
+                onPartialText: { _ in },
+                onFinalResult: { result in
+                    results.append(result)
+                }
+            )
+
+            try mergeBackgroundTranscriptResults(
+                results,
+                into: meeting,
+                gapStartTimeMS: gapStartTimeMS,
+                gapEndTimeMS: gapEndTimeMS,
+                timestampsAreRelativeToGap: source.timestampsAreRelativeToGap
+            )
+
+            settingsStore.markASRStreamSucceeded()
+            recordingSessionStore.clearBackgroundTranscriptGap()
+            backgroundTranscriptPCMBuffer.removeAll(keepingCapacity: false)
+            if recordingSessionStore.asrState == .connected {
+                recordingSessionStore.infoBanner = nil
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            recordingSessionStore.markTranscriptCoverageGap()
+            recordingSessionStore.isBackfillingBackgroundTranscript = false
+            recordingSessionStore.infoBanner = AppStrings.current.backgroundTranscriptPendingRepair
+            settingsStore.markASRStreamFailed(message: error.localizedDescription)
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func resolveWorkspaceID(for meetingID: String) async throws -> String? {
+        let existingWorkspaceID = meeting(withID: meetingID)?.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+        let workspaceID: String?
+        if let existingWorkspaceID {
+            workspaceID = existingWorkspaceID
+        } else {
+            workspaceID = await bootstrapHiddenWorkspace(force: false, surfaceBlockingError: false)
+        }
+
+        if let meeting = meeting(withID: meetingID), meeting.hiddenWorkspaceId != workspaceID {
+            meeting.hiddenWorkspaceId = workspaceID
+            meeting.markPending()
+            try repository.save()
+        }
+
+        return workspaceID
+    }
+
+    private func makeBackgroundTranscriptBackfillSource(
+        meetingID: String,
+        gapStartTimeMS: Double,
+        gapEndTimeMS: Double
+    ) throws -> BackgroundTranscriptBackfillSource {
+        if !backgroundTranscriptPCMBuffer.isEmpty {
+            let wavURL = try PCMTemporaryWAVWriter.write(pcmData: backgroundTranscriptPCMBuffer)
+            let durationSeconds = max(1, Int(ceil((gapEndTimeMS - gapStartTimeMS) / 1_000)))
+            return BackgroundTranscriptBackfillSource(
+                fileURL: wavURL,
+                mimeType: "audio/wav",
+                durationSeconds: durationSeconds,
+                timestampsAreRelativeToGap: true
+            )
+        }
+
+        if let snapshot = try audioRecorderService.makeRecordingSnapshot() {
+            return BackgroundTranscriptBackfillSource(
+                fileURL: snapshot.fileURL,
+                mimeType: snapshot.mimeType,
+                durationSeconds: snapshot.durationSeconds,
+                timestampsAreRelativeToGap: false
+            )
+        }
+
+        throw APIClientError.requestFailed("后台片段暂时无法补齐。")
+    }
+
+    private func mergeBackgroundTranscriptResults(
+        _ results: [ASRFinalResult],
+        into meeting: Meeting,
+        gapStartTimeMS: Double,
+        gapEndTimeMS: Double,
+        timestampsAreRelativeToGap: Bool
+    ) throws {
+        let effectiveGapEndTimeMS = min(
+            gapEndTimeMS,
+            meeting.orderedSegments
+                .filter { $0.startTime > gapStartTimeMS }
+                .map(\.startTime)
+                .min() ?? gapEndTimeMS
+        )
+        guard effectiveGapEndTimeMS > gapStartTimeMS else {
+            return
+        }
+
+        let speaker = meeting.recordingMode == .fileMix ? "混合音频" : "麦克风"
+        let normalizedResults = results.compactMap { result -> ASRFinalResult? in
+            let normalizedText = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalizedText.isEmpty else { return nil }
+
+            let startTime = timestampsAreRelativeToGap ? result.startTime + gapStartTimeMS : result.startTime
+            let endTime = timestampsAreRelativeToGap ? result.endTime + gapStartTimeMS : result.endTime
+            guard max(endTime, startTime) > gapStartTimeMS, startTime < effectiveGapEndTimeMS else {
+                return nil
+            }
+
+            return ASRFinalResult(
+                text: normalizedText,
+                startTime: startTime,
+                endTime: max(endTime, startTime)
+            )
+        }
+
+        guard !normalizedResults.isEmpty else {
+            throw APIClientError.requestFailed("补转写未返回任何结果。")
+        }
+
+        let preservedSegments = meeting.orderedSegments.filter {
+            $0.endTime <= gapStartTimeMS || $0.startTime >= effectiveGapEndTimeMS
+        }
+        let insertedSegments = normalizedResults.enumerated().map { index, result in
+            makeTranscriptSegment(result, speaker: speaker, orderIndex: index)
+        }
+        let mergedSegments = (preservedSegments + insertedSegments)
+            .sorted {
+                if $0.startTime == $1.startTime {
+                    return $0.orderIndex < $1.orderIndex
+                }
+                return $0.startTime < $1.startTime
+            }
+            .enumerated()
+            .map { index, segment -> TranscriptSegment in
+                segment.orderIndex = index
+                return segment
+            }
+
+        repository.replaceSegments(for: meeting, with: mergedSegments)
+        meeting.markPending()
+        try repository.save()
+        loadMeetings()
     }
 
     private func handleRecordingProgress(level: Double, duration: Int) {
