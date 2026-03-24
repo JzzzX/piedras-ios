@@ -44,7 +44,8 @@ struct MeetingDeletionSyncTests {
     @MainActor
     @Test
     func fetchMeetingsExcludesDeletedTombstonesByDefault() throws {
-        let repository = try makeRepository()
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
         repository.insert(
             Meeting(
                 id: "visible-meeting",
@@ -102,7 +103,8 @@ struct MeetingDeletionSyncTests {
     @MainActor
     @Test
     func syncPendingMeetingsPurgesDeletedTombstoneAfterRemoteDeleteSucceeds() async throws {
-        let repository = try makeRepository()
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
         let settingsStore = makeSettingsStore()
         let apiClient = makeAPIClient(settingsStore: settingsStore)
         let syncService = MeetingSyncService(
@@ -145,7 +147,8 @@ struct MeetingDeletionSyncTests {
     @MainActor
     @Test
     func refreshRemoteMeetingsDoesNotResurrectDeletedTombstone() async throws {
-        let repository = try makeRepository()
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
         let settingsStore = makeSettingsStore()
         let apiClient = makeAPIClient(settingsStore: settingsStore)
         let syncService = MeetingSyncService(
@@ -194,15 +197,188 @@ struct MeetingDeletionSyncTests {
     }
 
     @MainActor
-    private func makeAppContainer() throws -> AppContainer {
-        try #require(AppContainer.currentXCTestInstance)
+    @Test
+    func syncMeetingUploadsEndedLocalAudioAndClearsLocalCopy() async throws {
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
+        let settingsStore = makeSettingsStore()
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let syncService = MeetingSyncService(
+            repository: repository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+        let audioURL = try makeTemporaryAudioFile(named: "meeting-upload-success.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        let meeting = Meeting(
+            id: "meeting-upload-success",
+            title: "Upload audio",
+            status: .ended,
+            audioLocalPath: audioURL.path,
+            audioMimeType: "audio/m4a",
+            audioDuration: 12,
+            audioUpdatedAt: .now,
+            hiddenWorkspaceId: "workspace-1",
+            syncState: .pending
+        )
+        repository.insert(meeting)
+        try repository.save()
+
+        MockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/meetings":
+                let payload: [String: Any] = [
+                    "id": meeting.id,
+                    "title": meeting.title,
+                    "date": meeting.date.ISO8601Format(),
+                    "status": meeting.status.rawValue,
+                    "duration": meeting.durationSeconds,
+                    "workspaceId": meeting.hiddenWorkspaceId ?? "workspace-1",
+                    "userNotes": meeting.userNotesPlainText,
+                    "enhancedNotes": meeting.enhancedNotes,
+                    "createdAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "updatedAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "segments": [],
+                    "chatMessages": [],
+                    "hasAudio": false,
+                    "audioUrl": NSNull(),
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            case "/api/meetings/\(meeting.id)/audio":
+                return (
+                    response,
+                    Data(
+                        #"{"hasAudio":true,"audioMimeType":"audio/m4a","audioDuration":12,"audioUpdatedAt":"2026-03-24T04:00:00.000Z","audioUrl":"/api/meetings/meeting-upload-success/audio?t=123"}"#.utf8
+                    )
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+        defer { MockURLProtocol.reset() }
+
+        try await syncService.syncMeeting(id: meeting.id)
+
+        let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.syncState == .synced)
+        #expect(refreshedMeeting.audioLocalPath == nil)
+        #expect(refreshedMeeting.audioRemotePath == "https://example.com/api/meetings/meeting-upload-success/audio?t=123")
+        #expect(FileManager.default.fileExists(atPath: audioURL.path) == false)
+        #expect(MockURLProtocol.requests.count == 2)
+        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings", "/api/meetings/\(meeting.id)/audio"])
+        #expect(MockURLProtocol.requests.last?.httpMethod == "POST")
+        #expect(MockURLProtocol.requests.last?.value(forHTTPHeaderField: "Content-Type")?.contains("multipart/form-data") == true)
     }
 
     @MainActor
-    private func makeRepository() throws -> MeetingRepository {
-        let repository = try makeAppContainer().meetingRepository
+    @Test
+    func syncMeetingKeepsLocalAudioWhenUploadFails() async throws {
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
+        let settingsStore = makeSettingsStore()
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let syncService = MeetingSyncService(
+            repository: repository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+        let audioURL = try makeTemporaryAudioFile(named: "meeting-upload-failure.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        let meeting = Meeting(
+            id: "meeting-upload-failure",
+            title: "Upload fails",
+            status: .ended,
+            audioLocalPath: audioURL.path,
+            audioMimeType: "audio/m4a",
+            audioDuration: 18,
+            audioUpdatedAt: .now,
+            hiddenWorkspaceId: "workspace-1",
+            syncState: .pending
+        )
+        repository.insert(meeting)
+        try repository.save()
+
+        MockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let statusCode = url.path == "/api/meetings/\(meeting.id)/audio" ? 500 : 200
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: statusCode,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/meetings":
+                let payload: [String: Any] = [
+                    "id": meeting.id,
+                    "title": meeting.title,
+                    "date": meeting.date.ISO8601Format(),
+                    "status": meeting.status.rawValue,
+                    "duration": meeting.durationSeconds,
+                    "workspaceId": meeting.hiddenWorkspaceId ?? "workspace-1",
+                    "userNotes": meeting.userNotesPlainText,
+                    "enhancedNotes": meeting.enhancedNotes,
+                    "createdAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "updatedAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "segments": [],
+                    "chatMessages": [],
+                    "hasAudio": false,
+                    "audioUrl": NSNull(),
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            case "/api/meetings/\(meeting.id)/audio":
+                return (response, Data(#"{"error":"upload failed"}"#.utf8))
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+        defer { MockURLProtocol.reset() }
+
+        await #expect(throws: Error.self) {
+            try await syncService.syncMeeting(id: meeting.id)
+        }
+
+        let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.syncState == .failed)
+        #expect(refreshedMeeting.audioLocalPath == audioURL.path)
+        #expect(FileManager.default.fileExists(atPath: audioURL.path))
+        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings", "/api/meetings/\(meeting.id)/audio"])
+    }
+
+    @MainActor
+    private func makeAppContainer() throws -> AppContainer {
+        if let container = AppContainer.currentXCTestInstance {
+            return container
+        }
+
+        return AppContainer(inMemory: true)
+    }
+
+    @MainActor
+    private func makeRepositoryFixture() throws -> (appContainer: AppContainer, repository: MeetingRepository) {
+        let appContainer = try makeAppContainer()
+        let repository = appContainer.meetingRepository
         try resetRepository(repository)
-        return repository
+        return (appContainer, repository)
     }
 
     @MainActor
@@ -234,5 +410,17 @@ struct MeetingDeletionSyncTests {
             settingsStore: settingsStore,
             session: URLSession(configuration: configuration)
         )
+    }
+
+    private func makeTemporaryAudioFile(named name: String) throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathComponent(name)
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data("audio".utf8).write(to: url)
+        return url
     }
 }

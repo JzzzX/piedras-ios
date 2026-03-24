@@ -6,7 +6,15 @@ struct MeetingSyncBatchResult {
 }
 
 @MainActor
-final class MeetingSyncService {
+protocol MeetingSyncServicing: AnyObject {
+    @discardableResult
+    func syncPendingMeetings() async -> MeetingSyncBatchResult
+    func syncMeeting(id: String) async throws
+    func refreshRemoteMeetings() async throws -> Int
+}
+
+@MainActor
+final class MeetingSyncService: MeetingSyncServicing {
     private let repository: MeetingRepository
     private let settingsStore: SettingsStore
     private let apiClient: APIClient
@@ -74,6 +82,7 @@ final class MeetingSyncService {
                 MeetingPayloadMapper.makeMeetingUpsertPayload(from: meeting, workspaceID: workspaceID)
             )
             MeetingPayloadMapper.apply(remote: remoteMeeting, to: meeting, repository: repository, baseURL: apiClient.baseURL)
+            try await uploadLocalAudioIfNeeded(for: meeting)
 
             meeting.syncState = .synced
             meeting.lastSyncedAt = .now
@@ -85,6 +94,35 @@ final class MeetingSyncService {
             try? repository.save()
             throw error
         }
+    }
+
+    private func uploadLocalAudioIfNeeded(for meeting: Meeting) async throws {
+        guard meeting.status == .ended else {
+            return
+        }
+
+        guard let audioLocalPath = meeting.audioLocalPath, !audioLocalPath.isEmpty else {
+            return
+        }
+
+        let fileManager = FileManager.default
+        guard fileManager.fileExists(atPath: audioLocalPath) else {
+            return
+        }
+
+        let fallbackDuration = max(meeting.audioDuration, meeting.durationSeconds)
+        let uploadResponse = try await apiClient.uploadAudio(
+            meetingID: meeting.id,
+            fileURL: URL(fileURLWithPath: audioLocalPath),
+            duration: max(fallbackDuration, 0),
+            mimeType: meeting.audioMimeType ?? "audio/m4a"
+        )
+
+        meeting.audioRemotePath = apiClient.resolveAbsoluteURLString(uploadResponse.audioUrl) ?? meeting.audioRemotePath
+        meeting.audioMimeType = uploadResponse.audioMimeType ?? meeting.audioMimeType
+        meeting.audioDuration = uploadResponse.audioDuration ?? fallbackDuration
+        meeting.audioUpdatedAt = uploadResponse.audioUpdatedAt ?? meeting.audioUpdatedAt ?? .now
+        try repository.save()
     }
 
     func refreshRemoteMeetings() async throws -> Int {
