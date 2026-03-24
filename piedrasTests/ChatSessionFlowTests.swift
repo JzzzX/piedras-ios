@@ -389,7 +389,7 @@ struct ChatSessionFlowTests {
             question: "继续追问"
         )
 
-        #expect(payload.chatHistory.map(\.content) == ["当前问题", "当前回答"])
+        #expect(payload.chatHistory.map { $0.content } == ["当前问题", "当前回答"])
         #expect(payload.question == "继续追问")
     }
 
@@ -419,7 +419,7 @@ struct ChatSessionFlowTests {
         store.deleteChatSession(latestSession.id, for: meeting.id)
 
         #expect(store.activeChatSession(for: meeting.id)?.id == earlierSession.id)
-        #expect(store.chatMessages(for: meeting.id).map(\.content) == ["先前的问题"])
+        #expect(store.chatMessages(for: meeting.id).map { $0.content } == ["先前的问题"])
 
         store.deleteChatSession(earlierSession.id, for: meeting.id)
 
@@ -487,7 +487,7 @@ struct ChatSessionFlowTests {
             baseURL: nil
         )
 
-        #expect(session.orderedMessages.map(\.content) == ["主要内容?", "这里是回答"])
+        #expect(session.orderedMessages.map { $0.content } == ["主要内容?", "这里是回答"])
     }
 
     @MainActor
@@ -548,7 +548,7 @@ struct ChatSessionFlowTests {
         let reloadedMeeting = try #require(try meetingRepository.meeting(withID: meeting.id))
         let reloadedSession = try #require(reloadedMeeting.chatSessions.first(where: { $0.id == session.id }))
 
-        #expect(reloadedSession.orderedMessages.map(\.content) == ["主要内容?", "这里是回答"])
+        #expect(reloadedSession.orderedMessages.map { $0.content } == ["主要内容?", "这里是回答"])
     }
 
     @MainActor
@@ -574,6 +574,7 @@ struct ChatSessionFlowTests {
             settingsStore: settingsStore,
             recordingSessionStore: RecordingSessionStore(),
             appActivityCoordinator: AppActivityCoordinator(),
+            recordingLiveActivityCoordinator: RecordingLiveActivityCoordinator(),
             audioRecorderService: AudioRecorderService(sessionCoordinator: AudioSessionCoordinator()),
             audioFileTranscriptionService: AudioFileTranscriptionService(apiClient: apiClient),
             apiClient: apiClient,
@@ -650,7 +651,7 @@ struct ChatSessionFlowTests {
         #expect(capturedUpsertChatContents == ["主要内容?", "这里是回答"])
         #expect(meetingStore.chatSessions(for: meeting.id).count == 1)
         #expect(meetingStore.activeChatSession(for: meeting.id)?.title == "主要内容?")
-        #expect(meetingStore.chatMessages(for: meeting.id).map(\.content) == ["主要内容?", "这里是回答"])
+        #expect(meetingStore.chatMessages(for: meeting.id).map { $0.content } == ["主要内容?", "这里是回答"])
     }
 
     @MainActor
@@ -681,6 +682,7 @@ struct ChatSessionFlowTests {
             settingsStore: settingsStore,
             recordingSessionStore: RecordingSessionStore(),
             appActivityCoordinator: AppActivityCoordinator(),
+            recordingLiveActivityCoordinator: RecordingLiveActivityCoordinator(),
             audioRecorderService: AudioRecorderService(sessionCoordinator: AudioSessionCoordinator()),
             audioFileTranscriptionService: AudioFileTranscriptionService(apiClient: apiClient),
             apiClient: apiClient,
@@ -699,12 +701,12 @@ struct ChatSessionFlowTests {
         let counter = ObservationInvalidationCounter()
         var observedMessageSnapshots: [[String]] = []
         func trackMessages() {
-            let currentSnapshot = meetingStore.chatMessages(for: meeting.id).map(\.content)
+            let currentSnapshot = meetingStore.chatMessages(for: meeting.id).map { $0.content }
             if observedMessageSnapshots.last != currentSnapshot {
                 observedMessageSnapshots.append(currentSnapshot)
             }
             withObservationTracking {
-                _ = meetingStore.chatMessages(for: meeting.id).map(\.content)
+                _ = meetingStore.chatMessages(for: meeting.id).map { $0.content }
             } onChange: {
                 counter.increment()
                 Task { @MainActor in
@@ -794,7 +796,7 @@ struct ChatSessionFlowTests {
                     && snapshot[1] != "这是来自测试后端的回答。"
             }
         )
-        #expect(meetingStore.chatMessages(for: meeting.id).map(\.content) == ["帮我总结", "这是来自测试后端的回答。"])
+        #expect(meetingStore.chatMessages(for: meeting.id).map { $0.content } == ["帮我总结", "这是来自测试后端的回答。"])
     }
 
     @MainActor
@@ -813,7 +815,7 @@ struct ChatSessionFlowTests {
 
         var invalidationCount = 0
         withObservationTracking {
-            _ = store.chatMessages(for: meeting.id).map(\.content)
+            _ = store.chatMessages(for: meeting.id).map { $0.content }
         } onChange: {
             invalidationCount += 1
         }
@@ -841,7 +843,7 @@ struct ChatSessionFlowTests {
 
         var invalidationCount = 0
         withObservationTracking {
-            _ = store.chatMessages(for: meeting.id).map(\.content)
+            _ = store.chatMessages(for: meeting.id).map { $0.content }
         } onChange: {
             invalidationCount += 1
         }
@@ -849,7 +851,7 @@ struct ChatSessionFlowTests {
         assistantMessage.content = "这里是新的回答"
 
         #expect(invalidationCount == 1)
-        #expect(store.chatMessages(for: meeting.id).map(\.content) == ["帮我总结", "这里是新的回答"])
+        #expect(store.chatMessages(for: meeting.id).map { $0.content } == ["帮我总结", "这里是新的回答"])
     }
 
     @MainActor

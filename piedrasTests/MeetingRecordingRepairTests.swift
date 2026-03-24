@@ -76,19 +76,32 @@ private final class StubAudioRecorderService: AudioRecorderServicing {
     var reconcileResult: AudioRecorderForegroundRecoveryResult = .healthy
     var currentDurationSecondsValue = 0
     var snapshotArtifact: RecordingSnapshotArtifact?
+    var startArtifact = RecordingStartArtifact(
+        fileURL: URL(fileURLWithPath: "/tmp/recording-start.m4a"),
+        mimeType: "audio/m4a",
+        inputMode: .microphone,
+        sourceAudioLocalPath: nil,
+        sourceAudioDisplayName: nil,
+        sourceAudioDurationSeconds: 0
+    )
+    var stopArtifact = LocalAudioArtifact(
+        fileURL: URL(fileURLWithPath: "/tmp/recording-stop.m4a"),
+        durationSeconds: 0,
+        mimeType: "audio/m4a"
+    )
 
     func startRecording(
         meetingID: String,
         sourceAudio: SourceAudioAsset?
     ) async throws -> RecordingStartArtifact {
-        throw AudioSessionError.recorderUnavailable
+        startArtifact
     }
 
     func pauseRecording() throws {}
     func resumeRecording() throws {}
 
     func stopRecording() throws -> LocalAudioArtifact {
-        throw AudioSessionError.recorderUnavailable
+        stopArtifact
     }
 
     func toggleSourceAudioPlayback() throws {}
@@ -127,12 +140,44 @@ private final class StubMeetingSyncService: MeetingSyncServicing {
 
     func syncMeeting(id: String) async throws {
         syncedMeetingIDs.append(id)
+        if let meeting = try repository.meeting(withID: id) {
+            if meeting.speakerDiarizationState == .processing {
+                meeting.speakerDiarizationState = .ready
+                meeting.speakerDiarizationErrorMessage = nil
+            }
+            meeting.syncState = .synced
+            meeting.lastSyncedAt = .now
+            try repository.save()
+        }
         let transcript = try repository.meeting(withID: id)?.transcriptText ?? ""
         transcriptSnapshotsAtSync.append(transcript)
     }
 
     func refreshRemoteMeetings() async throws -> Int {
         0
+    }
+}
+
+@MainActor
+private final class StubRecordingLiveActivityCoordinator: RecordingLiveActivityCoordinating {
+    enum Event: Equatable {
+        case start(meetingID: String, phase: RecordingLiveActivityPhase, durationSeconds: Int)
+        case update(phase: RecordingLiveActivityPhase, durationSeconds: Int)
+        case end
+    }
+
+    private(set) var events: [Event] = []
+
+    func start(meetingID: String, phase: RecordingLiveActivityPhase, durationSeconds: Int) {
+        events.append(.start(meetingID: meetingID, phase: phase, durationSeconds: durationSeconds))
+    }
+
+    func update(phase: RecordingLiveActivityPhase, durationSeconds: Int) {
+        events.append(.update(phase: phase, durationSeconds: durationSeconds))
+    }
+
+    func end() {
+        events.append(.end)
     }
 }
 
@@ -152,6 +197,7 @@ struct MeetingRecordingRepairTests {
 
         #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop == false)
         #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == nil)
+        #expect(fixture.recordingSessionStore.infoBanner == nil)
     }
 
     @MainActor
@@ -212,7 +258,32 @@ struct MeetingRecordingRepairTests {
         #expect(fixture.recordingSessionStore.isBackfillingBackgroundTranscript == false)
         #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == nil)
         #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop == false)
+        #expect(fixture.recordingSessionStore.infoBanner == nil)
+        #expect(fixture.recordingSessionStore.errorBanner == nil)
         #expect(fixture.asrService.startCalls == 1)
+    }
+
+    @MainActor
+    @Test
+    func backgroundAsrDropStaysSilentUntilUserActionIsNeeded() async throws {
+        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.durationSeconds = 2
+        fixture.recorder.currentDurationSecondsValue = 2
+
+        fixture.meetingStore.handleScenePhaseChange(.background)
+        fixture.asrService.onError?("socket closed")
+
+        #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == 2_000)
+        #expect(fixture.recordingSessionStore.infoBanner == nil)
+        #expect(fixture.recordingSessionStore.errorBanner == nil)
     }
 
     @MainActor
@@ -239,6 +310,53 @@ struct MeetingRecordingRepairTests {
         #expect(fixture.recordingSessionStore.infoBanner == "录音在后台被系统打断，请返回应用后继续。")
         #expect(fixture.asrService.stopCalls == 1)
         #expect(fixture.asrService.startCalls == 0)
+    }
+
+    @MainActor
+    @Test
+    func recordingLifecycleDrivesLiveActivityState() async throws {
+        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        let recordingURL = try makeTemporaryAudioFile(named: "recording-live-activity-start.m4a")
+        let stopURL = try makeTemporaryAudioFile(named: "recording-live-activity-stop.m4a")
+        defer {
+            try? FileManager.default.removeItem(at: recordingURL)
+            try? FileManager.default.removeItem(at: stopURL)
+        }
+
+        fixture.recorder.startArtifact = RecordingStartArtifact(
+            fileURL: recordingURL,
+            mimeType: "audio/m4a",
+            inputMode: .microphone,
+            sourceAudioLocalPath: nil,
+            sourceAudioDisplayName: nil,
+            sourceAudioDurationSeconds: 0
+        )
+        fixture.recorder.stopArtifact = LocalAudioArtifact(
+            fileURL: stopURL,
+            durationSeconds: 3,
+            mimeType: "audio/m4a"
+        )
+
+        await fixture.meetingStore.startRecording(meetingID: meeting.id)
+        await fixture.meetingStore.pauseRecording()
+        await fixture.meetingStore.resumeRecording()
+        await fixture.meetingStore.stopRecording()
+        try await waitUntil {
+            fixture.liveActivity.events.contains(.end)
+        }
+
+        #expect(
+            fixture.liveActivity.events == [
+                .start(meetingID: meeting.id, phase: .recording, durationSeconds: 0),
+                .update(phase: .paused, durationSeconds: 0),
+                .update(phase: .recording, durationSeconds: 0),
+                .end,
+            ]
+        )
     }
 
     @MainActor
@@ -350,7 +468,8 @@ struct MeetingRecordingRepairTests {
         recorder: StubAudioRecorderService,
         asrService: StubASRService,
         transcriber: StubAudioFileTranscriptionService,
-        syncService: StubMeetingSyncService
+        syncService: StubMeetingSyncService,
+        liveActivity: StubRecordingLiveActivityCoordinator
     ) {
         let container = try ModelContainerFactory.makeContainer(inMemory: true)
         let repository = MeetingRepository(modelContext: container.mainContext)
@@ -365,12 +484,14 @@ struct MeetingRecordingRepairTests {
         let transcriber = StubAudioFileTranscriptionService(behavior: transcriptionBehavior)
         let syncService = StubMeetingSyncService(repository: repository)
         let asrService = StubASRService()
+        let liveActivity = StubRecordingLiveActivityCoordinator()
         let meetingStore = MeetingStore(
             repository: repository,
             chatSessionRepository: chatRepository,
             settingsStore: settingsStore,
             recordingSessionStore: recordingSessionStore,
             appActivityCoordinator: AppActivityCoordinator(),
+            recordingLiveActivityCoordinator: liveActivity,
             audioRecorderService: recorder,
             audioFileTranscriptionService: transcriber,
             apiClient: apiClient,
@@ -390,7 +511,8 @@ struct MeetingRecordingRepairTests {
             recorder,
             asrService,
             transcriber,
-            syncService
+            syncService,
+            liveActivity
         )
     }
 

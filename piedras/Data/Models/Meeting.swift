@@ -29,6 +29,15 @@ enum MeetingRecordingMode: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum SpeakerDiarizationState: String, Codable, CaseIterable, Identifiable {
+    case idle
+    case processing
+    case ready
+    case failed
+
+    var id: String { rawValue }
+}
+
 @Model
 final class Meeting {
     @Attribute(.unique) var id: String
@@ -48,6 +57,9 @@ final class Meeting {
     var sourceAudioDisplayName: String?
     var sourceAudioDuration: Int
     var hiddenWorkspaceId: String?
+    var speakersRaw: String
+    var speakerDiarizationStateRaw: String
+    var speakerDiarizationErrorMessage: String?
     var syncStateRaw: String
     var lastSyncedAt: Date?
     @Attribute(originalName: "hasPendingImageTextRefresh")
@@ -82,6 +94,9 @@ final class Meeting {
         sourceAudioDisplayName: String? = nil,
         sourceAudioDuration: Int = 0,
         hiddenWorkspaceId: String? = nil,
+        speakers: [String: String] = [:],
+        speakerDiarizationState: SpeakerDiarizationState = .idle,
+        speakerDiarizationErrorMessage: String? = nil,
         syncState: MeetingSyncState = .pending,
         lastSyncedAt: Date? = nil,
         hasPendingImageTextRefresh: Bool = false,
@@ -108,6 +123,9 @@ final class Meeting {
         self.sourceAudioDisplayName = sourceAudioDisplayName
         self.sourceAudioDuration = sourceAudioDuration
         self.hiddenWorkspaceId = hiddenWorkspaceId
+        self.speakersRaw = Self.encodeSpeakers(speakers)
+        self.speakerDiarizationStateRaw = speakerDiarizationState.rawValue
+        self.speakerDiarizationErrorMessage = speakerDiarizationErrorMessage
         self.syncStateRaw = syncState.rawValue
         self.lastSyncedAt = lastSyncedAt
         self.hasPendingImageTextRefreshValue = hasPendingImageTextRefresh
@@ -131,6 +149,16 @@ final class Meeting {
     var syncState: MeetingSyncState {
         get { MeetingSyncState(rawValue: syncStateRaw) ?? .pending }
         set { syncStateRaw = newValue.rawValue }
+    }
+
+    var speakers: [String: String] {
+        get { Self.decodeSpeakers(speakersRaw) }
+        set { speakersRaw = Self.encodeSpeakers(newValue) }
+    }
+
+    var speakerDiarizationState: SpeakerDiarizationState {
+        get { SpeakerDiarizationState(rawValue: speakerDiarizationStateRaw) ?? .idle }
+        set { speakerDiarizationStateRaw = newValue.rawValue }
     }
 
     var hasPendingImageTextRefresh: Bool {
@@ -178,10 +206,70 @@ final class Meeting {
         MeetingSearchIndexBuilder.searchIndexText(for: self)
     }
 
+    func displayName(forSpeaker speaker: String) -> String {
+        let normalized = speaker.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return AppStrings.current.speakerLabel(1)
+        }
+
+        if let displayName = speakers[normalized]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !displayName.isEmpty {
+            return displayName
+        }
+
+        if let index = Self.generatedSpeakerIndex(from: normalized) {
+            return AppStrings.current.speakerLabel(index)
+        }
+
+        return normalized
+    }
+
+    func setDisplayName(_ displayName: String, forSpeaker speaker: String) {
+        let normalizedSpeaker = speaker.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedSpeaker.isEmpty else { return }
+
+        var updatedSpeakers = speakers
+        let normalizedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if normalizedDisplayName.isEmpty {
+            updatedSpeakers.removeValue(forKey: normalizedSpeaker)
+        } else {
+            updatedSpeakers[normalizedSpeaker] = normalizedDisplayName
+        }
+
+        speakers = updatedSpeakers
+    }
+
     func markPending() {
         updatedAt = .now
         if syncState != .syncing {
             syncState = .pending
         }
+    }
+
+    private static func encodeSpeakers(_ speakers: [String: String]) -> String {
+        guard JSONSerialization.isValidJSONObject(speakers),
+              let data = try? JSONSerialization.data(withJSONObject: speakers, options: [.sortedKeys]),
+              let value = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+
+        return value
+    }
+
+    private static func decodeSpeakers(_ rawValue: String) -> [String: String] {
+        guard let data = rawValue.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let speakers = object as? [String: String] else {
+            return [:]
+        }
+
+        return speakers
+    }
+
+    private static func generatedSpeakerIndex(from speaker: String) -> Int? {
+        guard speaker.hasPrefix("spk_") else { return nil }
+        guard let index = Int(speaker.dropFirst(4)), index > 0 else { return nil }
+        return index
     }
 }

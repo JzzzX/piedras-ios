@@ -155,6 +155,7 @@ export async function PUT(
 
     return jsonResponse(context, {
       ...hydratedMeeting,
+      speakers: hydratedMeeting ? JSON.parse(hydratedMeeting.speakers) : {},
       hasAudio,
       audioUrl:
         hydratedMeeting && hasAudio

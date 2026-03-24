@@ -144,6 +144,36 @@ final class APIClient {
         return try decoder.decode(RemoteAudioUploadResponse.self, from: data)
     }
 
+    func uploadAudioAndFinalizeTranscript(
+        meetingID: String,
+        fileURL: URL,
+        duration: Int,
+        mimeType: String
+    ) async throws -> RemoteMeetingDetail {
+        guard let fileData = try? Data(contentsOf: fileURL) else {
+            throw APIClientError.unreadableFile
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString.lowercased())"
+        var request = try makeRequest(
+            path: "/api/meetings/\(meetingID)/audio",
+            method: "POST",
+            queryItems: [URLQueryItem(name: "finalizeTranscript", value: "true")]
+        )
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = makeMultipartBody(
+            boundary: boundary,
+            fileData: fileData,
+            filename: fileURL.lastPathComponent,
+            duration: duration,
+            mimeType: mimeType
+        )
+
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data)
+        return try decoder.decode(RemoteMeetingDetail.self, from: data)
+    }
+
     func enhanceNotes(_ payload: EnhanceRequestPayload) async throws -> RemoteEnhanceResponse {
         try await sendJSONRequest(path: "/api/enhance", method: "POST", body: payload)
     }

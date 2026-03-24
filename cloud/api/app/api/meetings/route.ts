@@ -233,7 +233,10 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    return jsonResponse(context, meeting);
+    return jsonResponse(context, {
+      ...meeting,
+      speakers: meeting ? JSON.parse(meeting.speakers) : {},
+    });
   } catch (error) {
     return errorResponse(
       context,

@@ -285,6 +285,132 @@ struct MeetingDeletionSyncTests {
 
     @MainActor
     @Test
+    func syncMeetingFinalizesEndedAudioWithSpeakerDiarization() async throws {
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
+        let settingsStore = makeSettingsStore()
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let syncService = MeetingSyncService(
+            repository: repository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+        let audioURL = try makeTemporaryAudioFile(named: "meeting-upload-diarized.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        let meeting = Meeting(
+            id: "meeting-upload-diarized",
+            title: "Interview",
+            status: .ended,
+            audioLocalPath: audioURL.path,
+            audioMimeType: "audio/m4a",
+            audioDuration: 24,
+            audioUpdatedAt: .now,
+            hiddenWorkspaceId: "workspace-1",
+            syncState: .pending
+        )
+        meeting.speakerDiarizationState = .processing
+        repository.insert(meeting)
+        try repository.save()
+
+        MockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/meetings":
+                let payload: [String: Any] = [
+                    "id": meeting.id,
+                    "title": meeting.title,
+                    "date": meeting.date.ISO8601Format(),
+                    "status": meeting.status.rawValue,
+                    "duration": meeting.durationSeconds,
+                    "workspaceId": meeting.hiddenWorkspaceId ?? "workspace-1",
+                    "speakers": [:],
+                    "userNotes": meeting.userNotesPlainText,
+                    "enhancedNotes": meeting.enhancedNotes,
+                    "createdAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "updatedAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "segments": [],
+                    "chatMessages": [],
+                    "hasAudio": false,
+                    "audioUrl": NSNull(),
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            case "/api/meetings/\(meeting.id)/audio":
+                #expect(url.query?.contains("finalizeTranscript=true") == true)
+                return (
+                    response,
+                    Data(
+                        """
+                        {
+                          "id": "\(meeting.id)",
+                          "title": "Interview",
+                          "date": "2026-03-24T04:00:00.000Z",
+                          "status": "ended",
+                          "duration": 24,
+                          "audioMimeType": "audio/m4a",
+                          "audioDuration": 24,
+                          "audioUpdatedAt": "2026-03-24T04:00:00.000Z",
+                          "userNotes": "",
+                          "enhancedNotes": "",
+                          "createdAt": "2026-03-24T03:50:00.000Z",
+                          "updatedAt": "2026-03-24T04:00:00.000Z",
+                          "workspaceId": "workspace-1",
+                          "speakers": {
+                            "spk_1": "面试官",
+                            "spk_2": "候选人"
+                          },
+                          "segments": [
+                            {
+                              "id": "segment-1",
+                              "speaker": "spk_1",
+                              "text": "请做个自我介绍。",
+                              "startTime": 0,
+                              "endTime": 1200,
+                              "isFinal": true,
+                              "order": 0
+                            }
+                          ],
+                          "chatMessages": [],
+                          "hasAudio": true,
+                          "audioUrl": "/api/meetings/\(meeting.id)/audio?t=123"
+                        }
+                        """.utf8
+                    )
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+        defer { MockURLProtocol.reset() }
+
+        try await syncService.syncMeeting(id: meeting.id)
+
+        let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.syncState == .synced)
+        #expect(refreshedMeeting.speakerDiarizationState == .ready)
+        #expect(refreshedMeeting.audioLocalPath == nil)
+        #expect(refreshedMeeting.speakers == [
+            "spk_1": "面试官",
+            "spk_2": "候选人",
+        ])
+        #expect(refreshedMeeting.orderedSegments.map { $0.speaker } == ["spk_1"])
+        #expect(refreshedMeeting.orderedSegments.map { $0.text } == ["请做个自我介绍。"])
+        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings", "/api/meetings/\(meeting.id)/audio"])
+    }
+
+    @MainActor
+    @Test
     func syncMeetingKeepsLocalAudioWhenUploadFails() async throws {
         let fixture = try makeRepositoryFixture()
         let repository = fixture.repository

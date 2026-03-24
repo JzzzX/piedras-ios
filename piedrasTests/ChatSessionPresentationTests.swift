@@ -17,8 +17,8 @@ struct ChatSessionPresentationTests {
 
         let sections = ChatSessionHistorySection.makeSections(from: sessions, now: now, calendar: calendar)
 
-        #expect(sections.map(\.bucket) == [.today, .yesterday, .earlierThisWeek, .earlier])
-        #expect(sections.flatMap(\.sessions).map(\.title) == ["today", "yesterday", "week", "earlier"])
+        #expect(sections.map { $0.bucket } == [.today, .yesterday, .earlierThisWeek, .earlier])
+        #expect(sections.flatMap { $0.sessions }.map { $0.title } == ["today", "yesterday", "week", "earlier"])
     }
 
     @Test

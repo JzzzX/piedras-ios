@@ -95,10 +95,51 @@ struct RemoteMeetingDetail: Decodable {
     let createdAt: Date?
     let updatedAt: Date?
     let workspaceId: String?
+    let speakers: [String: String]?
     let segments: [RemoteTranscriptSegment]
     let chatMessages: [RemoteChatMessage]
     let hasAudio: Bool?
     let audioUrl: String?
+
+    init(
+        id: String,
+        title: String?,
+        date: Date,
+        status: String?,
+        duration: Int?,
+        audioMimeType: String?,
+        audioDuration: Int?,
+        audioUpdatedAt: Date?,
+        userNotes: String?,
+        enhancedNotes: String?,
+        createdAt: Date?,
+        updatedAt: Date?,
+        workspaceId: String?,
+        speakers: [String: String]? = nil,
+        segments: [RemoteTranscriptSegment],
+        chatMessages: [RemoteChatMessage],
+        hasAudio: Bool?,
+        audioUrl: String?
+    ) {
+        self.id = id
+        self.title = title
+        self.date = date
+        self.status = status
+        self.duration = duration
+        self.audioMimeType = audioMimeType
+        self.audioDuration = audioDuration
+        self.audioUpdatedAt = audioUpdatedAt
+        self.userNotes = userNotes
+        self.enhancedNotes = enhancedNotes
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.workspaceId = workspaceId
+        self.speakers = speakers
+        self.segments = segments
+        self.chatMessages = chatMessages
+        self.hasAudio = hasAudio
+        self.audioUrl = audioUrl
+    }
 }
 
 struct RemoteAudioUploadResponse: Decodable {
@@ -209,7 +250,7 @@ enum MeetingPayloadMapper {
             workspaceId: workspaceID,
             userNotes: PlainTextHTMLAdapter.html(from: meeting.userNotesPlainText),
             enhancedNotes: meeting.enhancedNotes,
-            speakers: [:],
+            speakers: meeting.speakers,
             segments: meeting.orderedSegments.map {
                 MeetingSegmentPayload(
                     id: $0.id,
@@ -281,6 +322,7 @@ enum MeetingPayloadMapper {
             audioDuration: remote.audioDuration ?? 0,
             audioUpdatedAt: remote.audioUpdatedAt,
             hiddenWorkspaceId: remote.workspaceId,
+            speakers: remote.speakers ?? [:],
             syncState: .synced,
             lastSyncedAt: .now,
             createdAt: remote.createdAt ?? remote.date,
@@ -307,6 +349,7 @@ enum MeetingPayloadMapper {
         meeting.audioDuration = remote.audioDuration ?? meeting.audioDuration
         meeting.audioUpdatedAt = remote.audioUpdatedAt ?? meeting.audioUpdatedAt
         meeting.hiddenWorkspaceId = remote.workspaceId ?? meeting.hiddenWorkspaceId
+        meeting.speakers = remote.speakers ?? meeting.speakers
         meeting.syncState = .synced
         meeting.lastSyncedAt = .now
         meeting.createdAt = remote.createdAt ?? meeting.createdAt
@@ -346,7 +389,7 @@ enum MeetingPayloadMapper {
         let finalSegments = meeting.orderedSegments.filter(\.isFinal)
         let source = finalSegments.isEmpty ? meeting.orderedSegments : finalSegments
         return source
-            .map { "[\($0.speaker)]: \($0.text)" }
+            .map { "[\(meeting.displayName(forSpeaker: $0.speaker))]: \($0.text)" }
             .joined(separator: "\n")
     }
 

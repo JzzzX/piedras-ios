@@ -3,9 +3,11 @@ import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-err
 import { prisma } from '@/lib/db';
 import {
   buildMeetingAudioResponse,
+  getMeetingAudioPath,
   hasMeetingAudioFile,
   saveMeetingAudioFile,
 } from '@/lib/meeting-audio';
+import { finalizeMeetingTranscriptFromAudio } from '@/lib/meeting-transcript-finalizer';
 
 export const runtime = 'nodejs';
 
@@ -51,6 +53,7 @@ export async function POST(
 
   try {
     const { id } = await params;
+    const shouldFinalizeTranscript = req.nextUrl.searchParams.get('finalizeTranscript') === 'true';
     const formData = await req.formData();
     const file = formData.get('file');
     const duration = Number(formData.get('duration') || 0);
@@ -72,11 +75,70 @@ export async function POST(
     const arrayBuffer = await file.arrayBuffer();
     await saveMeetingAudioFile(id, Buffer.from(arrayBuffer));
 
+    const normalizedDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null;
+    const normalizedMimeType = mimeType || file.type || 'audio/webm';
+
+    if (shouldFinalizeTranscript) {
+      const finalizedTranscript = await finalizeMeetingTranscriptFromAudio({
+        audioPath: getMeetingAudioPath(id),
+        mimeType: normalizedMimeType,
+        requestId: context.requestId,
+        userId: `meeting-${id}`,
+      });
+
+      const hydratedMeeting = await prisma.$transaction(async (tx: any) => {
+        await tx.meeting.update({
+          where: { id },
+          data: {
+            audioMimeType: normalizedMimeType,
+            audioDuration: normalizedDuration,
+            audioUpdatedAt: new Date(),
+            speakers: JSON.stringify(finalizedTranscript.speakers),
+          },
+        });
+
+        await tx.transcriptSegment.deleteMany({
+          where: { meetingId: id },
+        });
+
+        if (finalizedTranscript.segments.length > 0) {
+          await tx.transcriptSegment.createMany({
+            data: finalizedTranscript.segments.map((segment, index) => ({
+              id: crypto.randomUUID(),
+              meetingId: id,
+              speaker: segment.speaker,
+              text: segment.text,
+              startTime: segment.startTime,
+              endTime: segment.endTime,
+              isFinal: segment.isFinal,
+              order: index,
+            })),
+          });
+        }
+
+        return tx.meeting.findUnique({
+          where: { id },
+          include: {
+            collection: true,
+            segments: { orderBy: { order: 'asc' } },
+            chatMessages: { orderBy: { timestamp: 'asc' } },
+          },
+        });
+      });
+
+      return jsonResponse(context, {
+        ...hydratedMeeting,
+        speakers: hydratedMeeting ? JSON.parse(hydratedMeeting.speakers) : {},
+        hasAudio: true,
+        audioUrl: `/api/meetings/${id}/audio?t=${hydratedMeeting?.audioUpdatedAt?.getTime() || Date.now()}`,
+      });
+    }
+
     const updated = await prisma.meeting.update({
       where: { id },
       data: {
-        audioMimeType: mimeType || file.type || 'audio/webm',
-        audioDuration: Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null,
+        audioMimeType: normalizedMimeType,
+        audioDuration: normalizedDuration,
         audioUpdatedAt: new Date(),
       },
       select: {

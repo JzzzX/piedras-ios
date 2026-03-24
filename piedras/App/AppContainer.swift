@@ -11,6 +11,7 @@ final class AppContainer {
     let settingsStore: SettingsStore
     let recordingSessionStore: RecordingSessionStore
     let appActivityCoordinator: AppActivityCoordinator
+    let recordingLiveActivityCoordinator: RecordingLiveActivityCoordinator
     let audioSessionCoordinator: AudioSessionCoordinator
     let audioRecorderService: AudioRecorderService
     let audioFileTranscriptionService: AudioFileTranscriptionService
@@ -52,6 +53,7 @@ final class AppContainer {
         )
         recordingSessionStore = RecordingSessionStore()
         appActivityCoordinator = AppActivityCoordinator()
+        recordingLiveActivityCoordinator = RecordingLiveActivityCoordinator()
         audioSessionCoordinator = AudioSessionCoordinator()
         audioRecorderService = AudioRecorderService(sessionCoordinator: audioSessionCoordinator)
         meetingRepository = MeetingRepository(modelContext: modelContainer.mainContext)
@@ -74,6 +76,7 @@ final class AppContainer {
             settingsStore: settingsStore,
             recordingSessionStore: recordingSessionStore,
             appActivityCoordinator: appActivityCoordinator,
+            recordingLiveActivityCoordinator: recordingLiveActivityCoordinator,
             audioRecorderService: audioRecorderService,
             audioFileTranscriptionService: audioFileTranscriptionService,
             apiClient: apiClient,

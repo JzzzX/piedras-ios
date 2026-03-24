@@ -82,7 +82,14 @@ final class MeetingSyncService: MeetingSyncServicing {
                 MeetingPayloadMapper.makeMeetingUpsertPayload(from: meeting, workspaceID: workspaceID)
             )
             MeetingPayloadMapper.apply(remote: remoteMeeting, to: meeting, repository: repository, baseURL: apiClient.baseURL)
-            try await uploadLocalAudioIfNeeded(for: meeting)
+            if let finalizedMeeting = try await uploadLocalAudioIfNeeded(for: meeting) {
+                MeetingPayloadMapper.apply(
+                    remote: finalizedMeeting,
+                    to: meeting,
+                    repository: repository,
+                    baseURL: apiClient.baseURL
+                )
+            }
 
             meeting.syncState = .synced
             meeting.lastSyncedAt = .now
@@ -90,27 +97,45 @@ final class MeetingSyncService: MeetingSyncServicing {
             try repository.save()
             try pruneLocalAudioIfNeeded(for: meeting)
         } catch {
+            if meeting.speakerDiarizationState == .processing {
+                meeting.speakerDiarizationState = .failed
+                meeting.speakerDiarizationErrorMessage = error.localizedDescription
+            }
             meeting.syncState = .failed
             try? repository.save()
             throw error
         }
     }
 
-    private func uploadLocalAudioIfNeeded(for meeting: Meeting) async throws {
+    private func uploadLocalAudioIfNeeded(for meeting: Meeting) async throws -> RemoteMeetingDetail? {
         guard meeting.status == .ended else {
-            return
+            return nil
         }
 
         guard let audioLocalPath = meeting.audioLocalPath, !audioLocalPath.isEmpty else {
-            return
+            return nil
         }
 
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: audioLocalPath) else {
-            return
+            return nil
         }
 
         let fallbackDuration = max(meeting.audioDuration, meeting.durationSeconds)
+
+        if meeting.speakerDiarizationState == .processing {
+            let remoteMeeting = try await apiClient.uploadAudioAndFinalizeTranscript(
+                meetingID: meeting.id,
+                fileURL: URL(fileURLWithPath: audioLocalPath),
+                duration: max(fallbackDuration, 0),
+                mimeType: meeting.audioMimeType ?? "audio/m4a"
+            )
+            meeting.speakerDiarizationState = .ready
+            meeting.speakerDiarizationErrorMessage = nil
+            try repository.save()
+            return remoteMeeting
+        }
+
         let uploadResponse = try await apiClient.uploadAudio(
             meetingID: meeting.id,
             fileURL: URL(fileURLWithPath: audioLocalPath),
@@ -123,6 +148,7 @@ final class MeetingSyncService: MeetingSyncServicing {
         meeting.audioDuration = uploadResponse.audioDuration ?? fallbackDuration
         meeting.audioUpdatedAt = uploadResponse.audioUpdatedAt ?? meeting.audioUpdatedAt ?? .now
         try repository.save()
+        return nil
     }
 
     func refreshRemoteMeetings() async throws -> Int {

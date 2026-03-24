@@ -83,6 +83,14 @@ struct AppStringTable {
     var audioTranscriptionFailed: String { isChinese ? "文件转写失败" : "Audio transcription failed" }
     var retryTranscription: String { isChinese ? "重新转写" : "Retry transcription" }
     var fileTranscriptionInterrupted: String { isChinese ? "应用中断了上次文件转写，请重新转写。" : "The previous file transcription was interrupted. Please retry." }
+    var renameSpeaker: String { isChinese ? "重命名说话人" : "Rename speaker" }
+    var renameSpeakerPrompt: String { isChinese ? "输入名字；留空会恢复默认标签。" : "Enter a name; leave it blank to restore the default label." }
+    var speakerNamePlaceholder: String { isChinese ? "说话人名称" : "Speaker name" }
+
+    func speakerLabel(_ index: Int) -> String {
+        let normalized = max(index, 1)
+        return isChinese ? "说话人 \(normalized)" : "Speaker \(normalized)"
+    }
 
     func transcribingAudioProgress(elapsed: String, total: String) -> String {
         isChinese ? "正在转写 \(elapsed) / \(total)" : "Transcribing \(elapsed) / \(total)"
