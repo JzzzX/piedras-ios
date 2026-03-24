@@ -402,7 +402,7 @@ struct RetroBlinkingCursor: View {
             .foregroundStyle(AppTheme.ink)
             .opacity(isVisible ? 1 : 0)
             .onAppear {
-                withAnimation(.easeInOut(duration: 0).repeatForever(autoreverses: true).speed(0.8)) {
+                withAnimation(.easeInOut(duration: 0.55).repeatForever(autoreverses: true)) {
                     isVisible.toggle()
                 }
             }
