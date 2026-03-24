@@ -130,7 +130,7 @@ struct CollapsibleRecordingBar: View {
                         .background(AppTheme.highlight)
                         .overlay(
                             Rectangle()
-                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                                .stroke(AppTheme.ink, lineWidth: 2)
                         )
                 }
                 .buttonStyle(.plain)

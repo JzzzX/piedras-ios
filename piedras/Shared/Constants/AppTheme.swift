@@ -13,14 +13,14 @@ enum AppTheme {
     static var surface: Color { Color(hex: 0xF4F0E6) }
     /// Elevated surface (same as surface in retro: no transparency)
     static var surfaceElevated: Color { Color(hex: 0xF4F0E6) }
-    /// Hard ink-black border
-    static var border: Color { Color(hex: 0x111111) }
+    /// Warm taupe border for lighter retro chrome
+    static var border: Color { Color(hex: 0xC8B9A6) }
     /// Ink black for text
     static var ink: Color { Color(hex: 0x111111) }
     /// Faded ink for secondary text
-    static var mutedInk: Color { Color(hex: 0x6A6358) }
+    static var mutedInk: Color { Color(hex: 0x8A7E6B) }
     /// Faded ink for tertiary text
-    static var subtleInk: Color { Color(hex: 0x8A8578) }
+    static var subtleInk: Color { Color(hex: 0xB5A998) }
     /// Muted accent (same as ink in retro)
     static var accent: Color { Color(hex: 0x111111) }
     /// Soft accent background
@@ -35,6 +35,10 @@ enum AppTheme {
     static var success: Color { Color(hex: 0x5F824D) }
     /// Ballpoint pen blue
     static var penBlue: Color { Color(hex: 0x2B4C7E) }
+    /// Caramel accent for icons and utility emphasis
+    static var caramel: Color { Color(hex: 0x9C7B5C) }
+    /// Light warm background for document and utility icons
+    static var iconBackground: Color { Color(hex: 0xE8DED0) }
 
     /// Dock / toolbar surface – slightly darker than cards for visual separation
     static var dockSurface: Color { Color(hex: 0xE8E1D0) }
@@ -120,9 +124,9 @@ enum AppTheme {
     }
 
     // ── Retro Dimensions ──────────────────────────────────────────
-    static let retroBorderWidth: CGFloat = 2
+    static let retroBorderWidth: CGFloat = 1
     static let retroCornerRadius: CGFloat = 0
-    static let retroShadowOffset: CGFloat = 4
+    static let retroShadowOffset: CGFloat = 3
     static let retroTitleBarHeight: CGFloat = 24
     static let subtleBorderWidth: CGFloat = 1
     static let subtleBorderColor: Color = Color(hex: 0x111111).opacity(0.13)
@@ -185,7 +189,7 @@ extension View {
     func retroHardShadow(
         x: CGFloat = AppTheme.retroShadowOffset,
         y: CGFloat = AppTheme.retroShadowOffset,
-        color: Color = AppTheme.border
+        color: Color = Color(hex: 0x8A7E6B)
     ) -> some View {
         self.background(alignment: .topLeading) {
             Rectangle()

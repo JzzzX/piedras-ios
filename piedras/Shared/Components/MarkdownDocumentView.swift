@@ -5,6 +5,7 @@ struct MarkdownDocumentView: View {
     let markdown: String
     var placeholder: String = "No notes yet."
     var minHeight: CGFloat = 420
+    var bodyLineSpacing: CGFloat = AppTheme.editorialBodyLineSpacing
     var accessibilityIdentifier: String? = nil
 
     private var blocks: [MarkdownDocumentFormatter.Block] {
@@ -48,7 +49,7 @@ struct MarkdownDocumentView: View {
         case .paragraph:
             Text(block.attributedText)
                 .font(AppTheme.bodyFont(size: 15))
-                .lineSpacing(AppTheme.editorialBodyLineSpacing)
+                .lineSpacing(bodyLineSpacing)
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -61,7 +62,7 @@ struct MarkdownDocumentView: View {
 
                 Text(block.attributedText)
                     .font(AppTheme.bodyFont(size: 15))
-                    .lineSpacing(AppTheme.editorialBodyLineSpacing)
+                    .lineSpacing(bodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -80,7 +81,7 @@ struct MarkdownDocumentView: View {
 
                 Text(block.attributedText)
                     .font(AppTheme.bodyFont(size: 15))
-                    .lineSpacing(AppTheme.editorialBodyLineSpacing)
+                    .lineSpacing(bodyLineSpacing)
                     .foregroundStyle(AppTheme.ink)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -94,7 +95,7 @@ struct MarkdownDocumentView: View {
 
                 Text(block.attributedText)
                     .font(AppTheme.bodyFont(size: 14))
-                    .lineSpacing(AppTheme.editorialBodyLineSpacing)
+                    .lineSpacing(bodyLineSpacing)
                     .foregroundStyle(AppTheme.mutedInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)

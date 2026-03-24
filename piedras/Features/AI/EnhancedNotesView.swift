@@ -16,6 +16,7 @@ struct EnhancedNotesView: View {
                     markdown: text,
                     placeholder: AppStrings.current.noAINotesYet,
                     minHeight: 420,
+                    bodyLineSpacing: 8,
                     accessibilityIdentifier: "EnhancedNotesRenderedView"
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)

@@ -53,15 +53,27 @@ extension Meeting {
         date.formatted(.dateTime.hour().minute())
     }
 
-    var homeMetadataLine: String {
-        let sectionTitle = daySectionTitle
-        let parts = [
-            sectionTitle == AppStrings.current.today || sectionTitle == AppStrings.current.yesterday ? compactTimestampLabel : sectionTitle,
-            durationLabel,
-        ]
-            .filter { !$0.isEmpty }
+    func homeMetadataComponents(
+        referenceDate: Date = .now,
+        calendar: Calendar = .current
+    ) -> [String] {
+        let isToday = calendar.isDate(date, inSameDayAs: referenceDate)
+        let isYesterday = if let yesterday = calendar.date(byAdding: .day, value: -1, to: referenceDate) {
+            calendar.isDate(date, inSameDayAs: yesterday)
+        } else {
+            false
+        }
 
-        return parts.joined(separator: " · ")
+        let leading = isToday || isYesterday
+            ? compactTimestampLabel
+            : date.formatted(.dateTime.month(.wide).day())
+
+        return [leading, durationLabel]
+            .filter { !$0.isEmpty }
+    }
+
+    var homeMetadataLine: String {
+        homeMetadataComponents().joined(separator: " · ")
     }
 
     var transcriptSummaryLabel: String {

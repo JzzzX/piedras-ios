@@ -14,6 +14,7 @@ private struct MeetingActionItem: Identifiable {
     let title: String
     let systemName: String
     let accessibilityIdentifier: String
+    let isDisabled: Bool
     let action: () -> Void
 }
 
@@ -102,7 +103,7 @@ struct MeetingDetailView: View {
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: isRecordingThisMeeting ? 12 : 18) {
+                    VStack(alignment: .leading, spacing: isRecordingThisMeeting ? 12 : 20) {
                         Color.clear
                             .frame(height: 0)
                             .id(topAnchorID)
@@ -160,7 +161,7 @@ struct MeetingDetailView: View {
             detailTopChrome(meeting: meeting)
         }
         .safeAreaInset(edge: .bottom) {
-            if annotationStore.activeSegmentID == nil {
+            if !isRecordingThisMeeting {
                 bottomStack(for: meeting)
             }
         }
@@ -250,48 +251,45 @@ struct MeetingDetailView: View {
             Spacer()
 
             HStack(spacing: 10) {
-                if !isRecordingThisMeeting {
-                    Button {
-                        closeActionMenu()
-                        showsTranscriptSheet = true
-                    } label: {
-                        detailToolLabel(systemName: "doc.text")
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(AppStrings.current.transcript)
-                    .accessibilityIdentifier("MeetingTranscriptSheetButton")
-
-                    Button {
-                        closeActionMenu()
-                        Task {
-                            await meetingStore.generateEnhancedNotes(for: meeting.id)
-                        }
-                    } label: {
-                        detailToolLabel(systemName: meetingStore.isEnhancing(meetingID: meeting.id) ? "hourglass" : "arrow.clockwise")
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(meetingStore.isEnhancing(meetingID: meeting.id) || !canRefreshSummary(for: meeting))
-                    .accessibilityLabel(meetingStore.isEnhancing(meetingID: meeting.id) ? AppStrings.current.generatingNotes : AppStrings.current.refreshNotes)
-                    .accessibilityIdentifier("MeetingRefreshSummaryButton")
+                ForEach(MeetingDetailChrome.topBarActions(isRecording: isRecordingThisMeeting), id: \.self) { action in
+                    topBarActionButton(action, meeting: meeting)
                 }
-
-                ShareLink(item: sharePayload(for: meeting)) {
-                    detailToolLabel(systemName: "square.and.arrow.up")
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("分享")
-                .accessibilityIdentifier("MeetingShareButton")
-
-                Button {
-                    withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
-                        showsActionMenu.toggle()
-                    }
-                } label: {
-                    detailToolLabel(systemName: "ellipsis")
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("MeetingDetailMoreButton")
             }
+        }
+    }
+
+    @ViewBuilder
+    private func topBarActionButton(_ action: MeetingDetailToolbarAction, meeting: Meeting) -> some View {
+        switch action {
+        case .transcript:
+            Button {
+                closeActionMenu()
+                showsTranscriptSheet = true
+            } label: {
+                detailToolLabel(systemName: "doc.text")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppStrings.current.transcript)
+            .accessibilityIdentifier("MeetingTranscriptSheetButton")
+
+        case .share:
+            ShareLink(item: sharePayload(for: meeting)) {
+                detailToolLabel(systemName: "square.and.arrow.up")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppStrings.current.share)
+            .accessibilityIdentifier("MeetingShareButton")
+
+        case .more:
+            Button {
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
+                    showsActionMenu.toggle()
+                }
+            } label: {
+                detailToolLabel(systemName: "ellipsis")
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("MeetingDetailMoreButton")
         }
     }
 
@@ -345,9 +343,11 @@ struct MeetingDetailView: View {
     }
 
     private func actionMenuOverlay(meeting: Meeting) -> some View {
-        ZStack(alignment: .topTrailing) {
+        let chrome = MeetingDetailChrome.actionMenuChrome
+
+        return ZStack(alignment: .topTrailing) {
             Rectangle()
-                .fill(Color.black.opacity(0.001))
+                .fill(Color.black.opacity(chrome.backdropOpacity))
                 .ignoresSafeArea()
                 .contentShape(Rectangle())
                 .accessibilityIdentifier("MeetingDetailActionMenuBackdrop")
@@ -406,8 +406,19 @@ struct MeetingDetailView: View {
 
     @ViewBuilder
     private func bottomStack(for meeting: Meeting) -> some View {
-        if !isRecordingThisMeeting {
-            VStack(spacing: 10) {
+        VStack(spacing: 0) {
+            LinearGradient(
+                colors: [
+                    AppTheme.background.opacity(0),
+                    AppTheme.background.opacity(0.86)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 28)
+            .allowsHitTesting(false)
+
+            VStack(spacing: 12) {
                 notesTeaser()
                     .padding(.horizontal, 20)
 
@@ -422,6 +433,7 @@ struct MeetingDetailView: View {
             }
             .padding(.top, 8)
             .padding(.bottom, 12)
+            .background(AppTheme.background)
         }
     }
 
@@ -471,6 +483,7 @@ struct MeetingDetailView: View {
 
     private func actionMenu(meeting: Meeting) -> some View {
         let items = actionItems(meeting: meeting)
+        let chrome = MeetingDetailChrome.actionMenuChrome
 
         return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
@@ -492,6 +505,8 @@ struct MeetingDetailView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(item.isDisabled)
+                .opacity(item.isDisabled ? 0.46 : 1)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(item.title)
                 .accessibilityIdentifier(item.accessibilityIdentifier)
@@ -502,56 +517,112 @@ struct MeetingDetailView: View {
                 }
             }
         }
-        .frame(width: 230, alignment: .leading)
-        .padding(.vertical, 8)
+        .frame(width: 208, alignment: .leading)
+        .padding(.vertical, 6)
         .background(AppTheme.surface)
+        .background {
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                    .fill(AppTheme.backgroundSecondary.opacity(chrome.haloOpacity))
+                    .padding(-chrome.haloExpansion)
+
+                Rectangle()
+                    .fill(AppTheme.mutedInk.opacity(chrome.shadowOpacity))
+                    .offset(x: chrome.shadowOffset, y: chrome.shadowOffset)
+            }
+        }
         .overlay(
             Rectangle()
                 .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
         )
-        .retroHardShadow()
     }
 
     private func actionItems(meeting: Meeting) -> [MeetingActionItem] {
-        var items = [
-            MeetingActionItem(title: AppStrings.current.editAINotes, systemName: "square.and.pencil", accessibilityIdentifier: "MeetingDetailActionEditAINotes") {
-                closeActionMenu()
-                openEnhancedNotesEditor(for: meeting)
-            },
-            MeetingActionItem(title: AppStrings.current.copyNotes, systemName: "doc.on.doc", accessibilityIdentifier: "MeetingDetailActionCopyNotes") {
-                closeActionMenu()
-                let content = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                UIPasteboard.general.string = content
-                UINotificationFeedbackGenerator().notificationOccurred(.success)
-                showToast(AppStrings.current.copiedNotes)
-            },
-        ]
-
         let transcript = meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !transcript.isEmpty {
-            items.append(
-                MeetingActionItem(title: AppStrings.current.copyTranscript, systemName: "doc.on.doc", accessibilityIdentifier: "MeetingDetailActionCopyTranscript") {
+        let menuItems = MeetingDetailChrome.actionMenuItems(
+            isRecording: isRecordingThisMeeting,
+            hasTranscript: !transcript.isEmpty,
+            canRetryTranscription: meetingStore.fileTranscriptionStatus(meetingID: meeting.id)?.canRetry == true
+        )
+
+        return menuItems.map { item in
+            switch item.accessibilityIdentifier {
+            case "MeetingDetailActionEditAINotes":
+                return MeetingActionItem(
+                    title: item.title,
+                    systemName: item.systemName,
+                    accessibilityIdentifier: item.accessibilityIdentifier,
+                    isDisabled: false
+                ) {
+                    closeActionMenu()
+                    openEnhancedNotesEditor(for: meeting)
+                }
+
+            case "MeetingDetailActionRegenerateNotes":
+                let isDisabled = meetingStore.isEnhancing(meetingID: meeting.id) || !canRefreshSummary(for: meeting)
+                return MeetingActionItem(
+                    title: item.title,
+                    systemName: meetingStore.isEnhancing(meetingID: meeting.id) ? "hourglass" : item.systemName,
+                    accessibilityIdentifier: item.accessibilityIdentifier,
+                    isDisabled: isDisabled
+                ) {
+                    closeActionMenu()
+                    Task {
+                        await meetingStore.generateEnhancedNotes(for: meeting.id)
+                    }
+                }
+
+            case "MeetingDetailActionCopyNotes":
+                return MeetingActionItem(
+                    title: item.title,
+                    systemName: item.systemName,
+                    accessibilityIdentifier: item.accessibilityIdentifier,
+                    isDisabled: false
+                ) {
+                    closeActionMenu()
+                    let content = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    UIPasteboard.general.string = content
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    showToast(AppStrings.current.copiedNotes)
+                }
+
+            case "MeetingDetailActionCopyTranscript":
+                return MeetingActionItem(
+                    title: item.title,
+                    systemName: item.systemName,
+                    accessibilityIdentifier: item.accessibilityIdentifier,
+                    isDisabled: false
+                ) {
                     closeActionMenu()
                     UIPasteboard.general.string = transcript
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     showToast(AppStrings.current.copiedTranscript)
                 }
-            )
-        }
 
-        if meetingStore.fileTranscriptionStatus(meetingID: meeting.id)?.canRetry == true {
-            items.append(
-                MeetingActionItem(title: AppStrings.current.retryTranscription, systemName: "arrow.clockwise", accessibilityIdentifier: "MeetingDetailActionRetryTranscription") {
+            case "MeetingDetailActionRetryTranscription":
+                return MeetingActionItem(
+                    title: item.title,
+                    systemName: item.systemName,
+                    accessibilityIdentifier: item.accessibilityIdentifier,
+                    isDisabled: false
+                ) {
                     closeActionMenu()
                     Task {
                         await meetingStore.retryFileTranscription(meetingID: meeting.id)
                     }
                 }
-            )
-        }
 
-        return items
+            default:
+                return MeetingActionItem(
+                    title: item.title,
+                    systemName: item.systemName,
+                    accessibilityIdentifier: item.accessibilityIdentifier,
+                    isDisabled: false,
+                    action: {}
+                )
+            }
+        }
     }
 
     private var minimumPageHeight: CGFloat {
@@ -669,10 +740,6 @@ struct MeetingDetailView: View {
     }
 
     private func contentBottomPadding(for meeting: Meeting) -> CGFloat {
-        if annotationStore.activeSegmentID != nil {
-            return 20
-        }
-
         if isRecordingThisMeeting {
             return 20  // No bottom controls during recording
         }
@@ -734,9 +801,8 @@ struct MeetingDetailView: View {
     private func detailToolLabel(systemName: String) -> some View {
         Image(systemName: systemName)
             .font(.system(size: 16, weight: .bold))
-            .foregroundStyle(AppTheme.ink)
+            .foregroundStyle(AppTheme.mutedInk)
             .frame(width: 40, height: 40)
-            .background(AppTheme.surface)
             .overlay(
                 Rectangle()
                     .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
@@ -761,6 +827,11 @@ struct MeetingDetailView: View {
         action: @escaping () -> Void
     ) -> some View {
         let config = MeetingDetailChrome.entry(for: kind)
+        let usesHeroChrome = kind == .chat
+        let foreground = usesHeroChrome ? AppTheme.surface : AppTheme.ink
+        let background = usesHeroChrome ? AppTheme.ink : AppTheme.surface
+        let borderColor = usesHeroChrome ? AppTheme.ink : AppTheme.border
+        let lineWidth = usesHeroChrome ? CGFloat(2) : AppTheme.retroBorderWidth
 
         return Button(action: action) {
             HStack(spacing: 10) {
@@ -770,21 +841,22 @@ struct MeetingDetailView: View {
                     usesSymbolImage: config.usesSymbolImage,
                     textSize: 13,
                     symbolSize: 14,
+                    foreground: foreground,
                     identifier: glyphIdentifier
                 )
 
                 Text(config.title)
                     .font(AppTheme.bodyFont(size: 15, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
+                    .foregroundStyle(foreground)
 
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 52)
-            .background(AppTheme.surface)
+            .background(background)
             .overlay(
                 Rectangle()
-                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                    .stroke(borderColor, lineWidth: lineWidth)
             )
             .retroHardShadow()
         }
@@ -798,17 +870,18 @@ struct MeetingDetailView: View {
         usesSymbolImage: Bool,
         textSize: CGFloat,
         symbolSize: CGFloat,
+        foreground: Color,
         identifier: String
     ) -> some View {
         if usesSymbolImage {
             Image(systemName: glyph)
                 .font(.system(size: symbolSize, weight: .semibold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(foreground)
                 .accessibilityIdentifier(identifier)
         } else {
             Text(glyph)
                 .font(.system(size: textSize, weight: .bold, design: .monospaced))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(foreground)
                 .accessibilityIdentifier(identifier)
         }
     }
@@ -1064,6 +1137,8 @@ private struct MeetingChatSheet<Content: View>: View {
 }
 
 private struct MeetingTranscriptSheet: View {
+    @Environment(AnnotationStore.self) private var annotationStore
+
     let meeting: Meeting
     let onClose: () -> Void
 
@@ -1101,6 +1176,9 @@ private struct MeetingTranscriptSheet: View {
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.hidden)
         .presentationBackground(AppTheme.surface)
+        .onDisappear {
+            annotationStore.dismissEditor()
+        }
     }
 }
 

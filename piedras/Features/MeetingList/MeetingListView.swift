@@ -82,15 +82,21 @@ struct MeetingListView: View {
             Spacer()
 
             HStack(spacing: 8) {
-                AppGlassCircleButton(systemName: "magnifyingglass", accessibilityLabel: "搜索", size: 40) {
+                headerToolButton(
+                    systemName: "magnifyingglass",
+                    accessibilityLabel: AppStrings.current.search,
+                    identifier: "HomeSearchButton"
+                ) {
                     router.showSearch()
                 }
-                .accessibilityIdentifier("HomeSearchButton")
 
-                AppGlassCircleButton(systemName: "slider.horizontal.3", accessibilityLabel: "设置", size: 40) {
+                headerToolButton(
+                    systemName: "slider.horizontal.3",
+                    accessibilityLabel: AppStrings.current.settings,
+                    identifier: "HomeSettingsButton"
+                ) {
                     router.showSettings()
                 }
-                .accessibilityIdentifier("HomeSettingsButton")
             }
         }
     }
@@ -270,27 +276,46 @@ struct MeetingListView: View {
             }
         } label: {
             ZStack {
-                if recordingSessionStore.phase == .idle {
-                    RetroIconBadge(systemName: "mic.fill", size: size, symbolSize: size * 0.34)
-                } else {
-                    Rectangle()
-                        .fill(AppTheme.highlight)
-                        .overlay(
-                            Rectangle()
-                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
-                        )
+                Rectangle()
+                    .fill(recordingSessionStore.phase == .idle ? AppTheme.surface : AppTheme.highlight)
 
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: size * 0.30, weight: .bold))
-                        .foregroundStyle(.white)
-                }
+                Image(systemName: recordingSessionStore.phase == .idle ? "mic.fill" : "stop.fill")
+                    .font(.system(size: size * 0.30, weight: .bold))
+                    .foregroundStyle(recordingSessionStore.phase == .idle ? AppTheme.ink : .white)
             }
             .frame(width: size, height: size)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.ink, lineWidth: 2)
+            )
+            .retroHardShadow()
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(recordingSessionStore.phase == .idle ? AppStrings.current.newRecording : AppStrings.current.stop)
         .accessibilityIdentifier("NewRecordingButton")
+    }
+
+    private func headerToolButton(
+        systemName: String,
+        accessibilityLabel: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(AppTheme.mutedInk)
+                .frame(width: 40, height: 40)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                )
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityIdentifier(identifier)
     }
 
     private func errorBanner(_ message: String) -> some View {

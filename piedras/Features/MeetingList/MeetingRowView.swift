@@ -3,7 +3,8 @@ import SwiftUI
 struct MeetingRowSnapshot: Identifiable, Hashable {
     let id: String
     let title: String
-    let metadataLine: String
+    let metadataPrimary: String
+    let metadataDuration: String?
     let isRecording: Bool
     let showsSyncFailure: Bool
     let matchedSources: [MeetingSearchSource]
@@ -11,7 +12,9 @@ struct MeetingRowSnapshot: Identifiable, Hashable {
     init(meeting: Meeting, isRecording: Bool, matchedSources: [MeetingSearchSource] = []) {
         id = meeting.id
         title = meeting.displayTitle
-        metadataLine = meeting.homeMetadataLine
+        let metadataComponents = meeting.homeMetadataComponents()
+        metadataPrimary = metadataComponents.first ?? ""
+        metadataDuration = metadataComponents.dropFirst().first
         self.isRecording = isRecording
         showsSyncFailure = !isRecording && meeting.syncState == .failed
         self.matchedSources = Array(matchedSources.prefix(2))
@@ -30,7 +33,7 @@ struct MeetingRowView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 10) {
                         Text(snapshot.title)
-                            .font(AppTheme.bodyFont(size: 16, weight: .semibold))
+                            .font(AppTheme.bodyFont(size: 15, weight: .bold))
                             .foregroundStyle(AppTheme.ink)
                             .lineLimit(2)
 
@@ -45,10 +48,23 @@ struct MeetingRowView: View {
                         }
                     }
 
-                    Text(snapshot.metadataLine)
-                        .font(AppTheme.dataFont(size: 12))
-                        .foregroundStyle(AppTheme.subtleInk)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(snapshot.metadataPrimary)
+                            .font(AppTheme.bodyFont(size: 12))
+                            .foregroundStyle(AppTheme.subtleInk)
+                            .lineLimit(1)
+
+                        if let metadataDuration = snapshot.metadataDuration {
+                            Text("·")
+                                .font(AppTheme.bodyFont(size: 12))
+                                .foregroundStyle(AppTheme.subtleInk)
+
+                            Text(metadataDuration)
+                                .font(AppTheme.dataFont(size: 12))
+                                .foregroundStyle(AppTheme.subtleInk)
+                                .lineLimit(1)
+                        }
+                    }
 
                     if !snapshot.matchedSources.isEmpty {
                         HStack(spacing: 6) {
@@ -68,8 +84,7 @@ struct MeetingRowView: View {
                     }
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 14)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .softCard(
                 borderColor: snapshot.isRecording ? AppTheme.highlight : AppTheme.subtleBorderColor,
@@ -83,7 +98,19 @@ struct MeetingRowView: View {
 
     private var leadingIcon: some View {
         ZStack(alignment: .topTrailing) {
-            RetroIconBadge(systemName: "doc.text", size: AppTheme.compactIconSize, symbolSize: 12)
+            ZStack {
+                Rectangle()
+                    .fill(AppTheme.iconBackground)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                    )
+
+                Image(systemName: "doc.text")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(AppTheme.caramel)
+            }
+            .frame(width: AppTheme.compactIconSize, height: AppTheme.compactIconSize)
 
             if snapshot.isRecording {
                 Rectangle()

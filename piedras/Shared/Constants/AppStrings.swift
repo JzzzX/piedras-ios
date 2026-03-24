@@ -72,6 +72,7 @@ struct AppStringTable {
     var share: String { isChinese ? "分享" : "Share" }
     var generatingNotes: String { isChinese ? "正在生成笔记" : "Generating notes" }
     var refreshNotes: String { isChinese ? "刷新笔记" : "Refresh notes" }
+    var regenerateNotes: String { isChinese ? "重新生成笔记" : "Regenerate notes" }
     var imageTextRefreshHint: String { isChinese ? "图片文字已更新，刷新 AI 笔记后会纳入这些新增上下文。" : "Image text was updated. Refresh AI Notes to include the new context." }
     var cancel: String { isChinese ? "取消" : "Cancel" }
     var save: String { isChinese ? "保存" : "Save" }
