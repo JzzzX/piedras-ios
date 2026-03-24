@@ -1,5 +1,24 @@
 import SwiftUI
 
+struct MeetingChatEmptyStateContent {
+    let scopeHint: String
+    let prompt: String
+    let suggestions: [String]
+    let composerPlaceholder: String
+
+    static func noteScoped(strings: AppStringTable = AppStrings.current) -> Self {
+        .init(
+            scopeHint: strings.meetingChatScopeHint,
+            prompt: strings.meetingChatEmptyPrompt,
+            suggestions: [
+                strings.meetingChatSuggestSummarize,
+                strings.meetingChatSuggestNextSteps,
+            ],
+            composerPlaceholder: strings.meetingChatComposerPlaceholder
+        )
+    }
+}
+
 struct ChatView: View {
     @Environment(MeetingStore.self) private var meetingStore
     @Environment(SettingsStore.self) private var settingsStore
@@ -111,10 +130,44 @@ struct ChatView: View {
     }
 
     private var emptyState: some View {
-        Text(AppStrings.current.chatHistoryEmpty)
-            .font(AppTheme.bodyFont(size: 14))
-            .foregroundStyle(AppTheme.subtleInk)
-            .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(emptyStateContent.prompt)
+                .font(AppTheme.bodyFont(size: 15))
+                .foregroundStyle(AppTheme.mutedInk)
+
+            HStack(spacing: 10) {
+                ForEach(emptyStateContent.suggestions, id: \.self) { suggestion in
+                    suggestionButton(suggestion)
+                }
+            }
+        }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .softCard()
+    }
+
+    private func suggestionButton(_ text: String) -> some View {
+        Button {
+            input = text
+            isInputFocused = true
+        } label: {
+            Text(text)
+                .font(AppTheme.bodyFont(size: 12, weight: .semibold))
+                .foregroundStyle(AppTheme.ink)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
+    }
+
+    private var emptyStateContent: MeetingChatEmptyStateContent {
+        .noteScoped(strings: AppStrings.current)
     }
 
     private func messageRow(_ message: ChatMessage) -> some View {
@@ -155,7 +208,7 @@ struct ChatView: View {
                         .font(.system(size: 16, weight: .bold, design: .monospaced))
                         .foregroundStyle(AppTheme.subtleInk)
 
-                    TextField(AppStrings.current.chatWithNote, text: $input)
+                    TextField(emptyStateContent.composerPlaceholder, text: $input)
                         .textFieldStyle(.plain)
                         .font(AppTheme.bodyFont(size: 15))
                         .foregroundStyle(AppTheme.ink)
@@ -165,14 +218,19 @@ struct ChatView: View {
                         .disabled(meetingStore.isStreamingChat(meetingID: meeting.id))
                         .accessibilityIdentifier("MeetingChatComposerField")
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .frame(height: 54)
+                .background(AppTheme.surface)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                )
 
                 Button(action: sendCurrentInput) {
                     Image(systemName: "arrow.up")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.system(size: 16, weight: .bold))
                         .foregroundStyle(AppTheme.surface)
-                        .frame(width: 44, height: 44)
+                        .frame(width: 52, height: 52)
                         .background(AppTheme.ink)
                         .overlay(
                             Rectangle()

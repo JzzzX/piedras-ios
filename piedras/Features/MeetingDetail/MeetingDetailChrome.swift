@@ -53,7 +53,7 @@ enum MeetingDetailChrome {
                 title: AppStrings.current.chatWithNote,
                 glyph: ">_",
                 usesSymbolImage: false,
-                hint: nil
+                hint: AppStrings.current.meetingChatScopeHint
             )
         }
     }

@@ -916,22 +916,33 @@ private struct MeetingDetailSurfaceSheet<Content: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
-                if chrome.usesSymbolImage {
-                    Image(systemName: chrome.glyph)
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(AppTheme.ink)
-                        .accessibilityIdentifier(glyphIdentifier)
-                } else {
-                    Text(chrome.glyph)
-                        .font(.system(size: 15, weight: .bold, design: .monospaced))
-                        .foregroundStyle(AppTheme.ink)
-                        .accessibilityIdentifier(glyphIdentifier)
-                }
+                HStack(alignment: .top, spacing: 12) {
+                    if chrome.usesSymbolImage {
+                        Image(systemName: chrome.glyph)
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(AppTheme.ink)
+                            .accessibilityIdentifier(glyphIdentifier)
+                    } else {
+                        Text(chrome.glyph)
+                            .font(.system(size: 15, weight: .bold, design: .monospaced))
+                            .foregroundStyle(AppTheme.ink)
+                            .accessibilityIdentifier(glyphIdentifier)
+                    }
 
-                Text(chrome.title)
-                    .font(AppTheme.bodyFont(size: 24, weight: .bold))
-                    .foregroundStyle(AppTheme.ink)
-                    .accessibilityIdentifier(titleIdentifier)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(chrome.title)
+                            .font(AppTheme.bodyFont(size: 24, weight: .bold))
+                            .foregroundStyle(AppTheme.ink)
+                            .accessibilityIdentifier(titleIdentifier)
+
+                        if let hint = chrome.hint {
+                            Text(hint)
+                                .font(AppTheme.bodyFont(size: 13))
+                                .foregroundStyle(AppTheme.subtleInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
 
                 Spacer(minLength: 0)
 
@@ -951,7 +962,7 @@ private struct MeetingDetailSurfaceSheet<Content: View>: View {
             }
             .padding(.horizontal, 20)
             .padding(.top, 18)
-            .padding(.bottom, 16)
+            .padding(.bottom, chrome.hint == nil ? 16 : 14)
 
             ThinDivider()
                 .padding(.horizontal, 20)

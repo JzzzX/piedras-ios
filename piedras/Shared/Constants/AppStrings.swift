@@ -143,6 +143,11 @@ struct AppStringTable {
     // ── ChatView ─────────────────────────────────────────────────
 
     var processing: String { isChinese ? "处理中..." : "Processing..." }
+    var meetingChatScopeHint: String { isChinese ? "仅针对当前笔记提问" : "Ask about this note only" }
+    var meetingChatEmptyPrompt: String { isChinese ? "从当前笔记中提问。" : "Ask from this note." }
+    var meetingChatSuggestSummarize: String { isChinese ? "总结这条笔记" : "Summarize this note" }
+    var meetingChatSuggestNextSteps: String { isChinese ? "下一步是什么？" : "What are the next steps?" }
+    var meetingChatComposerPlaceholder: String { isChinese ? "问这条笔记里的细节、决定或下一步…" : "Ask about details, decisions, or next steps in this note…" }
 
     // ── Transcript Annotations ────────────────────────────────────
 
