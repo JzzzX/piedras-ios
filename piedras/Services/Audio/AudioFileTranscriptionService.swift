@@ -2,6 +2,17 @@ import AVFoundation
 import Foundation
 import UniformTypeIdentifiers
 
+@MainActor
+protocol AudioFileTranscriptionServicing: AnyObject {
+    func transcribe(
+        fileURL: URL,
+        workspaceID: String?,
+        onPhaseChange: @escaping @MainActor (AudioFileTranscriptionPhase) -> Void,
+        onPartialText: @escaping @MainActor (String) -> Void,
+        onFinalResult: @escaping @MainActor (ASRFinalResult) -> Void
+    ) async throws
+}
+
 struct ImportedAudioFileDescriptor {
     let fileURL: URL
     let displayName: String
@@ -236,7 +247,7 @@ private actor AudioFileTranscriptionTransportState {
 }
 
 @MainActor
-final class AudioFileTranscriptionService {
+final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
     private let apiClient: APIClient
     private let injectedSession: URLSession?
 

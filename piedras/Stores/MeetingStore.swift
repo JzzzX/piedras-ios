@@ -48,11 +48,11 @@ final class MeetingStore {
     private let recordingSessionStore: RecordingSessionStore
     private let appActivityCoordinator: AppActivityCoordinator
     private let audioRecorderService: AudioRecorderService
-    private let audioFileTranscriptionService: AudioFileTranscriptionService
+    private let audioFileTranscriptionService: any AudioFileTranscriptionServicing
     private let apiClient: APIClient
-    private let asrService: ASRService
+    private let asrService: any ASRServicing
     private let workspaceBootstrapService: WorkspaceBootstrapService
-    private let meetingSyncService: MeetingSyncService
+    private let meetingSyncService: any MeetingSyncServicing
 
     var meetings: [Meeting] = []
     var selectedMeetingID: String?
@@ -87,11 +87,11 @@ final class MeetingStore {
         recordingSessionStore: RecordingSessionStore,
         appActivityCoordinator: AppActivityCoordinator,
         audioRecorderService: AudioRecorderService,
-        audioFileTranscriptionService: AudioFileTranscriptionService,
+        audioFileTranscriptionService: any AudioFileTranscriptionServicing,
         apiClient: APIClient,
-        asrService: ASRService,
+        asrService: any ASRServicing,
         workspaceBootstrapService: WorkspaceBootstrapService,
-        meetingSyncService: MeetingSyncService
+        meetingSyncService: any MeetingSyncServicing
     ) {
         self.repository = repository
         self.chatSessionRepository = chatSessionRepository
@@ -146,9 +146,13 @@ final class MeetingStore {
             self?.handleFinalTranscript(result)
         }
         self.asrService.onError = { [weak self] message in
-            self?.recordingSessionStore.infoBanner = "实时转写暂时不可用，录音会继续。"
-            self?.recordingSessionStore.errorBanner = message
-            self?.settingsStore.markASRStreamFailed(message: message)
+            guard let self else { return }
+            if self.recordingSessionStore.phase == .recording {
+                self.recordingSessionStore.markTranscriptCoverageGap()
+            }
+            self.recordingSessionStore.infoBanner = "实时转写暂时不可用，录音会继续。"
+            self.recordingSessionStore.errorBanner = message
+            self.settingsStore.markASRStreamFailed(message: message)
         }
     }
 
@@ -458,27 +462,7 @@ final class MeetingStore {
             updateKeepScreenAwake()
             await asrService.stopStreaming()
             let artifact = try audioRecorderService.stopRecording()
-            meeting.status = .ended
-            meeting.audioLocalPath = artifact.fileURL.path
-            meeting.audioMimeType = artifact.mimeType
-            meeting.audioDuration = artifact.durationSeconds
-            meeting.audioUpdatedAt = .now
-            meeting.durationSeconds = max(meeting.durationSeconds, artifact.durationSeconds)
-            meeting.markPending()
-            try repository.save()
-
-            // Pre-insert enhancing state so EnhancedNotesView shows processing animation
-            // immediately when the view transitions from transcript to AI notes.
-            if !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                enhancingMeetingIDs.insert(meeting.id)
-            }
-
-            recordingSessionStore.reset()
-            updateKeepScreenAwake()
-            loadMeetings()
-            await appActivityCoordinator.performExpiringActivity(named: "finish-meeting-\(meeting.id)") { [weak self] in
-                await self?.finalizeStoppedMeeting(meetingID: meeting.id)
-            }
+            await finishStoppedRecording(meetingID: meeting.id, artifact: artifact)
         } catch {
             recordingSessionStore.errorBanner = error.localizedDescription
         }
@@ -502,6 +486,7 @@ final class MeetingStore {
         switch phase {
         case .background:
             if recordingSessionStore.phase == .recording {
+                recordingSessionStore.markTranscriptCoverageGap()
                 recordingSessionStore.currentPartial = ""
                 recordingSessionStore.infoBanner = "应用已切到后台，录音会继续；实时转写会在回到前台后自动恢复。"
             }
@@ -851,6 +836,58 @@ final class MeetingStore {
         }
     }
 
+    func finishStoppedRecording(meetingID: String, artifact: LocalAudioArtifact) async {
+        guard let meeting = meeting(withID: meetingID) else {
+            recordingSessionStore.reset()
+            updateKeepScreenAwake()
+            loadMeetings()
+            return
+        }
+
+        lastErrorMessage = nil
+        let needsTranscriptRepair = recordingSessionStore.needsTranscriptRepairAfterStop
+        fileTranscriptionTasks[meetingID]?.cancel()
+        fileTranscriptionTasks[meetingID] = nil
+        transcribingMeetingIDs.remove(meetingID)
+        fileTranscriptionStatuses.removeValue(forKey: meetingID)
+        fileTranscriptionPartials.removeValue(forKey: meetingID)
+
+        meeting.status = needsTranscriptRepair ? .transcribing : .ended
+        meeting.audioLocalPath = artifact.fileURL.path
+        meeting.audioMimeType = artifact.mimeType
+        meeting.audioDuration = artifact.durationSeconds
+        meeting.audioUpdatedAt = .now
+        meeting.durationSeconds = max(meeting.durationSeconds, artifact.durationSeconds)
+        meeting.markPending()
+
+        do {
+            try repository.save()
+        } catch {
+            recordingSessionStore.errorBanner = error.localizedDescription
+            lastErrorMessage = error.localizedDescription
+            recordingSessionStore.reset()
+            updateKeepScreenAwake()
+            loadMeetings()
+            return
+        }
+
+        recordingSessionStore.reset()
+        updateKeepScreenAwake()
+        loadMeetings()
+
+        await appActivityCoordinator.performExpiringActivity(named: "finish-meeting-\(meetingID)") { [weak self] in
+            guard let self else { return }
+
+            if needsTranscriptRepair {
+                await self.repairStoppedRecordingTranscript(meetingID: meetingID, artifact: artifact)
+                return
+            }
+
+            self.primeEnhancingStateIfNeeded(meetingID: meetingID)
+            await self.finalizeStoppedMeeting(meetingID: meetingID)
+        }
+    }
+
     private func prepareMeetingForFileTranscription(
         meeting: Meeting,
         importedAudio: ImportedAudioFileDescriptor,
@@ -983,10 +1020,114 @@ final class MeetingStore {
         }
     }
 
+    private func repairStoppedRecordingTranscript(meetingID: String, artifact: LocalAudioArtifact) async {
+        transcribingMeetingIDs.insert(meetingID)
+        fileTranscriptionStatuses[meetingID] = FileTranscriptionStatusSnapshot(
+            phase: .preparing,
+            errorMessage: nil
+        )
+        fileTranscriptionPartials[meetingID] = ""
+        loadMeetings()
+
+        defer {
+            transcribingMeetingIDs.remove(meetingID)
+            loadMeetings()
+        }
+
+        do {
+            await checkBackendHealth(force: false)
+
+            guard settingsStore.apiReachable else {
+                throw APIClientError.requestFailed(
+                    settingsStore.blockingMessage(for: .backend) ?? "\(AppEnvironment.cloudName) 暂时不可用。"
+                )
+            }
+
+            if let asrBlockingMessage = settingsStore.blockingMessage(for: .asr) {
+                throw APIClientError.requestFailed(asrBlockingMessage)
+            }
+
+            let existingWorkspaceID = meeting(withID: meetingID)?.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+            let workspaceID: String?
+            if let existingWorkspaceID {
+                workspaceID = existingWorkspaceID
+            } else {
+                workspaceID = await bootstrapHiddenWorkspace(force: false, surfaceBlockingError: false)
+            }
+
+            if let meeting = meeting(withID: meetingID), meeting.hiddenWorkspaceId != workspaceID {
+                meeting.hiddenWorkspaceId = workspaceID
+                meeting.markPending()
+                try repository.save()
+            }
+
+            var repairedResults: [ASRFinalResult] = []
+            try await audioFileTranscriptionService.transcribe(
+                fileURL: artifact.fileURL,
+                workspaceID: workspaceID,
+                onPhaseChange: { [weak self] phase in
+                    guard let self else { return }
+                    self.fileTranscriptionStatuses[meetingID] = FileTranscriptionStatusSnapshot(
+                        phase: phase,
+                        errorMessage: nil
+                    )
+                },
+                onPartialText: { [weak self] partial in
+                    guard let self else { return }
+                    self.fileTranscriptionPartials[meetingID] = partial
+                },
+                onFinalResult: { result in
+                    repairedResults.append(result)
+                }
+            )
+
+            guard let meeting = meeting(withID: meetingID) else { return }
+            let replacementSegments = makeTranscriptSegments(
+                from: repairedResults,
+                speaker: meeting.recordingMode == .fileMix ? "混合音频" : "麦克风"
+            )
+            if replacementSegments.isEmpty, !meeting.orderedSegments.isEmpty {
+                throw APIClientError.requestFailed("补转写未返回任何结果。")
+            }
+
+            repository.replaceSegments(for: meeting, with: replacementSegments)
+            meeting.status = .ended
+            meeting.audioLocalPath = artifact.fileURL.path
+            meeting.audioMimeType = artifact.mimeType
+            meeting.audioDuration = artifact.durationSeconds
+            meeting.audioUpdatedAt = .now
+            meeting.durationSeconds = max(meeting.durationSeconds, artifact.durationSeconds)
+            meeting.markPending()
+            try repository.save()
+            settingsStore.markASRStreamSucceeded()
+            fileTranscriptionStatuses[meetingID] = FileTranscriptionStatusSnapshot(
+                phase: .finalizing,
+                errorMessage: nil
+            )
+            fileTranscriptionPartials[meetingID] = ""
+            primeEnhancingStateIfNeeded(meetingID: meetingID)
+            await finalizeStoppedMeeting(meetingID: meetingID)
+            fileTranscriptionStatuses.removeValue(forKey: meetingID)
+            fileTranscriptionPartials.removeValue(forKey: meetingID)
+        } catch is CancellationError {
+            return
+        } catch {
+            markFileTranscriptionFailed(meetingID: meetingID, message: error.localizedDescription)
+            settingsStore.markASRStreamFailed(message: error.localizedDescription)
+        }
+    }
+
     private func appendImportedAudioTranscript(_ result: ASRFinalResult, meetingID: String) {
         guard let meeting = meeting(withID: meetingID) else { return }
         fileTranscriptionPartials[meetingID] = ""
         appendTranscriptSegment(result, to: meeting, speaker: "音频文件")
+    }
+
+    private func primeEnhancingStateIfNeeded(meetingID: String) {
+        guard let meeting = meeting(withID: meetingID) else { return }
+        if !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            enhancingMeetingIDs.insert(meetingID)
+        }
     }
 
     private func markFileTranscriptionFailed(meetingID: String, message: String) {
@@ -1055,14 +1196,7 @@ final class MeetingStore {
 
     private func appendTranscriptSegment(_ result: ASRFinalResult, to meeting: Meeting, speaker: String) {
         let nextIndex = (meeting.orderedSegments.last?.orderIndex ?? -1) + 1
-        let segment = TranscriptSegment(
-            speaker: speaker,
-            text: result.text,
-            startTime: result.startTime,
-            endTime: max(result.endTime, result.startTime),
-            isFinal: true,
-            orderIndex: nextIndex
-        )
+        let segment = makeTranscriptSegment(result, speaker: speaker, orderIndex: nextIndex)
         segment.meeting = meeting
 
         meeting.segments.append(segment)
@@ -1073,6 +1207,27 @@ final class MeetingStore {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    private func makeTranscriptSegments(from results: [ASRFinalResult], speaker: String) -> [TranscriptSegment] {
+        results.enumerated().map { index, result in
+            makeTranscriptSegment(result, speaker: speaker, orderIndex: index)
+        }
+    }
+
+    private func makeTranscriptSegment(
+        _ result: ASRFinalResult,
+        speaker: String,
+        orderIndex: Int
+    ) -> TranscriptSegment {
+        TranscriptSegment(
+            speaker: speaker,
+            text: result.text,
+            startTime: result.startTime,
+            endTime: max(result.endTime, result.startTime),
+            isFinal: true,
+            orderIndex: orderIndex
+        )
     }
 
     private func startBackendPreparationIfNeeded() {
@@ -1353,6 +1508,7 @@ final class MeetingStore {
             try await asrService.startStreaming(workspaceID: workspaceID)
         } catch {
             guard recordingSessionStore.meetingID == meetingID else { return }
+            recordingSessionStore.markTranscriptCoverageGap()
             recordingSessionStore.asrState = .degraded
             recordingSessionStore.infoBanner = "实时转写暂时不可用，录音会继续。"
             recordingSessionStore.errorBanner = "实时转写未启动：\(error.localizedDescription)"

@@ -55,6 +55,7 @@ final class RecordingSessionStore {
     var sourceAudioCurrentTime: TimeInterval = 0
     var sourceAudioDuration: TimeInterval = 0
     var isSourceAudioPlaying = false
+    var needsTranscriptRepairAfterStop = false
 
     func reset() {
         meetingID = nil
@@ -78,6 +79,7 @@ final class RecordingSessionStore {
         sourceAudioCurrentTime = 0
         sourceAudioDuration = 0
         isSourceAudioPlaying = false
+        needsTranscriptRepairAfterStop = false
     }
 
     func pushAudioLevelSample(_ sample: Double) {
@@ -107,6 +109,7 @@ final class RecordingSessionStore {
         self.sourceAudioCurrentTime = 0
         self.sourceAudioDuration = sourceAudioDuration
         isSourceAudioPlaying = false
+        needsTranscriptRepairAfterStop = false
     }
 
     func registerCapturedPCM(bytes: Int) {
@@ -125,5 +128,9 @@ final class RecordingSessionStore {
         sourceAudioCurrentTime = max(0, currentTime)
         sourceAudioDuration = max(0, duration)
         isSourceAudioPlaying = isPlaying
+    }
+
+    func markTranscriptCoverageGap() {
+        needsTranscriptRepairAfterStop = true
     }
 }

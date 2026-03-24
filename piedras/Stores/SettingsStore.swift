@@ -165,7 +165,10 @@ final class SettingsStore {
                 return llmStatusMessage
             }
         case .asr:
-            if lastHealthCheckAt != nil, !asrReady {
+            if lastHealthCheckAt != nil,
+               !asrReady,
+               asrStatusMessage != "等待检查",
+               asrStatusMessage != "未检查" {
                 return asrStatusMessage
             }
         case .backend, .sync:

@@ -15,7 +15,21 @@ struct ASRFinalResult {
 }
 
 @MainActor
-final class ASRService {
+protocol ASRServicing: AnyObject {
+    var onPartialText: ((String) -> Void)? { get set }
+    var onFinalResult: ((ASRFinalResult) -> Void)? { get set }
+    var onStateChange: ((ASRConnectionState) -> Void)? { get set }
+    var onError: ((String) -> Void)? { get set }
+    var onTransportEvent: ((String) -> Void)? { get set }
+    var onPCMChunkSent: ((Int) -> Void)? { get set }
+
+    func startStreaming(workspaceID: String?) async throws
+    func enqueuePCM(_ data: Data)
+    func stopStreaming() async
+}
+
+@MainActor
+final class ASRService: ASRServicing {
     private let apiClient: APIClient
     private let session: URLSession
 
