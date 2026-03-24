@@ -107,9 +107,6 @@ struct MeetingDetailView: View {
                             .frame(height: 0)
                             .id(topAnchorID)
 
-                        topBar(meeting: meeting)
-                            .zIndex(3)
-
                         if let transcriptionStatus = meetingStore.fileTranscriptionStatus(meetingID: meeting.id) {
                             fileTranscriptionStatusView(transcriptionStatus, meetingID: meeting.id)
                         }
@@ -159,6 +156,9 @@ struct MeetingDetailView: View {
         .animation(.easeOut(duration: 0.18), value: showsActionMenu)
         .toolbar(.hidden, for: .navigationBar)
         .background(InteractivePopGestureEnabler())
+        .safeAreaInset(edge: .top, spacing: 0) {
+            detailTopChrome(meeting: meeting)
+        }
         .safeAreaInset(edge: .bottom) {
             if annotationStore.activeSegmentID == nil {
                 bottomStack(for: meeting)
@@ -220,6 +220,23 @@ struct MeetingDetailView: View {
                 }
             }
         }
+    }
+
+    private func detailTopChrome(meeting: Meeting) -> some View {
+        VStack(spacing: 0) {
+            topBar(meeting: meeting)
+                .padding(.horizontal, 24)
+                .padding(.top, 12)
+                .padding(.bottom, 12)
+
+            LinearGradient(
+                colors: [AppTheme.background, AppTheme.background.opacity(0)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 16)
+        }
+        .background(AppTheme.background)
     }
 
     private func topBar(meeting: Meeting) -> some View {
