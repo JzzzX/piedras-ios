@@ -2,20 +2,6 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-private enum MeetingDetailMode: String, CaseIterable, Identifiable {
-    case transcript = "Transcript"
-    case summary = "AI Notes"
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .transcript: return AppStrings.current.transcript
-        case .summary: return AppStrings.current.aiNotes
-        }
-    }
-}
-
 private enum MeetingDetailSheet: String, Identifiable {
     case enhancedNotesEditor
     case chat
@@ -71,7 +57,7 @@ struct MeetingDetailView: View {
 
     let meetingID: String
 
-    @State private var selectedMode: MeetingDetailMode = .transcript
+    @State private var showsTranscriptSheet = false
     @State private var noteSaveTask: Task<Void, Never>?
     @State private var toastTask: Task<Void, Never>?
     @State private var showsRecordingModeDialog = false
@@ -116,7 +102,7 @@ struct MeetingDetailView: View {
 
             ScrollViewReader { proxy in
                 ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: selectedMode == .transcript ? 12 : 18) {
+                    VStack(alignment: .leading, spacing: isRecordingThisMeeting ? 12 : 18) {
                         Color.clear
                             .frame(height: 0)
                             .id(topAnchorID)
@@ -124,13 +110,11 @@ struct MeetingDetailView: View {
                         topBar(meeting: meeting)
                             .zIndex(3)
 
-                        modePicker
-
                         if let transcriptionStatus = meetingStore.fileTranscriptionStatus(meetingID: meeting.id) {
                             fileTranscriptionStatusView(transcriptionStatus, meetingID: meeting.id)
                         }
 
-                        if selectedMode == .summary {
+                        if !isRecordingThisMeeting {
                             titleBlock(meeting: meeting)
                         }
 
@@ -140,9 +124,18 @@ struct MeetingDetailView: View {
                     .padding(.top, 16)
                     .padding(.bottom, contentBottomPadding(for: meeting))
                 }
-                .onChange(of: selectedMode, initial: false) { _, _ in
-                    withAnimation(.easeOut(duration: 0.22)) {
-                        proxy.scrollTo(topAnchorID, anchor: .top)
+                .onChange(of: isRecordingThisMeeting, initial: false) { wasRecording, isRecording in
+                    if wasRecording && !isRecording {
+                        // Save any pending notes before transitioning to AI notes view
+                        if let meeting = meetingStore.meeting(withID: meetingID) {
+                            noteSaveTask?.cancel()
+                            let notes = currentNotesText(for: meeting)
+                            meetingStore.updateNotes(notes, for: meeting)
+                        }
+
+                        withAnimation(.easeOut(duration: 0.22)) {
+                            proxy.scrollTo(topAnchorID, anchor: .top)
+                        }
                     }
                 }
                 .scrollDismissesKeyboard(.interactively)
@@ -219,6 +212,14 @@ struct MeetingDetailView: View {
                 )
             }
         }
+        .sheet(isPresented: $showsTranscriptSheet) {
+            if let meeting = meetingStore.meeting(withID: meetingID) {
+                MeetingTranscriptSheet(meeting: meeting) {
+                    annotationStore.dismissEditor()
+                    showsTranscriptSheet = false
+                }
+            }
+        }
     }
 
     private func topBar(meeting: Meeting) -> some View {
@@ -232,7 +233,17 @@ struct MeetingDetailView: View {
             Spacer()
 
             HStack(spacing: 10) {
-                if selectedMode == .summary {
+                if !isRecordingThisMeeting {
+                    Button {
+                        closeActionMenu()
+                        showsTranscriptSheet = true
+                    } label: {
+                        detailToolLabel(systemName: "doc.text")
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(AppStrings.current.transcript)
+                    .accessibilityIdentifier("MeetingTranscriptSheetButton")
+
                     Button {
                         closeActionMenu()
                         Task {
@@ -339,89 +350,61 @@ struct MeetingDetailView: View {
 
     private func documentPage(meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if selectedMode == .summary {
-                ThinDivider()
-            }
+            if isRecordingThisMeeting {
+                CollapsibleRecordingBar(meeting: meeting)
+                    .padding(.bottom, 14)
 
-            Group {
-                if selectedMode == .transcript {
-                    TranscriptView(meeting: meeting)
-                } else {
-                    EnhancedNotesView(
-                        text: meeting.enhancedNotes,
-                        meetingID: meeting.id
-                    )
-                }
+                NoteEditorView(
+                    text: noteEditorBinding(for: meeting),
+                    showsHeader: false,
+                    title: AppStrings.current.notes,
+                    placeholder: AppStrings.current.writeHere,
+                    minHeight: 400,
+                    usesBodyStyle: true,
+                    accessibilityIdentifier: "RecordingNoteEditor"
+                )
+            } else {
+                ThinDivider()
+
+                EnhancedNotesView(
+                    text: meeting.enhancedNotes,
+                    meetingID: meeting.id
+                )
+                .padding(.top, 20)
             }
-            .padding(.top, selectedMode == .summary ? 20 : 0)
-            .padding(.bottom, 34)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.bottom, 34)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(maxWidth: .infinity, minHeight: minimumPageHeight, alignment: .topLeading)
     }
 
-    private var modePicker: some View {
-        HStack(spacing: 0) {
-            ForEach(MeetingDetailMode.allCases) { mode in
-                Button {
-                    closeActionMenu()
-                    withAnimation(.easeOut(duration: 0.18)) {
-                        selectedMode = mode
-                    }
-                } label: {
-                    Text(mode.title)
-                        .font(AppTheme.bodyFont(size: 13, weight: .semibold))
-                        .foregroundStyle(selectedMode == mode ? AppTheme.surface : AppTheme.ink)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 36)
-                        .background(selectedMode == mode ? AppTheme.ink : AppTheme.surface)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier(mode == .transcript ? "MeetingModeTranscriptTab" : "MeetingModeSummaryTab")
+    private func noteEditorBinding(for meeting: Meeting) -> Binding<String> {
+        Binding(
+            get: { currentNotesText(for: meeting) },
+            set: { newValue in
+                scheduleNoteSave(newValue, for: meeting)
             }
-        }
-        .overlay(
-            Rectangle()
-                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
         )
     }
 
     @ViewBuilder
     private func bottomStack(for meeting: Meeting) -> some View {
-        VStack(spacing: 10) {
-            if selectedMode == .transcript {
+        if !isRecordingThisMeeting {
+            VStack(spacing: 10) {
                 notesTeaser()
                     .padding(.horizontal, 20)
-            }
 
-            bottomDock(for: meeting)
-        }
-        .padding(.top, selectedMode == .transcript ? 8 : 0)
-        .padding(.bottom, 12)
-    }
-
-    @ViewBuilder
-    private func bottomDock(for meeting: Meeting) -> some View {
-        if recordingSessionStore.phase != .idle {
-            RecordingControlBar(
-                meeting: meeting,
-                onRequestStartRecording: {
-                    showsRecordingModeDialog = true
+                detailCTAButton(
+                    kind: .chat,
+                    accessibilityIdentifier: "MeetingAskButton",
+                    glyphIdentifier: "MeetingAskButtonGlyph"
+                ) {
+                    activeSheet = .chat
                 }
-            )
-            .padding(.horizontal, 20)
-        } else if selectedMode == .transcript, let filePath = meeting.audioLocalPath {
-            AudioPlaybackBar(filePath: filePath)
                 .padding(.horizontal, 20)
-        } else if selectedMode == .summary {
-            detailCTAButton(
-                kind: .chat,
-                accessibilityIdentifier: "MeetingAskButton",
-                glyphIdentifier: "MeetingAskButtonGlyph"
-            ) {
-                activeSheet = .chat
             }
-            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 12)
         }
     }
 
@@ -513,47 +496,53 @@ struct MeetingDetailView: View {
     }
 
     private func actionItems(meeting: Meeting) -> [MeetingActionItem] {
-        switch selectedMode {
-        case .summary:
-            return [
-                MeetingActionItem(title: AppStrings.current.editAINotes, systemName: "square.and.pencil", accessibilityIdentifier: "MeetingDetailActionEditAINotes") {
-                    closeActionMenu()
-                    openEnhancedNotesEditor(for: meeting)
-                },
-                MeetingActionItem(title: AppStrings.current.copyNotes, systemName: "doc.on.doc", accessibilityIdentifier: "MeetingDetailActionCopyNotes") {
-                    copyCurrentContent(for: meeting)
-                },
-            ]
+        var items = [
+            MeetingActionItem(title: AppStrings.current.editAINotes, systemName: "square.and.pencil", accessibilityIdentifier: "MeetingDetailActionEditAINotes") {
+                closeActionMenu()
+                openEnhancedNotesEditor(for: meeting)
+            },
+            MeetingActionItem(title: AppStrings.current.copyNotes, systemName: "doc.on.doc", accessibilityIdentifier: "MeetingDetailActionCopyNotes") {
+                closeActionMenu()
+                let content = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                UIPasteboard.general.string = content
+                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                showToast(AppStrings.current.copiedNotes)
+            },
+        ]
 
-        case .transcript:
-            var items = [
-                MeetingActionItem(title: AppStrings.current.viewAINotes, systemName: "sparkles", accessibilityIdentifier: "MeetingDetailActionViewAINotes") {
-                    closeActionMenu()
-                    selectedMode = .summary
-                },
+        let transcript = meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !transcript.isEmpty {
+            items.append(
                 MeetingActionItem(title: AppStrings.current.copyTranscript, systemName: "doc.on.doc", accessibilityIdentifier: "MeetingDetailActionCopyTranscript") {
-                    copyCurrentContent(for: meeting)
-                },
-            ]
-
-            if meetingStore.fileTranscriptionStatus(meetingID: meeting.id)?.canRetry == true {
-                items.insert(
-                    MeetingActionItem(title: AppStrings.current.retryTranscription, systemName: "arrow.clockwise", accessibilityIdentifier: "MeetingDetailActionRetryTranscription") {
-                        closeActionMenu()
-                        Task {
-                            await meetingStore.retryFileTranscription(meetingID: meeting.id)
-                        }
-                    },
-                    at: 1
-                )
-            }
-
-            return items
+                    closeActionMenu()
+                    UIPasteboard.general.string = transcript
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    showToast(AppStrings.current.copiedTranscript)
+                }
+            )
         }
+
+        if meetingStore.fileTranscriptionStatus(meetingID: meeting.id)?.canRetry == true {
+            items.append(
+                MeetingActionItem(title: AppStrings.current.retryTranscription, systemName: "arrow.clockwise", accessibilityIdentifier: "MeetingDetailActionRetryTranscription") {
+                    closeActionMenu()
+                    Task {
+                        await meetingStore.retryFileTranscription(meetingID: meeting.id)
+                    }
+                }
+            )
+        }
+
+        return items
     }
 
     private var minimumPageHeight: CGFloat {
         max(560, UIScreen.main.bounds.height * 0.66)
+    }
+
+    private var isRecordingThisMeeting: Bool {
+        recordingSessionStore.meetingID == meetingID && recordingSessionStore.phase != .idle
     }
 
     private func openTitleRenameDialog(for meeting: Meeting) {
@@ -572,15 +561,8 @@ struct MeetingDetailView: View {
     }
 
     private func sharePayload(for meeting: Meeting) -> String {
-        let body: String
-
-        switch selectedMode {
-        case .transcript:
-            body = meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
-        case .summary:
-            body = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-        }
+        let body = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
         if body.isEmpty {
             return meeting.displayTitle
@@ -590,17 +572,8 @@ struct MeetingDetailView: View {
     }
 
     private func copyCurrentContent(for meeting: Meeting) {
-        let content: String
-        let toast: String
-
-        switch selectedMode {
-        case .transcript:
-            content = meeting.transcriptText
-            toast = AppStrings.current.copiedTranscript
-        case .summary:
-            content = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
-            toast = AppStrings.current.copiedNotes
-        }
+        let content = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
+        let toast = AppStrings.current.copiedNotes
 
         UIPasteboard.general.string = content.trimmingCharacters(in: .whitespacesAndNewlines)
         UINotificationFeedbackGenerator().notificationOccurred(.success)
@@ -679,21 +652,15 @@ struct MeetingDetailView: View {
     }
 
     private func contentBottomPadding(for meeting: Meeting) -> CGFloat {
-        // When annotation editor is active, bottom stack is hidden — minimal padding
         if annotationStore.activeSegmentID != nil {
             return 20
         }
 
-        if recordingSessionStore.phase != .idle {
-            return selectedMode == .transcript ? 296 : 210
+        if isRecordingThisMeeting {
+            return 20  // No bottom controls during recording
         }
 
-        switch selectedMode {
-        case .transcript:
-            return meeting.audioLocalPath == nil ? 152 : 264
-        case .summary:
-            return 132
-        }
+        return 160  // notesTeaser + chatCTA
     }
 
     @ViewBuilder
@@ -1065,6 +1032,47 @@ private struct MeetingChatSheet<Content: View>: View {
         ) {
             content()
         }
+    }
+}
+
+private struct MeetingTranscriptSheet: View {
+    let meeting: Meeting
+    let onClose: () -> Void
+
+    var body: some View {
+        MeetingDetailSurfaceSheet(
+            chrome: MeetingDetailSheetChrome(
+                title: AppStrings.current.transcript,
+                glyph: "doc.text",
+                usesSymbolImage: true,
+                hint: nil
+            ),
+            accessibilityIdentifier: "MeetingTranscriptSheet",
+            glyphIdentifier: "MeetingTranscriptSheetGlyph",
+            titleIdentifier: "MeetingTranscriptSheetTitle",
+            closeIdentifier: "MeetingTranscriptSheetCloseButton",
+            onClose: onClose
+        ) {
+            VStack(spacing: 0) {
+                ScrollView(showsIndicators: false) {
+                    TranscriptView(meeting: meeting)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .padding(.bottom, 36)
+                }
+                .scrollDismissesKeyboard(.interactively)
+
+                if let filePath = meeting.audioLocalPath {
+                    ThinDivider()
+                    AudioPlaybackBar(filePath: filePath)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(AppTheme.surface)
     }
 }
 

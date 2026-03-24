@@ -466,6 +466,13 @@ final class MeetingStore {
             meeting.durationSeconds = max(meeting.durationSeconds, artifact.durationSeconds)
             meeting.markPending()
             try repository.save()
+
+            // Pre-insert enhancing state so EnhancedNotesView shows processing animation
+            // immediately when the view transitions from transcript to AI notes.
+            if !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                enhancingMeetingIDs.insert(meeting.id)
+            }
+
             recordingSessionStore.reset()
             updateKeepScreenAwake()
             loadMeetings()

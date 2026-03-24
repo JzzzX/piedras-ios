@@ -1,0 +1,91 @@
+<h2>历史记录计数提示</h2>
+<p class="subtitle">目标：保留“有几条历史”的信息，但不要像告警或未读那样抢戏。先判断整体气质更适合哪一类。</p>
+
+<div class="section" style="margin-bottom:24px">
+  <div class="label">Current</div>
+  <div class="mockup">
+    <div class="mockup-header">现在的感觉</div>
+    <div class="mockup-body" style="background:#eae3d2;padding:24px">
+      <div style="display:flex;justify-content:center">
+        <div style="display:flex;gap:10px;align-items:center">
+          <div style="width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 28px system-ui;color:#111">+</div>
+          <div style="position:relative;width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 26px system-ui;color:#111">
+            ⟳
+            <div style="position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 4px;background:#d9423e;color:#fff;border:2px solid #f4f0e6;display:flex;align-items:center;justify-content:center;font:700 10px ui-monospace, SFMono-Regular, Menlo, monospace">2</div>
+          </div>
+          <div style="width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 26px system-ui;color:#111">×</div>
+        </div>
+      </div>
+      <p style="margin:14px 0 0;color:#6a6358">问题：更像 alert / warning，而不是“静态信息提示”。</p>
+    </div>
+  </div>
+</div>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#eae3d2;padding:24px">
+        <div style="display:flex;justify-content:center">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div style="width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 28px system-ui;color:#111">+</div>
+            <div style="position:relative;width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 26px system-ui;color:#111">
+              ⟳
+              <div style="position:absolute;top:-7px;right:-7px;min-width:18px;height:18px;padding:0 4px;background:#f4f0e6;color:#111;border:2px solid #111;display:flex;align-items:center;justify-content:center;font:700 10px ui-monospace, SFMono-Regular, Menlo, monospace">2</div>
+            </div>
+            <div style="width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 26px system-ui;color:#111">×</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. Paper Ticket</h3>
+      <p>保留角标位置，但改成纸色小票。信息还在原位置，注意力从“警报”降到“工具计数”。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#eae3d2;padding:24px">
+        <div style="display:flex;justify-content:center">
+          <div style="display:flex;gap:10px;align-items:flex-start">
+            <div style="width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 28px system-ui;color:#111">+</div>
+            <div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+              <div style="width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 26px system-ui;color:#111">⟳</div>
+              <div style="padding:2px 6px;border:1px solid rgba(17,17,17,0.18);color:#6a6358;background:rgba(244,240,230,0.85);font:700 10px ui-monospace, SFMono-Regular, Menlo, monospace;letter-spacing:.05em">2 chats</div>
+            </div>
+            <div style="width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 26px system-ui;color:#111">×</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. Caption Count</h3>
+      <p>不做角标，改成按钮自己的辅助说明。最安静，也最像当前产品里很多次级 meta 信息。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="background:#eae3d2;padding:24px">
+        <div style="display:flex;justify-content:center">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div style="width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 28px system-ui;color:#111">+</div>
+            <div style="position:relative;width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 26px system-ui;color:#111">
+              ⟳
+              <div style="position:absolute;top:2px;right:2px;min-width:12px;height:12px;color:#6a6358;display:flex;align-items:center;justify-content:center;font:700 9px ui-monospace, SFMono-Regular, Menlo, monospace">2</div>
+            </div>
+            <div style="width:52px;height:52px;border:2px solid #111;background:#f4f0e6;display:flex;align-items:center;justify-content:center;font:700 26px system-ui;color:#111">×</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. Quiet Corner Number</h3>
+      <p>仍然是角落计数，但弱化成灰墨数字，不再像一个独立元素。最轻，但也最容易被忽略。</p>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px">
+  <p class="subtitle">想回答的问题只有一个：你更偏向哪种“信息语气”？点击卡片也可以，然后在终端告诉我你喜欢哪一个，以及是因为“更像工具栏信息”还是“还是想保留一点提醒感”。</p>
+</div>
