@@ -80,31 +80,36 @@ struct RecordingLiveActivityWidget: Widget {
 
     @ViewBuilder
     private func durationText(for state: RecordingLiveActivityAttributes.ContentState) -> some View {
-        if state.phase == .recording, let timerStartDate = state.timerStartDate {
-            Text(timerInterval: timerStartDate ... Date(), countsDown: false)
+        switch RecordingLiveActivityDurationPresenter.display(
+            for: state.phase,
+            durationSeconds: state.durationSeconds,
+            timerStartDate: state.timerStartDate
+        ) {
+        case .liveTimer(let startDate):
+            Text(timerInterval: startDate ... Date(), countsDown: false)
                 .monospacedDigit()
-        } else {
-            Text(formattedDuration(seconds: state.durationSeconds))
+        case .staticText(let text):
+            Text(text)
                 .monospacedDigit()
         }
     }
 
+    @ViewBuilder
     private func compactDurationText(for state: RecordingLiveActivityAttributes.ContentState) -> some View {
-        Text(formattedDuration(seconds: state.durationSeconds))
-            .font(.system(size: 12, weight: .semibold, design: .monospaced))
-    }
-
-    private func formattedDuration(seconds: Int) -> String {
-        let totalSeconds = max(seconds, 0)
-        let hours = totalSeconds / 3600
-        let minutes = (totalSeconds % 3600) / 60
-        let secs = totalSeconds % 60
-
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, secs)
+        switch RecordingLiveActivityDurationPresenter.display(
+            for: state.phase,
+            durationSeconds: state.durationSeconds,
+            timerStartDate: state.timerStartDate
+        ) {
+        case .liveTimer(let startDate):
+            Text(timerInterval: startDate ... Date(), countsDown: false)
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
+        case .staticText(let text):
+            Text(text)
+                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                .monospacedDigit()
         }
-
-        return String(format: "%02d:%02d", minutes, secs)
     }
 
     private func iconName(for phase: RecordingLiveActivityPhase) -> String {
