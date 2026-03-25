@@ -50,7 +50,7 @@ enum MeetingDetailChrome {
 
     static func topBarActions(isRecording: Bool) -> [MeetingDetailToolbarAction] {
         if isRecording {
-            return [.share, .more]
+            return [.more]
         }
 
         return [.transcript, .share, .more]

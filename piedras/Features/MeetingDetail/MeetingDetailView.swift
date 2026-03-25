@@ -73,6 +73,8 @@ struct MeetingDetailView: View {
     @State private var enhancedNotesDraft = ""
     @State private var toastMessage: String?
     @FocusState private var isTitleRenameFocused: Bool
+    @State private var recBadgePulse = false
+    @State private var atmosphereLineOpacity = false
 
     private let topAnchorID = "MeetingDetailTopAnchor"
     private let actionMenuTopInset: CGFloat = 70
@@ -131,7 +133,13 @@ struct MeetingDetailView: View {
                             meetingStore.updateNotes(notes, for: meeting)
                         }
 
-                        withAnimation(.easeOut(duration: 0.22)) {
+                        withAnimation(.easeOut(duration: 0.4)) {
+                            proxy.scrollTo(topAnchorID, anchor: .top)
+                        }
+                    }
+
+                    if !wasRecording && isRecording {
+                        withAnimation(.easeOut(duration: 0.4)) {
                             proxy.scrollTo(topAnchorID, anchor: .top)
                         }
                     }
@@ -155,13 +163,23 @@ struct MeetingDetailView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: showsActionMenu)
+        .animation(.easeOut(duration: 0.4), value: isRecordingThisMeeting)
         .toolbar(.hidden, for: .navigationBar)
         .background(InteractivePopGestureEnabler())
         .safeAreaInset(edge: .top, spacing: 0) {
             detailTopChrome(meeting: meeting)
         }
         .safeAreaInset(edge: .bottom) {
-            if !isRecordingThisMeeting {
+            if isRecordingThisMeeting {
+                RecordingBottomBar(
+                    meeting: meeting,
+                    onRequestTranscript: {
+                        annotationStore.dismissEditor()
+                        showsTranscriptSheet = true
+                    }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else {
                 bottomStack(for: meeting)
             }
         }
@@ -250,12 +268,40 @@ struct MeetingDetailView: View {
 
             Spacer()
 
+            if isRecordingThisMeeting {
+                recBadge
+            }
+
+            Spacer()
+
             HStack(spacing: 10) {
                 ForEach(MeetingDetailChrome.topBarActions(isRecording: isRecordingThisMeeting), id: \.self) { action in
                     topBarActionButton(action, meeting: meeting)
                 }
             }
         }
+    }
+
+    private var recBadge: some View {
+        Text("● REC")
+            .font(.system(size: 10, weight: .bold, design: .monospaced))
+            .tracking(1.5)
+            .foregroundStyle(AppTheme.surface)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(AppTheme.highlight)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.ink, lineWidth: AppTheme.retroBorderWidth)
+            )
+            .opacity(recBadgePulse ? 1.0 : 0.6)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    recBadgePulse.toggle()
+                }
+            }
+            .accessibilityLabel(AppStrings.current.statusRecording)
+            .accessibilityIdentifier("RecBadge")
     }
 
     @ViewBuilder
@@ -368,24 +414,7 @@ struct MeetingDetailView: View {
     private func documentPage(meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if isRecordingThisMeeting {
-                CollapsibleRecordingBar(
-                    meeting: meeting,
-                    onRequestTranscriptDrawer: {
-                        annotationStore.dismissEditor()
-                        showsTranscriptSheet = true
-                    }
-                )
-                    .padding(.bottom, 14)
-
-                NoteEditorView(
-                    text: noteEditorBinding(for: meeting),
-                    showsHeader: false,
-                    title: AppStrings.current.notes,
-                    placeholder: AppStrings.current.writeHere,
-                    minHeight: 400,
-                    usesBodyStyle: true,
-                    accessibilityIdentifier: "RecordingNoteEditor"
-                )
+                recordingDocumentPage(meeting: meeting)
             } else {
                 ThinDivider()
 
@@ -400,6 +429,93 @@ struct MeetingDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(maxWidth: .infinity, minHeight: minimumPageHeight, alignment: .topLeading)
     }
+
+    /// Recording mode document page: title, editorial guidance, and note editor with atmosphere line.
+    private func recordingDocumentPage(meeting: Meeting) -> some View {
+        ZStack(alignment: .leading) {
+            // Left atmosphere line
+            atmosphereLine
+
+            VStack(alignment: .leading, spacing: 0) {
+                // Meeting title
+                Text(displayTitle(for: meeting))
+                    .font(AppTheme.bodyFont(size: 20, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .padding(.bottom, 3)
+
+                // Date + REC status
+                HStack(spacing: 8) {
+                    Text(meeting.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits)))
+                        .font(AppTheme.dataFont(size: 11))
+                        .foregroundStyle(AppTheme.subtleInk)
+
+                    Text("·")
+                        .foregroundStyle(AppTheme.subtleInk.opacity(0.5))
+
+                    Text("● REC")
+                        .font(AppTheme.dataFont(size: 11, weight: .bold))
+                        .foregroundStyle(AppTheme.highlight)
+                }
+                .padding(.bottom, 20)
+
+                // Thin separator
+                Rectangle()
+                    .fill(AppTheme.border.opacity(0.15))
+                    .frame(height: 1)
+                    .padding(.bottom, 20)
+
+                // Note editor
+                NoteEditorView(
+                    text: noteEditorBinding(for: meeting),
+                    showsHeader: false,
+                    title: AppStrings.current.notes,
+                    placeholder: AppStrings.current.writeHere,
+                    minHeight: 400,
+                    usesBodyStyle: true,
+                    accessibilityIdentifier: "RecordingNoteEditor"
+                )
+
+                // Bottom decorative dots
+                HStack {
+                    Spacer()
+                    Text("· · ·")
+                        .font(AppTheme.dataFont(size: 12))
+                        .foregroundStyle(AppTheme.subtleInk.opacity(0.4))
+                        .tracking(4)
+                    Spacer()
+                }
+                .padding(.top, 40)
+            }
+        }
+    }
+
+    /// Red left-edge atmosphere line that subtly pulses during recording.
+    private var atmosphereLine: some View {
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    colors: [
+                        AppTheme.highlight,
+                        AppTheme.highlight.opacity(0),
+                        AppTheme.highlight,
+                        AppTheme.highlight.opacity(0),
+                        AppTheme.highlight
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: 3)
+            .opacity(atmosphereLineOpacity ? 0.4 : 0.2)
+            .padding(.vertical, 8)
+            .offset(x: -12)
+            .onAppear {
+                withAnimation(.easeInOut(duration: 3).repeatForever(autoreverses: true)) {
+                    atmosphereLineOpacity.toggle()
+                }
+            }
+    }
+
 
     private func noteEditorBinding(for meeting: Meeting) -> Binding<String> {
         Binding(
@@ -747,7 +863,7 @@ struct MeetingDetailView: View {
 
     private func contentBottomPadding(for meeting: Meeting) -> CGFloat {
         if isRecordingThisMeeting {
-            return 20  // No bottom controls during recording
+            return 20  // Bottom bar handled by safeAreaInset
         }
 
         return 160  // notesTeaser + chatCTA

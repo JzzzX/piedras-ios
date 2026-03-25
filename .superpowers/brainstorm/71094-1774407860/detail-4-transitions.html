@@ -1,0 +1,100 @@
+<h2>设计细节 4/4：录音模式的状态转换</h2>
+<p class="subtitle">从"普通会议详情"到"沉浸书桌"的变形过程</p>
+
+<div class="section">
+  <h3>进入录音模式（点击录音按钮后）</h3>
+  <div class="mockup">
+    <div class="mockup-header">状态 A → B 动画序列（约 0.4s）</div>
+    <div class="mockup-body" style="background:#F4F0E6;padding:24px;font-family:system-ui;color:#111;">
+      <div style="display:flex;gap:24px;align-items:flex-start;">
+
+        <!-- State A: Normal -->
+        <div style="flex:1;border:1px solid #8A7E6B;padding:0;font-size:11px;min-height:300px;display:flex;flex-direction:column;">
+          <div style="background:#EAE3D2;padding:6px 10px;display:flex;justify-content:space-between;font-size:10px;">
+            <span>← 返回</span>
+            <span>📄 ⬆ ⋯</span>
+          </div>
+          <div style="padding:10px;flex:1;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px;">产品周会</div>
+            <div style="font-size:9px;color:#B5A998;margin-bottom:8px;">2026.03.25 · 12min</div>
+            <div style="font-size:10px;color:#8A7E6B;line-height:1.6;margin-bottom:12px;">
+              AI 笔记摘要区域...<br>
+              关键议题：...
+            </div>
+          </div>
+          <div style="padding:8px 10px;display:flex;gap:6px;">
+            <div style="flex:1;border:1px solid #8A7E6B;text-align:center;padding:4px;font-size:9px;">笔记</div>
+            <div style="flex:1;border:1px solid #8A7E6B;text-align:center;padding:4px;font-size:9px;">提问</div>
+          </div>
+          <div style="text-align:center;padding:4px;font-size:9px;color:#B5A998;">普通状态</div>
+        </div>
+
+        <!-- Arrow -->
+        <div style="display:flex;align-items:center;padding-top:120px;font-size:20px;color:#8A7E6B;">→</div>
+
+        <!-- State B: Recording -->
+        <div style="flex:1;border:1px solid #8A7E6B;padding:0;font-size:11px;min-height:300px;display:flex;flex-direction:column;position:relative;">
+          <div style="position:absolute;left:0;top:28px;bottom:80px;width:2px;background:#D9423E;opacity:0.35;"></div>
+          <div style="background:#EAE3D2;padding:6px 10px;display:flex;justify-content:space-between;font-size:10px;align-items:center;">
+            <span>←</span>
+            <span style="display:flex;align-items:center;gap:4px;font-family:monospace;"><span style="width:4px;height:4px;border-radius:50%;background:#D9423E;display:inline-block;"></span>04:20</span>
+            <span>⋯</span>
+          </div>
+          <div style="padding:10px;flex:1;">
+            <div style="font-size:13px;font-weight:600;margin-bottom:2px;">产品周会</div>
+            <div style="font-size:9px;color:#B5A998;font-family:monospace;margin-bottom:8px;">2026.03.25 · <span style="color:#D9423E;">● REC</span></div>
+            <div style="border-top:1px solid rgba(138,126,107,0.1);margin-bottom:8px;"></div>
+            <div style="display:flex;gap:6px;font-size:9px;color:#8A7E6B;font-style:italic;border-left:1.5px solid rgba(217,66,62,0.2);padding-left:8px;line-height:1.6;">
+              随手记下关键词 ——<br>会后 AI 帮你整理。
+            </div>
+            <div style="margin-top:10px;color:#D5CCBC;font-size:10px;">在此书写...</div>
+          </div>
+          <div style="border:1px solid #8A7E6B;margin:0 6px 6px;background:#EAE3D2;font-size:9px;">
+            <div style="padding:4px 8px;border-bottom:1px solid rgba(138,126,107,0.15);color:#8A7E6B;font-style:italic;">≡ "...讨论排期..."&nbsp;▸</div>
+            <div style="padding:6px 8px;display:flex;justify-content:space-between;align-items:center;">
+              <span style="border:1px solid #8A7E6B;padding:2px 8px;background:#F4F0E6;">⏸</span>
+              <span style="font-family:monospace;">04:20 ▏▎▍▌</span>
+              <span style="background:#D9423E;color:white;padding:2px 8px;border:1px solid #111;">■ 结束</span>
+            </div>
+          </div>
+          <div style="text-align:center;padding:4px;font-size:9px;color:#D9423E;">沉浸录音</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>动画编排</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:13px;">
+    <tr style="border-bottom:1px solid rgba(138,126,107,0.15);">
+      <td style="padding:8px;font-family:monospace;color:#8A7E6B;">0.0s</td>
+      <td style="padding:8px;">顶部按钮淡出（转写、分享），红点指示器淡入</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(138,126,107,0.15);">
+      <td style="padding:8px;font-family:monospace;color:#8A7E6B;">0.1s</td>
+      <td style="padding:8px;">AI 笔记摘要 crossfade 为编辑器 + 引导文字</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(138,126,107,0.15);">
+      <td style="padding:8px;font-family:monospace;color:#8A7E6B;">0.2s</td>
+      <td style="padding:8px;">底部 CTA（笔记/提问）下滑退出，底部录音栏从下方滑入</td>
+    </tr>
+    <tr style="border-bottom:1px solid rgba(138,126,107,0.15);">
+      <td style="padding:8px;font-family:monospace;color:#8A7E6B;">0.3s</td>
+      <td style="padding:8px;">左侧氛围线从上向下"画出"（高度从 0 到满）</td>
+    </tr>
+    <tr>
+      <td style="padding:8px;font-family:monospace;color:#8A7E6B;">0.4s</td>
+      <td style="padding:8px;">红点开始脉冲动画，波形开始跳动</td>
+    </tr>
+  </table>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <h3>退出录音模式（点击结束后）</h3>
+  <ul style="font-size:13px;line-height:1.8;">
+    <li>反向播放进入动画（底栏滑出 → CTA 滑入 → 摘要替换编辑器）</li>
+    <li>增加一个 0.3s 的"生成中"状态：笔记区显示打字机效果的 "AI 正在整理..." 过渡</li>
+    <li>氛围线从下向上收起消失</li>
+  </ul>
+</div>

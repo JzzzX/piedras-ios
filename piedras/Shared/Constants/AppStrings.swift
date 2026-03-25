@@ -255,6 +255,8 @@ struct AppStringTable {
     var backgroundTranscriptPendingRepair: String { isChinese ? "后台片段暂未补齐，停止录音后会自动修复。" : "Background transcript is still incomplete. It will be repaired when recording stops." }
     var recordingInterruptedNeedsResume: String { isChinese ? "录音在后台被系统打断，请返回应用后继续。" : "Recording was interrupted in the background. Return to the app to continue." }
     var liveTranscriptHint: String { isChinese ? "长按录音条查看完整实时转写" : "Long press the recorder to view the full live transcript" }
+    var liveTranscriptTapHint: String { isChinese ? "点击查看实时转写" : "Tap to view live transcript" }
+    var transcriptPausedHint: String { isChinese ? "转写已暂停" : "Transcription paused" }
 }
 
 // MARK: - Global Accessor

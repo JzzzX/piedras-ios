@@ -1,0 +1,83 @@
+<h2>录音控制的位置 — 顶部 vs 底部？</h2>
+<p class="subtitle">这决定了整个录音体验的基础交互框架</p>
+
+<div class="split">
+  <div class="mockup" data-choice="top" onclick="toggleSelect(this)">
+    <div class="mockup-header">方案 A：顶部录音条（当前）</div>
+    <div class="mockup-body" style="background:#F4F0E6;padding:0;font-family:system-ui;color:#111;min-height:400px;display:flex;flex-direction:column;">
+      <!-- Status bar -->
+      <div style="background:#EAE3D2;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+        <span>← 返回</span>
+        <span>⬆ ⋯</span>
+      </div>
+      <!-- Recording bar at top -->
+      <div style="margin:16px;border:1px solid #8A7E6B;background:#F4F0E6;padding:12px 14px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+          <div style="width:8px;height:8px;background:#D9423E;"></div>
+          <span style="font-family:monospace;font-weight:bold;font-size:17px;">04:20</span>
+          <span style="flex:1;"></span>
+          <span style="color:#8A7E6B;font-size:12px;">录音中</span>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div style="flex:1;border:1px solid #8A7E6B;text-align:center;padding:10px;font-weight:bold;">⏸</div>
+          <div style="flex:2;background:#D9423E;color:white;text-align:center;padding:10px;font-weight:bold;border:2px solid #111;">■ 停止</div>
+        </div>
+      </div>
+      <!-- Note area -->
+      <div style="flex:1;padding:16px;color:#B5A998;min-height:250px;">
+        在此书写。
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup" data-choice="bottom" onclick="toggleSelect(this)">
+    <div class="mockup-header">方案 B：底部浮动栏（类 Granola）</div>
+    <div class="mockup-body" style="background:#F4F0E6;padding:0;font-family:system-ui;color:#111;min-height:400px;display:flex;flex-direction:column;">
+      <!-- Status bar -->
+      <div style="background:#EAE3D2;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-size:12px;">
+        <span>← 返回</span>
+        <span>⬆ ⋯</span>
+      </div>
+      <!-- Note area takes up most space -->
+      <div style="flex:1;padding:20px;">
+        <div style="font-family:monospace;font-size:13px;color:#D9423E;margin-bottom:4px;">● REC 04:20</div>
+        <div style="font-size:22px;font-weight:bold;margin-bottom:16px;color:#111;">会议标题</div>
+        <div style="color:#B5A998;font-size:16px;line-height:1.8;">
+          在此书写笔记...<br><br>
+          <span style="color:#111;opacity:0.15;">────────────────────────</span>
+        </div>
+      </div>
+      <!-- Floating bottom bar -->
+      <div style="margin:12px;border:1px solid #8A7E6B;background:#EAE3D2;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <div style="border:1px solid #8A7E6B;padding:8px 20px;background:#F4F0E6;font-weight:bold;font-size:14px;">⏸ 暂停</div>
+        <div style="font-family:monospace;font-size:14px;color:#8A7E6B;">
+          04:20
+          <span style="letter-spacing:2px;">•••••</span>
+        </div>
+        <div style="background:#D9423E;color:white;padding:8px 20px;font-weight:bold;font-size:14px;border:2px solid #111;">■ 结束</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>思路对比</h3>
+  <div class="pros-cons">
+    <div class="pros">
+      <h4>顶部（当前）</h4>
+      <ul>
+        <li>录音状态一目了然</li>
+        <li>波形和实时转写就在眼前</li>
+        <li>符合"录音是主角"的心智</li>
+      </ul>
+    </div>
+    <div class="cons">
+      <h4>底部浮动</h4>
+      <ul>
+        <li>笔记区获得更多空间</li>
+        <li>录音控制不干扰写作流</li>
+        <li>拇指操作更自然（手机底部更易触达）</li>
+      </ul>
+    </div>
+  </div>
+</div>

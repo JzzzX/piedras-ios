@@ -1,0 +1,61 @@
+<h2>录音状态的视觉反馈 — 怎么让用户感受到"正在录"？</h2>
+<p class="subtitle">底部放控制栏后，上方需要某种方式持续传递"录音中"的感知</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>顶部微型指示器</h3>
+      <p>导航栏旁边放一个小红点 + 时间，类似 iOS 通话时的绿色状态条。极简，不占空间，但持续提醒。</p>
+      <div class="mockup" style="margin-top:12px;">
+        <div class="mockup-body" style="background:#EAE3D2;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;font-family:system-ui;font-size:13px;color:#111;">
+          <span style="border:1px solid #8A7E6B;padding:4px 8px;background:#F4F0E6;">← 返回</span>
+          <span style="display:flex;align-items:center;gap:6px;font-family:monospace;">
+            <span style="width:6px;height:6px;border-radius:50%;background:#D9423E;display:inline-block;"></span>
+            04:20
+          </span>
+          <span>⬆ ⋯</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>实时转写流</h3>
+      <p>在笔记区上方或侧边，显示实时语音转写文字，像字幕一样流过。既是状态反馈，也是功能展示。</p>
+      <div class="mockup" style="margin-top:12px;">
+        <div class="mockup-body" style="background:#F4F0E6;padding:16px;font-family:system-ui;color:#111;font-size:13px;">
+          <div style="border-left:2px solid #D9423E;padding-left:12px;color:#8A7E6B;font-size:13px;margin-bottom:16px;line-height:1.6;">
+            <span style="color:#D9423E;font-family:monospace;font-size:11px;">● LIVE</span><br>
+            "...所以我觉得这个方案可以考虑，但是需要..."
+          </div>
+          <div style="color:#B5A998;font-size:15px;">在此书写笔记...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>氛围式反馈</h3>
+      <p>用整个页面的微妙视觉变化来传递状态 — 比如边框呼吸灯效果、纹理微变、或底栏波形动画。不用文字，靠"氛围"。</p>
+      <div class="mockup" style="margin-top:12px;">
+        <div class="mockup-body" style="background:#F4F0E6;padding:16px;font-family:system-ui;color:#111;font-size:13px;border-left:3px solid #D9423E;">
+          <div style="color:#B5A998;font-size:15px;">在此书写笔记...</div>
+          <div style="margin-top:120px;display:flex;gap:3px;align-items:end;height:20px;">
+            <div style="width:3px;height:8px;background:#D9423E;opacity:0.3;"></div>
+            <div style="width:3px;height:14px;background:#D9423E;opacity:0.5;"></div>
+            <div style="width:3px;height:20px;background:#D9423E;opacity:0.7;"></div>
+            <div style="width:3px;height:12px;background:#D9423E;opacity:0.4;"></div>
+            <div style="width:3px;height:6px;background:#D9423E;opacity:0.2;"></div>
+            <div style="width:3px;height:16px;background:#D9423E;opacity:0.6;"></div>
+            <div style="width:3px;height:10px;background:#D9423E;opacity:0.35;"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

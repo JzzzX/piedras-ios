@@ -1,0 +1,135 @@
+<h2>笔记区引导风格 — 符号+文字组合对比</h2>
+<p class="subtitle">四种不同风格，点击选择你觉得最有质感的</p>
+
+<div class="cards">
+  <div class="card" data-choice="typewriter" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F4F0E6;padding:24px 20px;font-family:system-ui;color:#111;min-height:280px;position:relative;">
+      <!-- Left line -->
+      <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg, #D9423E 0%, transparent 40%, #D9423E 70%, transparent 100%);opacity:0.35;"></div>
+
+      <div style="font-size:18px;font-weight:600;margin-bottom:3px;">产品周会</div>
+      <div style="font-size:11px;color:#B5A998;font-family:monospace;margin-bottom:20px;">2026.03.25 · <span style="color:#D9423E;">● REC</span></div>
+      <div style="border-top:1px solid rgba(138,126,107,0.12);margin-bottom:20px;"></div>
+
+      <!-- Typewriter style hints -->
+      <div style="font-family:monospace;font-size:11px;color:#B5A998;letter-spacing:0.5px;line-height:2.4;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:#8A7E6B;">▸</span> 记下关键词，AI 稍后整理
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="color:#8A7E6B;">▸</span> 标记重要时刻：输入 <span style="border:1px solid rgba(138,126,107,0.25);padding:0 4px;color:#8A7E6B;">/mark</span>
+        </div>
+      </div>
+
+      <div style="margin-top:24px;color:#D5CCBC;font-size:15px;font-family:system-ui;">
+        在此书写...
+      </div>
+
+      <div style="position:absolute;bottom:20px;left:20px;right:20px;display:flex;align-items:center;gap:8px;">
+        <div style="flex:1;border-top:1px solid rgba(138,126,107,0.08);"></div>
+        <span style="font-family:monospace;font-size:10px;color:#D5CCBC;">─── ◆ ───</span>
+        <div style="flex:1;border-top:1px solid rgba(138,126,107,0.08);"></div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A「打字机」</h3>
+      <p>等宽字体 + ▸ 列表符号，打字机文档感。功能性提示融入美学。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="editorial" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F4F0E6;padding:24px 20px;font-family:system-ui;color:#111;min-height:280px;position:relative;">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg, #D9423E 0%, transparent 40%, #D9423E 70%, transparent 100%);opacity:0.35;"></div>
+
+      <div style="font-size:18px;font-weight:600;margin-bottom:3px;">产品周会</div>
+      <div style="font-size:11px;color:#B5A998;font-family:monospace;margin-bottom:20px;">2026.03.25 · <span style="color:#D9423E;">● REC</span></div>
+      <div style="border-top:1px solid rgba(138,126,107,0.12);margin-bottom:20px;"></div>
+
+      <!-- Editorial margin note style -->
+      <div style="display:flex;gap:16px;">
+        <div style="width:2px;background:rgba(217,66,62,0.15);flex-shrink:0;"></div>
+        <div style="font-size:12px;color:#8A7E6B;line-height:1.8;font-style:italic;">
+          随手记下关键词或想法 ——<br>
+          会后 AI 将结合录音，<br>
+          为你整理完整笔记。
+        </div>
+      </div>
+
+      <div style="margin-top:24px;color:#D5CCBC;font-size:15px;">
+        在此书写...
+      </div>
+
+      <div style="position:absolute;bottom:20px;left:20px;right:20px;text-align:center;">
+        <span style="font-size:12px;color:#D5CCBC;letter-spacing:4px;">· · ·</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B「编辑手记」</h3>
+      <p>红色边注线 + 斜体排版，像编辑在页边留的批注。文艺但不做作。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="stamp" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F4F0E6;padding:24px 20px;font-family:system-ui;color:#111;min-height:280px;position:relative;">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg, #D9423E 0%, transparent 40%, #D9423E 70%, transparent 100%);opacity:0.35;"></div>
+
+      <div style="font-size:18px;font-weight:600;margin-bottom:3px;">产品周会</div>
+      <div style="font-size:11px;color:#B5A998;font-family:monospace;margin-bottom:20px;">2026.03.25 · <span style="color:#D9423E;">● REC</span></div>
+      <div style="border-top:1px solid rgba(138,126,107,0.12);margin-bottom:20px;"></div>
+
+      <!-- Stamp/badge style hints -->
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;">
+        <span style="font-family:monospace;font-size:10px;color:#8A7E6B;border:1px solid rgba(138,126,107,0.25);padding:4px 8px;letter-spacing:0.5px;">✦ 关键词</span>
+        <span style="font-family:monospace;font-size:10px;color:#8A7E6B;border:1px solid rgba(138,126,107,0.25);padding:4px 8px;letter-spacing:0.5px;">⚡ 决策</span>
+        <span style="font-family:monospace;font-size:10px;color:#8A7E6B;border:1px solid rgba(138,126,107,0.25);padding:4px 8px;letter-spacing:0.5px;">→ 待办</span>
+      </div>
+      <div style="font-size:11px;color:#B5A998;margin-bottom:16px;">记下这些，AI 会后帮你归类整理</div>
+
+      <div style="color:#D5CCBC;font-size:15px;">
+        在此书写...
+      </div>
+
+      <div style="position:absolute;bottom:20px;right:20px;">
+        <span style="font-family:monospace;font-size:10px;color:#D5CCBC;border:1px dashed rgba(138,126,107,0.15);padding:3px 8px;">PIEDRAS</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C「印章标签」</h3>
+      <p>小标签组 + 品牌水印，像文具上的印章。功能性最强 — 暗示用户可以记什么类型的内容。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="ledger" onclick="toggleSelect(this)">
+    <div class="card-image" style="background:#F4F0E6;padding:24px 20px;font-family:system-ui;color:#111;min-height:280px;position:relative;">
+      <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg, #D9423E 0%, transparent 40%, #D9423E 70%, transparent 100%);opacity:0.35;"></div>
+
+      <div style="font-size:18px;font-weight:600;margin-bottom:3px;">产品周会</div>
+      <div style="font-size:11px;color:#B5A998;font-family:monospace;margin-bottom:20px;">2026.03.25 · <span style="color:#D9423E;">● REC</span></div>
+
+      <!-- Ledger ruled lines -->
+      <div style="border-top:2px solid rgba(138,126,107,0.15);margin-bottom:4px;"></div>
+      <div style="border-top:1px solid rgba(138,126,107,0.08);margin-bottom:16px;"></div>
+
+      <!-- Header row like a form -->
+      <div style="display:flex;justify-content:space-between;font-family:monospace;font-size:10px;color:#B5A998;letter-spacing:1px;margin-bottom:16px;padding:0 2px;">
+        <span>NOTES</span>
+        <span>№ 001</span>
+      </div>
+
+      <div style="color:#D5CCBC;font-size:15px;line-height:2.2;border-left:1px solid rgba(217,66,62,0.12);padding-left:14px;">
+        在此书写...<br>
+        <span style="visibility:hidden;">_</span><br>
+        <span style="visibility:hidden;">_</span>
+      </div>
+
+      <div style="position:absolute;bottom:20px;left:20px;right:20px;display:flex;justify-content:space-between;font-family:monospace;font-size:9px;color:#D5CCBC;letter-spacing:1px;">
+        <span>AI SUMMARY AFTER SESSION</span>
+        <span>◇</span>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>D「账簿」</h3>
+      <p>双线表头 + 编号 + 红色竖线，像老式记账本。最贴合 retro Mac 美学，有仪式感。</p>
+    </div>
+  </div>
+</div>

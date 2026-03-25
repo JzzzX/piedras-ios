@@ -1,0 +1,134 @@
+<h2>当前设计 vs 设计目标：痛点分析</h2>
+<p class="subtitle">5 个核心痛点与 Granola 对照</p>
+
+<div class="section">
+  <h3>🔍 痛点拆解</h3>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 16px;">
+
+    <!-- 痛点 1: 边框 -->
+    <div style="background: #1a1a1a; border-radius: 12px; padding: 20px;">
+      <div style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">痛点 1</div>
+      <h3 style="margin: 0 0 12px 0; color: #fff;">边框太重</h3>
+      <div style="display: flex; gap: 16px; align-items: center;">
+        <div style="flex: 1;">
+          <div style="font-size: 12px; color: #888; margin-bottom: 6px;">Piedras 现在</div>
+          <div style="background: #F4F0E6; border: 2px solid #111; padding: 12px 16px; box-shadow: 4px 4px 0 #111;">
+            <span style="font-weight: 700; color: #111; font-size: 14px;">每个卡片</span>
+            <span style="color: #6A6358; font-size: 12px;"> · 都有 2px 硬边框 + 硬阴影</span>
+          </div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 12px; color: #888; margin-bottom: 6px;">Granola 做法</div>
+          <div style="background: rgba(255,255,255,0.6); border-radius: 16px; padding: 12px 16px;">
+            <span style="font-weight: 600; color: #222; font-size: 14px;">卡片用透明度</span>
+            <span style="color: #888; font-size: 12px;"> · 没有显式边框</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 痛点 2: 字体 -->
+    <div style="background: #1a1a1a; border-radius: 12px; padding: 20px;">
+      <div style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">痛点 2</div>
+      <h3 style="margin: 0 0 12px 0; color: #fff;">字体层次不够</h3>
+      <div style="display: flex; gap: 16px;">
+        <div style="flex: 1;">
+          <div style="font-size: 12px; color: #888; margin-bottom: 6px;">Piedras 现在</div>
+          <div style="background: #F4F0E6; padding: 12px;">
+            <div style="font-weight: 700; color: #111; font-size: 15px;">标题 15px bold</div>
+            <div style="color: #6A6358; font-size: 13px; font-family: monospace;">副信息 13px mono</div>
+          </div>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 12px; color: #888; margin-bottom: 6px;">更理想的</div>
+          <div style="background: #F4F0E6; padding: 12px;">
+            <div style="font-weight: 700; color: #111; font-size: 17px;">标题 17px bold</div>
+            <div style="color: #999; font-size: 12px;">副信息 12px · 更轻的灰</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 痛点 3: 留白 -->
+    <div style="background: #1a1a1a; border-radius: 12px; padding: 20px;">
+      <div style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">痛点 3</div>
+      <h3 style="margin: 0 0 12px 0; color: #fff;">留白不够</h3>
+      <p style="color: #aaa; font-size: 13px; line-height: 1.5;">
+        当前卡片之间间距紧凑，元素之间缺少呼吸感。<br>
+        Granola 的卡片间距大约是 Piedras 的 1.5-2 倍。
+      </p>
+    </div>
+
+    <!-- 痛点 4: 颜色 -->
+    <div style="background: #1a1a1a; border-radius: 12px; padding: 20px;">
+      <div style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">痛点 4</div>
+      <h3 style="margin: 0 0 12px 0; color: #fff;">颜色太单调</h3>
+      <div style="display: flex; gap: 8px; margin-top: 8px;">
+        <div style="text-align: center;">
+          <div style="width: 40px; height: 40px; background: #111; border-radius: 8px;"></div>
+          <div style="font-size: 10px; color: #888; margin-top: 4px;">ink</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="width: 40px; height: 40px; background: #F4F0E6; border: 1px solid #333; border-radius: 8px;"></div>
+          <div style="font-size: 10px; color: #888; margin-top: 4px;">surface</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="width: 40px; height: 40px; background: #D9423E; border-radius: 8px;"></div>
+          <div style="font-size: 10px; color: #888; margin-top: 4px;">highlight</div>
+        </div>
+        <div style="font-size: 24px; color: #555; display: flex; align-items: center; padding: 0 8px;">→</div>
+        <div style="text-align: center;">
+          <div style="width: 40px; height: 40px; background: #5F824D; border-radius: 8px;"></div>
+          <div style="font-size: 10px; color: #888; margin-top: 4px;">打字机绿</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="width: 40px; height: 40px; background: #2B4C7E; border-radius: 8px;"></div>
+          <div style="font-size: 10px; color: #888; margin-top: 4px;">圆珠笔蓝</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="width: 40px; height: 40px; background: #C4956A; border-radius: 8px;"></div>
+          <div style="font-size: 10px; color: #888; margin-top: 4px;">牛皮纸棕?</div>
+        </div>
+      </div>
+      <p style="color: #aaa; font-size: 12px; margin-top: 10px;">现有调色板其实有绿色和蓝色，但几乎没在 UI 中使用</p>
+    </div>
+
+    <!-- 痛点 5: 图标 -->
+    <div style="background: #1a1a1a; border-radius: 12px; padding: 20px; grid-column: 1 / -1;">
+      <div style="font-size: 13px; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">痛点 5</div>
+      <h3 style="margin: 0 0 12px 0; color: #fff;">图标色调太单一</h3>
+      <div style="display: flex; gap: 24px; align-items: center;">
+        <div style="flex: 1;">
+          <div style="font-size: 12px; color: #888; margin-bottom: 8px;">Piedras 列表页图标</div>
+          <div style="display: flex; gap: 12px;">
+            <div style="background: #F4F0E6; border: 2px solid #111; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px;">📄</div>
+            <div style="background: #F4F0E6; border: 2px solid #111; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px;">📄</div>
+            <div style="background: #F4F0E6; border: 2px solid #111; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px;">📄</div>
+          </div>
+          <p style="color: #888; font-size: 11px; margin-top: 6px;">全部都是同样的黑色文档图标</p>
+        </div>
+        <div style="flex: 1;">
+          <div style="font-size: 12px; color: #888; margin-bottom: 8px;">Granola 列表页图标</div>
+          <div style="display: flex; gap: 12px;">
+            <div style="background: #D4E8C4; border-radius: 10px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px;">📱</div>
+            <div style="background: #D4E8C4; border-radius: 10px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px;">📱</div>
+            <div style="background: #D4E8C4; border-radius: 10px; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 18px;">📱</div>
+          </div>
+          <p style="color: #888; font-size: 11px; margin-top: 6px;">淡绿色柔和背景 + 主题色图标</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="section" style="margin-top: 24px; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 12px; border: 1px solid rgba(255,255,255,0.1);">
+  <h3>💡 核心设计问题</h3>
+  <p style="color: #ccc; font-size: 14px; line-height: 1.7;">
+    你的复古 macOS 9 设计语言的核心身份标识是：<strong style="color: #fff;">米黄纸张色调 + 墨黑硬边框 + 硬阴影 + 等宽字体</strong>。<br><br>
+    问题不在于"要不要复古"，而在于<strong style="color: #fff;">把复古特征用在哪些地方，用多重</strong>。<br>
+    现在是"处处都是 2px 硬边框 + 硬阴影"，所以显得拥挤单调。<br><br>
+    关键洞察：<strong style="color: #E8C872;">复古不等于"所有元素都必须看起来一样重"</strong>。
+  </p>
+</div>

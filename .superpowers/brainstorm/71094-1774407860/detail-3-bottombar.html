@@ -1,0 +1,67 @@
+<h2>设计细节 3/4：底部录音控制栏</h2>
+<p class="subtitle">丰富型底栏 — 转写预览 + 控制按钮 + 波形</p>
+
+<div class="mockup">
+  <div class="mockup-header">底部控制栏详细设计</div>
+  <div class="mockup-body" style="background:#F4F0E6;padding:20px 12px;font-family:system-ui;color:#111;">
+
+    <!-- The bar itself -->
+    <div style="border:1px solid #8A7E6B;background:#EAE3D2;">
+      <!-- Row 1: Live transcript preview -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(138,126,107,0.2);cursor:pointer;">
+        <span style="font-family:monospace;font-size:12px;color:#8A7E6B;">≡</span>
+        <span style="flex:1;font-size:12px;color:#8A7E6B;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-style:italic;">"...所以这个方案我们需要再讨论一下之后的排期..."</span>
+        <span style="font-size:11px;color:#8A7E6B;font-family:monospace;">▸</span>
+      </div>
+      <!-- Row 2: Controls -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;">
+        <div style="border:1px solid #8A7E6B;background:#F4F0E6;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;">⏸</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-family:monospace;font-size:16px;font-weight:bold;">04:20</span>
+          <div style="display:flex;gap:2px;align-items:end;">
+            <div style="width:2px;height:5px;background:#D9423E;opacity:0.3;"></div>
+            <div style="width:2px;height:10px;background:#D9423E;opacity:0.5;"></div>
+            <div style="width:2px;height:16px;background:#D9423E;opacity:0.85;"></div>
+            <div style="width:2px;height:12px;background:#D9423E;opacity:0.6;"></div>
+            <div style="width:2px;height:7px;background:#D9423E;opacity:0.35;"></div>
+            <div style="width:2px;height:14px;background:#D9423E;opacity:0.7;"></div>
+            <div style="width:2px;height:4px;background:#D9423E;opacity:0.2;"></div>
+            <div style="width:2px;height:9px;background:#D9423E;opacity:0.45;"></div>
+          </div>
+        </div>
+        <div style="background:#D9423E;color:#F4F0E6;height:44px;padding:0 24px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;border:2px solid #111;font-family:monospace;">■ 结束</div>
+      </div>
+    </div>
+
+    <!-- Paused state -->
+    <div style="margin-top:32px;opacity:0.7;">
+      <div style="font-size:11px;color:#8A7E6B;font-family:monospace;margin-bottom:8px;letter-spacing:1px;">── 暂停状态 ──</div>
+      <div style="border:1px solid #8A7E6B;background:#EAE3D2;">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid rgba(138,126,107,0.2);">
+          <span style="font-family:monospace;font-size:12px;color:#8A7E6B;">≡</span>
+          <span style="flex:1;font-size:12px;color:#B5A998;font-style:italic;">转写已暂停</span>
+          <span style="font-size:11px;color:#8A7E6B;font-family:monospace;">▸</span>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;">
+          <div style="border:1px solid #8A7E6B;background:#F4F0E6;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:bold;">▶</div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-family:monospace;font-size:16px;font-weight:bold;color:#8A7E6B;">04:20</span>
+            <span style="font-family:monospace;font-size:11px;color:#B5A998;border:1px solid rgba(138,126,107,0.2);padding:2px 8px;">已暂停</span>
+          </div>
+          <div style="background:#D9423E;color:#F4F0E6;height:44px;padding:0 24px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:14px;border:2px solid #111;font-family:monospace;">■ 结束</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <h3>交互说明</h3>
+  <ul>
+    <li><strong>转写预览行</strong>：显示最新 ASR partial 文字，点击打开完整转写 sheet（取代之前的长按手势，引导性更强）</li>
+    <li><strong>暂停/继续</strong>：44×44 retro 方形按钮，图标切换 ⏸↔▶</li>
+    <li><strong>波形</strong>：实时音频电平，录音中跳动，暂停时静止</li>
+    <li><strong>结束按钮</strong>：红色高亮 + 粗边框，视觉权重最高</li>
+    <li><strong>暂停态</strong>：波形消失，替换为「已暂停」标签；时间变灰；转写行显示"转写已暂停"</li>
+  </ul>
+</div>

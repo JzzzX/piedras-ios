@@ -57,8 +57,10 @@ final class Meeting {
     var sourceAudioDisplayName: String?
     var sourceAudioDuration: Int
     var hiddenWorkspaceId: String?
-    var speakersRaw: String
-    var speakerDiarizationStateRaw: String
+    @Attribute(originalName: "speakersRaw")
+    private var speakersRawValue: String?
+    @Attribute(originalName: "speakerDiarizationStateRaw")
+    private var speakerDiarizationStateRawValue: String?
     var speakerDiarizationErrorMessage: String?
     var syncStateRaw: String
     var lastSyncedAt: Date?
@@ -123,8 +125,8 @@ final class Meeting {
         self.sourceAudioDisplayName = sourceAudioDisplayName
         self.sourceAudioDuration = sourceAudioDuration
         self.hiddenWorkspaceId = hiddenWorkspaceId
-        self.speakersRaw = Self.encodeSpeakers(speakers)
-        self.speakerDiarizationStateRaw = speakerDiarizationState.rawValue
+        self.speakersRawValue = Self.encodeSpeakers(speakers)
+        self.speakerDiarizationStateRawValue = speakerDiarizationState.rawValue
         self.speakerDiarizationErrorMessage = speakerDiarizationErrorMessage
         self.syncStateRaw = syncState.rawValue
         self.lastSyncedAt = lastSyncedAt
@@ -152,13 +154,13 @@ final class Meeting {
     }
 
     var speakers: [String: String] {
-        get { Self.decodeSpeakers(speakersRaw) }
-        set { speakersRaw = Self.encodeSpeakers(newValue) }
+        get { Self.decodeSpeakers(speakersRawValue ?? Self.encodeSpeakers([:])) }
+        set { speakersRawValue = Self.encodeSpeakers(newValue) }
     }
 
     var speakerDiarizationState: SpeakerDiarizationState {
-        get { SpeakerDiarizationState(rawValue: speakerDiarizationStateRaw) ?? .idle }
-        set { speakerDiarizationStateRaw = newValue.rawValue }
+        get { SpeakerDiarizationState(rawValue: speakerDiarizationStateRawValue ?? "") ?? .idle }
+        set { speakerDiarizationStateRawValue = newValue.rawValue }
     }
 
     var hasPendingImageTextRefresh: Bool {

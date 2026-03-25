@@ -1,0 +1,126 @@
+- generic [active] [ref=e1]:
+  - banner "App Store Connect" [ref=e3]:
+    - generic [ref=e4]:
+      - heading "App Store Connect" [level=1] [ref=e20]:
+        - link "App Store Connect" [ref=e21] [cursor=pointer]:
+          - /url: /
+      - navigation "全球" [ref=e7]:
+        - list [ref=e23]:
+          - listitem [ref=e24]:
+            - link "App" [ref=e25] [cursor=pointer]:
+              - /url: /apps
+          - listitem [ref=e26]:
+            - link "分析" [ref=e27] [cursor=pointer]:
+              - /url: /analytics
+          - listitem [ref=e28]:
+            - link "趋势" [ref=e29] [cursor=pointer]:
+              - /url: /trends
+          - listitem [ref=e30]:
+            - link "报告" [ref=e31] [cursor=pointer]:
+              - /url: /itc/payments_and_financial_reports
+          - listitem [ref=e32]:
+            - link "商务" [ref=e33] [cursor=pointer]:
+              - /url: /business
+          - listitem [ref=e34]:
+            - link "用户和访问" [ref=e35] [cursor=pointer]:
+              - /url: /access/users
+      - button "兴菲 季 Mediocre, LLC Account name menu" [ref=e37] [cursor=pointer]:
+        - generic:
+          - generic: 兴菲 季
+          - generic: Mediocre, LLC
+          - img [ref=e38]
+  - generic [ref=e43]:
+    - button "App 菜单，已选择piedras" [ref=e48] [cursor=pointer]:
+      - generic [ref=e49]:
+        - generic "piedras" [ref=e50]:
+          - img "piedras" [ref=e51]
+        - generic [ref=e53]: piedras
+      - img [ref=e55]
+    - navigation "App" [ref=e58]:
+      - list [ref=e59]:
+        - listitem [ref=e60]:
+          - link "分发" [ref=e61] [cursor=pointer]:
+            - /url: /apps/6761040163/distribution
+        - listitem [ref=e62]:
+          - link "TestFlight" [ref=e63] [cursor=pointer]:
+            - /url: /teams/7452419a-acd1-4d98-ad15-a7a4722f4784/apps/6761040163/testflight
+        - listitem [ref=e64]:
+          - link "Xcode Cloud" [ref=e65] [cursor=pointer]:
+            - /url: /teams/7452419a-acd1-4d98-ad15-a7a4722f4784/apps/6761040163/ci
+  - main [ref=e69]:
+    - generic [ref=e70]:
+      - navigation [ref=e247]:
+        - link "构建版本" [ref=e248] [cursor=pointer]:
+          - /url: /teams/7452419a-acd1-4d98-ad15-a7a4722f4784/apps/6761040163/ci/groups
+          - generic [ref=e249]: 构建版本
+        - link "main" [ref=e256] [cursor=pointer]:
+          - /url: /teams/7452419a-acd1-4d98-ad15-a7a4722f4784/apps/6761040163/ci/groups/8faeb64f-4835-433c-bcfb-e5d5376ecccd
+          - generic [ref=e257]:
+            - img [ref=e258]
+            - text: main
+        - generic [ref=e260]:
+          - img [ref=e261] [cursor=pointer]
+          - text: 构建版本 5
+      - generic [ref=e264]:
+        - navigation [ref=e266]:
+          - heading "已加入队列 构建版本 5" [level=5] [ref=e268]:
+            - generic [ref=e269]:
+              - img "已加入队列" [ref=e273] [cursor=pointer]
+              - generic [ref=e274]: 构建版本 5
+          - heading "综合" [level=6] [ref=e275]
+          - list [ref=e276]:
+            - listitem [ref=e277]:
+              - link "概览" [ref=e278] [cursor=pointer]:
+                - /url: /teams/7452419a-acd1-4d98-ad15-a7a4722f4784/apps/6761040163/ci/builds/8aa02a3b-e415-4dc1-9b94-c08105f19cd4/summary
+                - generic [ref=e279]: 概览
+        - generic [ref=e280]:
+          - generic [ref=e283]:
+            - generic [ref=e287]: 概览
+            - button "取消构建版本" [ref=e290] [cursor=pointer]
+          - generic [ref=e292]:
+            - heading "详细信息" [level=5] [ref=e293]
+            - generic [ref=e294]:
+              - generic [ref=e295]:
+                - generic [ref=e296]:
+                  - generic [ref=e297]: 启动条件
+                  - generic "手动构建" [ref=e298]:
+                    - paragraph [ref=e299]: 手动构建
+                - generic [ref=e300]:
+                  - generic [ref=e301]: 创建时间
+                  - paragraph [ref=e302]: 今天 15:53
+                - generic [ref=e303]:
+                  - generic [ref=e304]: 排队时间
+                  - paragraph [ref=e305]: 6 秒
+              - generic [ref=e306]:
+                - generic [ref=e307]:
+                  - generic [ref=e308]: 工作流程
+                  - generic "Default" [ref=e309]:
+                    - link "Default" [ref=e310] [cursor=pointer]:
+                      - /url: /teams/7452419a-acd1-4d98-ad15-a7a4722f4784/apps/6761040163/ci/workflows/77FA094D-34DB-4215-9E96-AD81B4A59062
+                - generic [ref=e311]:
+                  - generic [ref=e312]: Xcode 版本
+                  - generic "--" [ref=e313]:
+                    - paragraph [ref=e314]: "--"
+                - generic [ref=e315]:
+                  - generic [ref=e316]: macOS 版本
+                  - generic "--" [ref=e317]:
+                    - paragraph [ref=e318]: "--"
+  - contentinfo [ref=e10]:
+    - generic [ref=e11]:
+      - list [ref=e150]:
+        - listitem [ref=e151]:
+          - link "App Store Connect" [ref=e152] [cursor=pointer]:
+            - /url: /apps
+      - list [ref=e12]:
+        - listitem [ref=e13]: Copyright © 2026 Apple Inc. 保留所有权利。 |
+        - listitem [ref=e14]:
+          - link "服务条款" [ref=e15] [cursor=pointer]:
+            - /url: /WebObjects/iTunesConnect.woa/wa/termsOfService
+          - text: "|"
+        - listitem [ref=e16]:
+          - link "隐私政策" [ref=e17] [cursor=pointer]:
+            - /url: https://www.apple.com/legal/privacy
+          - text: "|"
+        - listitem [ref=e18]:
+          - link "联系我们" [ref=e19] [cursor=pointer]:
+            - /url: /contact-us

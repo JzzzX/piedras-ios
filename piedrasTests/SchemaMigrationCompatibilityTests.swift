@@ -142,6 +142,8 @@ struct SchemaMigrationCompatibilityTests {
         #expect(meetings.count == 1)
         #expect(meetings.first?.title == "旧会议")
         #expect(meetings.first?.hasPendingImageTextRefresh == false)
+        #expect(meetings.first?.speakers == [:])
+        #expect(meetings.first?.speakerDiarizationState == .idle)
 
         #expect(annotations.count == 1)
         #expect(annotations.first?.comment == "旧评论")
