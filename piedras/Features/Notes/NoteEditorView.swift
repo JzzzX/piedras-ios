@@ -7,6 +7,8 @@ struct NoteEditorView: View {
     var placeholder = "Write here."
     var minHeight: CGFloat = 260
     var usesBodyStyle = false
+    var focusRequestToken: Int = 0
+    var isFocused: Binding<Bool>? = nil
     var accessibilityIdentifier: String? = nil
 
     var body: some View {
@@ -32,6 +34,8 @@ struct NoteEditorView: View {
                     minHeight: minHeight,
                     fontSize: 17,
                     style: usesBodyStyle ? .body : .editorial,
+                    focusRequestToken: focusRequestToken,
+                    isFocused: isFocused,
                     accessibilityIdentifier: accessibilityIdentifier
                 )
             }

@@ -74,7 +74,8 @@ struct MeetingDetailView: View {
     @State private var toastMessage: String?
     @FocusState private var isTitleRenameFocused: Bool
     @State private var recBadgePulse = false
-    @State private var atmosphereLineOpacity = false
+    @State private var recordingNoteFocusRequest = 0
+    @State private var isRecordingNoteEditorFocused = false
 
     private let topAnchorID = "MeetingDetailTopAnchor"
     private let actionMenuTopInset: CGFloat = 70
@@ -353,14 +354,7 @@ struct MeetingDetailView: View {
 
                     Spacer(minLength: 0)
 
-                    Image(systemName: "pencil")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AppTheme.subtleInk)
-                        .frame(width: 28, height: 28)
-                        .overlay(
-                            Rectangle()
-                                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
-                        )
+                    titleEditLabel(systemName: "pencil")
                 }
 
                 VStack(alignment: .leading, spacing: 8) {
@@ -430,41 +424,17 @@ struct MeetingDetailView: View {
         .frame(maxWidth: .infinity, minHeight: minimumPageHeight, alignment: .topLeading)
     }
 
-    /// Recording mode document page: title, editorial guidance, and note editor with atmosphere line.
     private func recordingDocumentPage(meeting: Meeting) -> some View {
-        ZStack(alignment: .leading) {
-            // Left atmosphere line
-            atmosphereLine
+        let chrome = MeetingDetailChrome.recordingDocument
 
-            VStack(alignment: .leading, spacing: 0) {
-                // Meeting title
-                Text(displayTitle(for: meeting))
-                    .font(AppTheme.bodyFont(size: 20, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
-                    .padding(.bottom, 3)
-
-                // Date + REC status
-                HStack(spacing: 8) {
-                    Text(meeting.date.formatted(.dateTime.year().month(.twoDigits).day(.twoDigits)))
-                        .font(AppTheme.dataFont(size: 11))
-                        .foregroundStyle(AppTheme.subtleInk)
-
-                    Text("·")
-                        .foregroundStyle(AppTheme.subtleInk.opacity(0.5))
-
-                    Text("● REC")
-                        .font(AppTheme.dataFont(size: 11, weight: .bold))
-                        .foregroundStyle(AppTheme.highlight)
-                }
+        return VStack(alignment: .leading, spacing: 0) {
+            recordingTitleBlock(meeting: meeting, chrome: chrome)
                 .padding(.bottom, 20)
 
-                // Thin separator
-                Rectangle()
-                    .fill(AppTheme.border.opacity(0.15))
-                    .frame(height: 1)
-                    .padding(.bottom, 20)
+            ThinDivider()
+                .padding(.bottom, 20)
 
-                // Note editor
+            ZStack(alignment: .topLeading) {
                 NoteEditorView(
                     text: noteEditorBinding(for: meeting),
                     showsHeader: false,
@@ -472,48 +442,107 @@ struct MeetingDetailView: View {
                     placeholder: AppStrings.current.writeHere,
                     minHeight: 400,
                     usesBodyStyle: true,
+                    focusRequestToken: recordingNoteFocusRequest,
+                    isFocused: $isRecordingNoteEditorFocused,
                     accessibilityIdentifier: "RecordingNoteEditor"
                 )
 
-                // Bottom decorative dots
-                HStack {
-                    Spacer()
-                    Text("· · ·")
-                        .font(AppTheme.dataFont(size: 12))
-                        .foregroundStyle(AppTheme.subtleInk.opacity(0.4))
-                        .tracking(4)
-                    Spacer()
+                if MeetingDetailChrome.showsRecordingNotePrompt(
+                    notes: currentNotesText(for: meeting),
+                    isEditorFocused: isRecordingNoteEditorFocused
+                ) {
+                    recordingNotePrompt(chrome: chrome)
                 }
-                .padding(.top, 40)
             }
+
+            HStack {
+                Spacer()
+                Text("· · ·")
+                    .font(AppTheme.dataFont(size: 12))
+                    .foregroundStyle(AppTheme.subtleInk.opacity(0.4))
+                    .tracking(4)
+                Spacer()
+            }
+            .padding(.top, 40)
         }
     }
 
-    /// Red left-edge atmosphere line that subtly pulses during recording.
-    private var atmosphereLine: some View {
-        Rectangle()
-            .fill(
-                LinearGradient(
-                    colors: [
-                        AppTheme.highlight,
-                        AppTheme.highlight.opacity(0),
-                        AppTheme.highlight,
-                        AppTheme.highlight.opacity(0),
-                        AppTheme.highlight
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .frame(width: 3)
-            .opacity(atmosphereLineOpacity ? 0.4 : 0.2)
-            .padding(.vertical, 8)
-            .offset(x: -12)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 3).repeatForever(autoreverses: true)) {
-                    atmosphereLineOpacity.toggle()
+    private func recordingTitleBlock(
+        meeting: Meeting,
+        chrome: MeetingDetailRecordingDocumentChrome
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
+                Button {
+                    openTitleRenameDialog(for: meeting)
+                } label: {
+                    Text(displayTitle(for: meeting))
+                        .font(AppTheme.bodyFont(size: 28, weight: .bold))
+                        .foregroundStyle(AppTheme.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .accessibilityIdentifier("MeetingDetailTitleText")
                 }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("RecordingDetailTitleButton")
+
+                Button {
+                    openTitleRenameDialog(for: meeting)
+                } label: {
+                    titleEditLabel(systemName: chrome.titleEditSystemName)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(AppStrings.current.editTitle)
+                .accessibilityIdentifier("RecordingDetailTitleEditButton")
             }
+
+            Text(MeetingDetailChrome.recordingMetaLine(for: meeting.date))
+                .font(AppTheme.dataFont(size: 14))
+                .foregroundStyle(AppTheme.subtleInk)
+                .accessibilityIdentifier("RecordingDetailMetaText")
+        }
+    }
+
+    private func recordingNotePrompt(chrome: MeetingDetailRecordingDocumentChrome) -> some View {
+        Button {
+            isRecordingNoteEditorFocused = true
+            recordingNoteFocusRequest += 1
+        } label: {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: chrome.notePromptSystemName)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .frame(width: 40, height: 40)
+                    .background(AppTheme.backgroundSecondary)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                    )
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(chrome.notePromptTitle)
+                        .font(AppTheme.bodyFont(size: 22, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+
+                    Text(chrome.notePromptHint)
+                        .font(AppTheme.bodyFont(size: 14))
+                        .foregroundStyle(AppTheme.mutedInk)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, minHeight: chrome.notePromptMinHeight, alignment: .topLeading)
+            .background(AppTheme.surface.opacity(0.76))
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("RecordingDetailNotePrompt")
     }
 
 
@@ -928,6 +957,17 @@ struct MeetingDetailView: View {
             .overlay(
                 Rectangle()
                     .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+            )
+    }
+
+    private func titleEditLabel(systemName: String) -> some View {
+        Image(systemName: systemName)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(AppTheme.subtleInk)
+            .frame(width: 28, height: 28)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
             )
     }
 

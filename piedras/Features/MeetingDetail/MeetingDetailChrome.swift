@@ -39,6 +39,16 @@ struct MeetingDetailSheetChrome {
     let hint: String?
 }
 
+struct MeetingDetailRecordingDocumentChrome: Equatable {
+    let showsAtmosphereLine: Bool
+    let showsSecondaryRecBadge: Bool
+    let titleEditSystemName: String
+    let notePromptSystemName: String
+    let notePromptTitle: String
+    let notePromptHint: String
+    let notePromptMinHeight: CGFloat
+}
+
 enum MeetingDetailChrome {
     static let actionMenuChrome = MeetingDetailActionMenuChrome(
         backdropOpacity: 0.001,
@@ -46,6 +56,16 @@ enum MeetingDetailChrome {
         haloOpacity: 0.3,
         shadowOffset: 3,
         shadowOpacity: 0.34
+    )
+
+    static let recordingDocument = MeetingDetailRecordingDocumentChrome(
+        showsAtmosphereLine: false,
+        showsSecondaryRecBadge: false,
+        titleEditSystemName: "pencil",
+        notePromptSystemName: "square.and.pencil",
+        notePromptTitle: AppStrings.current.recordingNotePromptTitle,
+        notePromptHint: AppStrings.current.recordingNotePromptHint,
+        notePromptMinHeight: 136
     )
 
     static func topBarActions(isRecording: Bool) -> [MeetingDetailToolbarAction] {
@@ -148,5 +168,15 @@ enum MeetingDetailChrome {
                 hint: AppStrings.current.meetingChatScopeHint
             )
         }
+    }
+
+    static func showsRecordingNotePrompt(notes: String, isEditorFocused: Bool) -> Bool {
+        notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isEditorFocused
+    }
+
+    static func recordingMetaLine(for meetingDate: Date) -> String {
+        let date = meetingDate.formatted(.dateTime.month(.wide).day().year())
+        let time = meetingDate.formatted(.dateTime.hour().minute())
+        return "\(date) · \(time)"
     }
 }

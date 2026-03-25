@@ -17,6 +17,8 @@ struct EditorialDocumentEditor: View {
     var autocapitalization: UITextAutocapitalizationType = .sentences
     var usesSmartDashes = true
     var usesSmartQuotes = true
+    var focusRequestToken: Int = 0
+    var isFocused: Binding<Bool>? = nil
     var accessibilityIdentifier: String? = nil
 
     var body: some View {
@@ -38,6 +40,8 @@ struct EditorialDocumentEditor: View {
                 autocapitalization: autocapitalization,
                 usesSmartDashes: usesSmartDashes,
                 usesSmartQuotes: usesSmartQuotes,
+                focusRequestToken: focusRequestToken,
+                isFocused: isFocused,
                 accessibilityIdentifier: accessibilityIdentifier
             )
         }
@@ -73,10 +77,16 @@ private struct EditorialTextView: UIViewRepresentable {
     let autocapitalization: UITextAutocapitalizationType
     let usesSmartDashes: Bool
     let usesSmartQuotes: Bool
+    let focusRequestToken: Int
+    let isFocused: Binding<Bool>?
     let accessibilityIdentifier: String?
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
+        Coordinator(
+            text: $text,
+            isFocused: isFocused,
+            lastFocusRequestToken: focusRequestToken
+        )
     }
 
     func makeUIView(context: Context) -> UITextView {
@@ -108,6 +118,16 @@ private struct EditorialTextView: UIViewRepresentable {
         textView.smartQuotesType = usesSmartQuotes ? .yes : .no
         textView.accessibilityIdentifier = accessibilityIdentifier
         textView.accessibilityValue = text
+        context.coordinator.isFocused = isFocused
+
+        if context.coordinator.lastFocusRequestToken != focusRequestToken {
+            context.coordinator.lastFocusRequestToken = focusRequestToken
+            if !textView.isFirstResponder {
+                DispatchQueue.main.async {
+                    textView.becomeFirstResponder()
+                }
+            }
+        }
 
         guard textView.text != text || textView.font != font else {
             textView.typingAttributes = typingAttributes
@@ -150,13 +170,29 @@ private struct EditorialTextView: UIViewRepresentable {
 
     final class Coordinator: NSObject, UITextViewDelegate {
         @Binding private var text: String
+        var isFocused: Binding<Bool>?
+        var lastFocusRequestToken: Int
 
-        init(text: Binding<String>) {
+        init(
+            text: Binding<String>,
+            isFocused: Binding<Bool>?,
+            lastFocusRequestToken: Int
+        ) {
             _text = text
+            self.isFocused = isFocused
+            self.lastFocusRequestToken = lastFocusRequestToken
         }
 
         func textViewDidChange(_ textView: UITextView) {
             text = textView.text
+        }
+
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            isFocused?.wrappedValue = true
+        }
+
+        func textViewDidEndEditing(_ textView: UITextView) {
+            isFocused?.wrappedValue = false
         }
     }
 }

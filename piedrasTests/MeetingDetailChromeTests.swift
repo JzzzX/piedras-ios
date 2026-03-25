@@ -70,4 +70,25 @@ struct MeetingDetailChromeTests {
         #expect(chat.glyph == ">_")
         #expect(chat.hint == AppStrings.current.meetingChatScopeHint)
     }
+
+    @Test
+    func recordingDocumentChromeRemovesAtmosphereLineAndSecondaryRecBadge() {
+        let chrome = MeetingDetailChrome.recordingDocument
+
+        #expect(chrome.showsAtmosphereLine == false)
+        #expect(chrome.showsSecondaryRecBadge == false)
+        #expect(chrome.titleEditSystemName == "pencil")
+        #expect(chrome.notePromptSystemName == "square.and.pencil")
+        #expect(chrome.notePromptTitle == AppStrings.current.recordingNotePromptTitle)
+        #expect(chrome.notePromptHint == AppStrings.current.recordingNotePromptHint)
+        #expect(chrome.notePromptMinHeight == CGFloat(136))
+    }
+
+    @Test
+    func recordingDocumentPromptShowsOnlyWhenNotesAreEmptyAndEditorIsIdle() {
+        #expect(MeetingDetailChrome.showsRecordingNotePrompt(notes: "", isEditorFocused: false))
+        #expect(MeetingDetailChrome.showsRecordingNotePrompt(notes: " \n ", isEditorFocused: false))
+        #expect(MeetingDetailChrome.showsRecordingNotePrompt(notes: "", isEditorFocused: true) == false)
+        #expect(MeetingDetailChrome.showsRecordingNotePrompt(notes: "已有内容", isEditorFocused: false) == false)
+    }
 }

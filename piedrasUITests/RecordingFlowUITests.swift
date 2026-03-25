@@ -416,3 +416,90 @@ final class RecordingFlowUITests: XCTestCase {
         start.press(forDuration: 0.05, thenDragTo: finish)
     }
 }
+
+final class RecordingDetailUITests: XCTestCase {
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+    }
+
+    @MainActor
+    func testRecordingDetailShowsFocusedNotePromptAndInlineTitleEdit() throws {
+        let app = launchApp()
+
+        let newRecordingButton = element(in: app, identifier: "NewRecordingButton", fallbackLabel: "新录音")
+        XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 8), "首页录音入口未出现。")
+        newRecordingButton.tap()
+
+        dismissPermissionAlertsIfNeeded(in: app)
+        app.tap()
+
+        let stopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
+        XCTAssertTrue(stopButton.waitForExistence(timeout: 12), "开始录音后未进入录音态。")
+
+        let titleEditButton = app.buttons["RecordingDetailTitleEditButton"]
+        XCTAssertTrue(titleEditButton.waitForExistence(timeout: 3), "录音态标题区应显示直接编辑按钮。")
+
+        XCTAssertFalse(app.staticTexts["RecordingDetailSecondaryRecBadge"].exists, "正文标题下不应再显示第二个 REC 标识。")
+
+        let notePrompt = app.buttons["RecordingDetailNotePrompt"]
+        XCTAssertTrue(notePrompt.waitForExistence(timeout: 3), "空白录音笔记应显示大块可点击引导。")
+        notePrompt.tap()
+
+        let editor = app.textViews["RecordingNoteEditor"]
+        XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
+
+        app.typeText("abc")
+
+        let editorContainsTypedText = NSPredicate(format: "value CONTAINS %@", "abc")
+        expectation(for: editorContainsTypedText, evaluatedWith: editor)
+        waitForExpectations(timeout: 3)
+
+        stopButton.tap()
+    }
+
+    private func launchApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append("UITEST_IN_MEMORY")
+        app.launch()
+        return app
+    }
+
+    private func element(in app: XCUIApplication, identifier: String, fallbackLabel: String? = nil) -> XCUIElement {
+        if let fallbackLabel {
+            let predicate = NSPredicate(format: "identifier == %@ OR label == %@", identifier, fallbackLabel)
+            return app.descendants(matching: .any)
+                .matching(predicate)
+                .firstMatch
+        }
+
+        return app.descendants(matching: .any)
+            .matching(identifier: identifier)
+            .firstMatch
+    }
+
+    private func dismissPermissionAlertsIfNeeded(in app: XCUIApplication) {
+        addUIInterruptionMonitor(withDescription: "Permissions") { alert in
+            let candidateLabels = [
+                "允许",
+                "好",
+                "OK",
+                "Allow",
+                "Allow While Using App",
+            ]
+
+            for label in candidateLabels where alert.buttons[label].exists {
+                alert.buttons[label].tap()
+                return true
+            }
+
+            if alert.buttons.firstMatch.exists {
+                alert.buttons.firstMatch.tap()
+                return true
+            }
+
+            return false
+        }
+
+        app.tap()
+    }
+}
