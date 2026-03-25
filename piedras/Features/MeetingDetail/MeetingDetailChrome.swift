@@ -174,6 +174,12 @@ enum MeetingDetailChrome {
         notes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isEditorFocused
     }
 
+    static func recordingNoteEditorPlaceholder(notes: String, isEditorFocused: Bool) -> String {
+        showsRecordingNotePrompt(notes: notes, isEditorFocused: isEditorFocused)
+            ? ""
+            : AppStrings.current.writeHere
+    }
+
     static func recordingMetaLine(for meetingDate: Date) -> String {
         let date = meetingDate.formatted(.dateTime.month(.wide).day().year())
         let time = meetingDate.formatted(.dateTime.hour().minute())

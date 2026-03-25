@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		9F00000C3A00000000000001 /* PiedrasRecordingWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 9F0000013A00000000000001 /* PiedrasRecordingWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		9F00000E3A00000000000001 /* RecordingLiveActivityDurationPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F00000F3A00000000000001 /* RecordingLiveActivityDurationPresenter.swift */; };
+		9F00000E3A00000000000001 /* piedras/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F00000F3A00000000000001 /* piedras/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,7 +54,7 @@
 		8E69CBCB2F695BBD005F246C /* piedrasTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = piedrasTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8E69CBD52F695BBD005F246C /* piedrasUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = piedrasUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		9F0000013A00000000000001 /* PiedrasRecordingWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = PiedrasRecordingWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		9F00000F3A00000000000001 /* RecordingLiveActivityDurationPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = piedras/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift; sourceTree = SOURCE_ROOT; };
+		9F00000F3A00000000000001 /* piedras/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = piedras/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -117,7 +117,7 @@
 			children = (
 				8E69CBBB2F695BBC005F246C /* piedras */,
 				9F0000023A00000000000001 /* PiedrasRecordingWidget */,
-				9F00000F3A00000000000001 /* RecordingLiveActivityDurationPresenter.swift */,
+				9F00000F3A00000000000001 /* piedras/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift */,
 				8E69CBCE2F695BBD005F246C /* piedrasTests */,
 				8E69CBD82F695BBD005F246C /* piedrasUITests */,
 				8E69CBBA2F695BBC005F246C /* Products */,
@@ -335,7 +335,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				9F00000E3A00000000000001 /* RecordingLiveActivityDurationPresenter.swift in Sources */,
+				9F00000E3A00000000000001 /* piedras/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

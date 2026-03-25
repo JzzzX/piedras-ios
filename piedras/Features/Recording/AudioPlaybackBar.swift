@@ -48,7 +48,7 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
         do {
             try await prepareIfNeeded(sourceURL: sourceURL)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserVisibleMediaErrorFormatter.playbackFailureMessage(for: error)
         }
     }
 
@@ -70,7 +70,7 @@ final class AudioPlaybackController: NSObject, AVAudioPlayerDelegate {
                 errorMessage = nil
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = UserVisibleMediaErrorFormatter.playbackFailureMessage(for: error)
         }
     }
 

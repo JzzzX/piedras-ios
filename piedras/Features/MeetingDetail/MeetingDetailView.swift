@@ -439,7 +439,10 @@ struct MeetingDetailView: View {
                     text: noteEditorBinding(for: meeting),
                     showsHeader: false,
                     title: AppStrings.current.notes,
-                    placeholder: AppStrings.current.writeHere,
+                    placeholder: MeetingDetailChrome.recordingNoteEditorPlaceholder(
+                        notes: currentNotesText(for: meeting),
+                        isEditorFocused: isRecordingNoteEditorFocused
+                    ),
                     minHeight: 400,
                     usesBodyStyle: true,
                     focusRequestToken: recordingNoteFocusRequest,
@@ -916,7 +919,9 @@ struct MeetingDetailView: View {
                     .font(AppTheme.bodyFont(size: 12))
                     .foregroundStyle(AppTheme.subtleInk)
                     .fixedSize(horizontal: false, vertical: true)
+            }
 
+            if status.canRetry {
                 Button(AppStrings.current.retryTranscription) {
                     Task {
                         await meetingStore.retryFileTranscription(meetingID: meetingID)

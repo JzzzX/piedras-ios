@@ -888,16 +888,16 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
             return fallback
         }
 
-        if let mapped = mappedAudioProcessingMessage(for: error) {
-            return mapped
-        }
-
-        let message = (error as NSError).localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
-        return message.isEmpty ? fallback : message
+        let message = UserVisibleMediaErrorFormatter.transcriptionFailureDetail(
+            from: (error as NSError).localizedDescription
+        )
+        return message ?? fallback
     }
 
     private static func describe(_ error: Error) -> String {
-        if let mapped = mappedAudioProcessingMessage(for: error) {
+        if let mapped = UserVisibleMediaErrorFormatter.transcriptionFailureDetail(
+            from: (error as NSError).localizedDescription
+        ) {
             return mapped
         }
 
@@ -909,37 +909,6 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
         }
 
         return parts.joined(separator: " ")
-    }
-
-    private nonisolated static func mappedAudioProcessingMessage(for error: Error) -> String? {
-        let nsError = error as NSError
-        let normalizedDescription = nsError.localizedDescription.lowercased()
-
-        if nsError.domain.contains("GenericObjCError")
-            || normalizedDescription.contains("genericobjcerror")
-            || normalizedDescription.contains("operation couldn")
-        {
-            return "当前音频文件在 iPhone 上无法稳定解析，请先重新导出为 m4a、mp3 或 wav 后重试。"
-        }
-
-        if nsError.domain == AVFoundationErrorDomain {
-            switch nsError.code {
-            case AVError.fileFormatNotRecognized.rawValue:
-                return "当前音频文件格式无法识别，请重新导出为 m4a、mp3 或 wav 后重试。"
-            case AVError.decoderNotFound.rawValue:
-                return "当前音频文件缺少可用解码器，请重新导出为 m4a、mp3 或 wav 后重试。"
-            case AVError.invalidSourceMedia.rawValue:
-                return "当前音频文件内容无效，请更换文件后重试。"
-            default:
-                break
-            }
-        }
-
-        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
-            return mappedAudioProcessingMessage(for: underlying)
-        }
-
-        return nil
     }
 
     private nonisolated static func isRetryableTransportFailure(_ error: Error) -> Bool {

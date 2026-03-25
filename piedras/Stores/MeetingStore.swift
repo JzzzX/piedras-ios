@@ -5,17 +5,28 @@ import SwiftUI
 struct FileTranscriptionStatusSnapshot: Equatable {
     let phase: AudioFileTranscriptionPhase?
     let errorMessage: String?
+    let showsFailure: Bool
+
+    init(
+        phase: AudioFileTranscriptionPhase?,
+        errorMessage: String?,
+        showsFailure: Bool = false
+    ) {
+        self.phase = phase
+        self.errorMessage = errorMessage
+        self.showsFailure = showsFailure
+    }
 
     var isActive: Bool {
-        phase != nil && errorMessage == nil
+        phase != nil && !showsFailure
     }
 
     var canRetry: Bool {
-        errorMessage != nil
+        showsFailure
     }
 
     var displayMessage: String {
-        if let errorMessage, !errorMessage.isEmpty {
+        if showsFailure {
             return AppStrings.current.audioTranscriptionFailed
         }
 
@@ -386,7 +397,8 @@ final class MeetingStore {
             lastErrorMessage = message
             fileTranscriptionStatuses[meetingID] = FileTranscriptionStatusSnapshot(
                 phase: nil,
-                errorMessage: message
+                errorMessage: message,
+                showsFailure: true
             )
             return
         }
@@ -929,7 +941,10 @@ final class MeetingStore {
         case .failed:
             return FileTranscriptionStatusSnapshot(
                 phase: nil,
-                errorMessage: meeting.speakerDiarizationErrorMessage ?? AppStrings.current.audioTranscriptionFailed
+                errorMessage: UserVisibleMediaErrorFormatter.transcriptionFailureDetail(
+                    from: meeting.speakerDiarizationErrorMessage
+                ),
+                showsFailure: true
             )
         }
     }
@@ -1258,10 +1273,11 @@ final class MeetingStore {
 
         fileTranscriptionStatuses[meetingID] = FileTranscriptionStatusSnapshot(
             phase: nil,
-            errorMessage: message
+            errorMessage: UserVisibleMediaErrorFormatter.transcriptionFailureDetail(from: message),
+            showsFailure: true
         )
         fileTranscriptionPartials[meetingID] = ""
-        lastErrorMessage = message
+        lastErrorMessage = nil
         loadMeetings()
     }
 
@@ -1274,7 +1290,8 @@ final class MeetingStore {
             meeting.markPending()
             fileTranscriptionStatuses[meeting.id] = FileTranscriptionStatusSnapshot(
                 phase: nil,
-                errorMessage: AppStrings.current.fileTranscriptionInterrupted
+                errorMessage: AppStrings.current.fileTranscriptionInterrupted,
+                showsFailure: true
             )
             fileTranscriptionPartials[meeting.id] = ""
         }
@@ -1745,7 +1762,11 @@ final class MeetingStore {
                         summary: "后台删除同步失败，将稍后自动重试。"
                     )
                     if let userVisibleFailurePrefix {
-                        lastErrorMessage = "\(userVisibleFailurePrefix)：云端暂时不可用，将稍后自动重试。"
+                        if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
+                            lastErrorMessage = nil
+                        } else {
+                            lastErrorMessage = "\(userVisibleFailurePrefix)：云端暂时不可用，将稍后自动重试。"
+                        }
                     }
                     return
                 }
@@ -1759,7 +1780,11 @@ final class MeetingStore {
                         summary: "后台删除同步失败，将稍后自动重试。"
                     )
                     if let userVisibleFailurePrefix {
-                        lastErrorMessage = "\(userVisibleFailurePrefix)：\(error.localizedDescription)"
+                        if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
+                            lastErrorMessage = nil
+                        } else {
+                            lastErrorMessage = "\(userVisibleFailurePrefix)：\(error.localizedDescription)"
+                        }
                     }
                     loadMeetings()
                 }
@@ -1770,7 +1795,11 @@ final class MeetingStore {
                 let message = "云端暂时不可用，将稍后自动重试。"
                 settingsStore.syncStatusMessage = message
                 if let userVisibleFailurePrefix {
-                    lastErrorMessage = "\(userVisibleFailurePrefix)：\(message)"
+                    if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
+                        lastErrorMessage = nil
+                    } else {
+                        lastErrorMessage = "\(userVisibleFailurePrefix)：\(message)"
+                    }
                 }
                 return
             }
@@ -1778,7 +1807,11 @@ final class MeetingStore {
                 let message = "云端工作区初始化失败，将稍后自动重试。"
                 settingsStore.syncStatusMessage = message
                 if let userVisibleFailurePrefix {
-                    lastErrorMessage = "\(userVisibleFailurePrefix)：\(message)"
+                    if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
+                        lastErrorMessage = nil
+                    } else {
+                        lastErrorMessage = "\(userVisibleFailurePrefix)：\(message)"
+                    }
                 }
                 return
             }
@@ -1792,7 +1825,11 @@ final class MeetingStore {
                     summary: "后台同步失败，将稍后自动重试。"
                 )
                 if let userVisibleFailurePrefix {
-                    lastErrorMessage = "\(userVisibleFailurePrefix)：\(error.localizedDescription)"
+                    if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
+                        lastErrorMessage = nil
+                    } else {
+                        lastErrorMessage = "\(userVisibleFailurePrefix)：\(error.localizedDescription)"
+                    }
                 }
                 loadMeetings()
             }
@@ -1805,7 +1842,7 @@ final class MeetingStore {
         if currentMeeting.speakerDiarizationState == .processing {
             await syncMeetingIfPossible(
                 meetingID: meetingID,
-                userVisibleFailurePrefix: "说话人整理失败"
+                userVisibleFailurePrefix: AppStrings.current.speakerDiarizationFailed
             )
         }
 

@@ -83,6 +83,10 @@ struct AppStringTable {
     var connectingASR: String { isChinese ? "正在连接 ASR..." : "Connecting ASR..." }
     var finalizingTranscription: String { isChinese ? "正在整理转写..." : "Finalizing transcript..." }
     var audioTranscriptionFailed: String { isChinese ? "文件转写失败" : "Audio transcription failed" }
+    var noSpeechDetectedInAudio: String { isChinese ? "这段音频里没有检测到可转写的人声。" : "No speech was detected in this audio." }
+    var audioFileNeedsReexport: String { isChinese ? "当前音频暂时无法稳定解析，请重新导出为 m4a、mp3 或 wav 后重试。" : "This audio could not be parsed reliably. Please re-export it as m4a, mp3, or wav and try again." }
+    var audioPlaybackFailed: String { isChinese ? "当前音频暂时无法播放，请重试或重新导出为 m4a、mp3 或 wav。" : "This audio cannot be played right now. Please try again or re-export it as m4a, mp3, or wav." }
+    var speakerDiarizationFailed: String { isChinese ? "说话人整理失败" : "Speaker separation failed" }
     var retryTranscription: String { isChinese ? "重新转写" : "Retry transcription" }
     var fileTranscriptionInterrupted: String { isChinese ? "应用中断了上次文件转写，请重新转写。" : "The previous file transcription was interrupted. Please retry." }
     var renameSpeaker: String { isChinese ? "重命名说话人" : "Rename speaker" }

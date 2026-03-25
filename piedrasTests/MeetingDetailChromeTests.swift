@@ -91,4 +91,26 @@ struct MeetingDetailChromeTests {
         #expect(MeetingDetailChrome.showsRecordingNotePrompt(notes: "", isEditorFocused: true) == false)
         #expect(MeetingDetailChrome.showsRecordingNotePrompt(notes: "已有内容", isEditorFocused: false) == false)
     }
+
+    @Test
+    func recordingDocumentHidesEditorPlaceholderWhilePromptCardIsVisible() {
+        #expect(
+            MeetingDetailChrome.recordingNoteEditorPlaceholder(
+                notes: "",
+                isEditorFocused: false
+            ) == ""
+        )
+        #expect(
+            MeetingDetailChrome.recordingNoteEditorPlaceholder(
+                notes: "",
+                isEditorFocused: true
+            ) == AppStrings.current.writeHere
+        )
+        #expect(
+            MeetingDetailChrome.recordingNoteEditorPlaceholder(
+                notes: "已有内容",
+                isEditorFocused: false
+            ) == AppStrings.current.writeHere
+        )
+    }
 }
