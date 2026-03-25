@@ -185,6 +185,19 @@ private final class StubRecordingLiveActivityCoordinator: RecordingLiveActivityC
 struct MeetingRecordingRepairTests {
     @MainActor
     @Test
+    func createMeetingForHomeRecordingPrimesRecordingStateBeforeNavigation() throws {
+        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+
+        let meeting = try #require(fixture.meetingStore.createMeeting(startingRecording: true))
+
+        #expect(fixture.recordingSessionStore.meetingID == meeting.id)
+        #expect(fixture.recordingSessionStore.phase == .starting)
+        #expect(fixture.recordingSessionStore.asrState == .connecting)
+        #expect(fixture.recordingSessionStore.inputMode == .microphone)
+    }
+
+    @MainActor
+    @Test
     func backgroundingActiveRecordingKeepsRepairDeferredUntilAsrActuallyDrops() async throws {
         let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
         let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")

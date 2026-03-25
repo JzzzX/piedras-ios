@@ -238,9 +238,23 @@ final class MeetingStore {
     }
 
     @discardableResult
-    func createMeeting() -> Meeting? {
+    func createMeeting(startingRecording: Bool = false) -> Meeting? {
+        if startingRecording, recordingSessionStore.phase != .idle {
+            let message = "请先结束当前录音，再开始新的会议。"
+            lastErrorMessage = message
+            recordingSessionStore.errorBanner = message
+            return nil
+        }
+
         do {
             let meeting = try repository.createDraftMeeting(hiddenWorkspaceID: settingsStore.hiddenWorkspaceID)
+            if startingRecording {
+                _ = primeRecordingSession(
+                    meetingID: meeting.id,
+                    inputMode: .microphone,
+                    sourceAudioDisplayName: nil
+                )
+            }
             loadMeetings()
             selectedMeetingID = meeting.id
             return meeting
@@ -425,31 +439,22 @@ final class MeetingStore {
     }
 
     func startRecording(meetingID: String, sourceAudio: SourceAudioAsset? = nil) async {
-        if let activeMeetingID = recordingSessionStore.meetingID,
-           activeMeetingID != meetingID,
-           recordingSessionStore.phase != .idle {
-            recordingSessionStore.errorBanner = "请先结束当前录音，再开始新的会议。"
+        let inputMode: RecordingInputMode = sourceAudio == nil ? .microphone : .fileMix
+        guard primeRecordingSession(
+            meetingID: meetingID,
+            inputMode: inputMode,
+            sourceAudioDisplayName: sourceAudio?.displayName
+        ) else {
             return
         }
 
-        guard let meeting = meeting(withID: meetingID) else { return }
+        guard let meeting = meeting(withID: meetingID) else {
+            recordingSessionStore.reset()
+            updateKeepScreenAwake()
+            return
+        }
 
         do {
-            cancelASRReconnect()
-            backgroundTranscriptBackfillTask?.cancel()
-            backgroundTranscriptBackfillTask = nil
-            backgroundTranscriptPCMBuffer.removeAll(keepingCapacity: false)
-            recordingSessionStore.errorBanner = nil
-            recordingSessionStore.infoBanner = nil
-            let inputMode: RecordingInputMode = sourceAudio == nil ? .microphone : .fileMix
-            recordingSessionStore.beginSession(
-                inputMode: inputMode,
-                sourceAudioDisplayName: sourceAudio?.displayName
-            )
-            recordingSessionStore.asrState = .connecting
-            recordingSessionStore.meetingID = meetingID
-            recordingSessionStore.phase = .starting
-            updateKeepScreenAwake()
             let artifact = try await audioRecorderService.startRecording(
                 meetingID: meetingID,
                 sourceAudio: sourceAudio
@@ -488,6 +493,47 @@ final class MeetingStore {
             updateKeepScreenAwake()
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    @discardableResult
+    private func primeRecordingSession(
+        meetingID: String,
+        inputMode: RecordingInputMode,
+        sourceAudioDisplayName: String?
+    ) -> Bool {
+        if let activeMeetingID = recordingSessionStore.meetingID,
+           activeMeetingID != meetingID,
+           recordingSessionStore.phase != .idle {
+            let message = "请先结束当前录音，再开始新的会议。"
+            recordingSessionStore.errorBanner = message
+            lastErrorMessage = message
+            return false
+        }
+
+        guard meeting(withID: meetingID) != nil else { return false }
+
+        if recordingSessionStore.meetingID == meetingID,
+           recordingSessionStore.phase == .starting,
+           recordingSessionStore.inputMode == inputMode,
+           recordingSessionStore.sourceAudioDisplayName == sourceAudioDisplayName {
+            return true
+        }
+
+        cancelASRReconnect()
+        backgroundTranscriptBackfillTask?.cancel()
+        backgroundTranscriptBackfillTask = nil
+        backgroundTranscriptPCMBuffer.removeAll(keepingCapacity: false)
+        recordingSessionStore.errorBanner = nil
+        recordingSessionStore.infoBanner = nil
+        recordingSessionStore.beginSession(
+            inputMode: inputMode,
+            sourceAudioDisplayName: sourceAudioDisplayName
+        )
+        recordingSessionStore.asrState = .connecting
+        recordingSessionStore.meetingID = meetingID
+        recordingSessionStore.phase = .starting
+        updateKeepScreenAwake()
+        return true
     }
 
     func pauseRecording() async {

@@ -436,7 +436,7 @@ struct MeetingListView: View {
     }
 
     private func startMicrophoneRecording() {
-        guard let meeting = meetingStore.createMeeting() else { return }
+        guard let meeting = meetingStore.createMeeting(startingRecording: true) else { return }
         router.showMeeting(id: meeting.id)
         Task {
             await meetingStore.startRecording(meetingID: meeting.id)
