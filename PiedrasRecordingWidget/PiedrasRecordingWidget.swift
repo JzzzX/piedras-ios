@@ -20,6 +20,8 @@ struct PiedrasRecordingWidgetBundle: WidgetBundle {
 }
 
 struct RecordingLiveActivityWidget: Widget {
+    private let compactDurationWidth: CGFloat = 42
+
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: RecordingLiveActivityAttributes.self) { context in
             lockScreenView(context)
@@ -96,20 +98,11 @@ struct RecordingLiveActivityWidget: Widget {
 
     @ViewBuilder
     private func compactDurationText(for state: RecordingLiveActivityAttributes.ContentState) -> some View {
-        switch RecordingLiveActivityDurationPresenter.display(
-            for: state.phase,
-            durationSeconds: state.durationSeconds,
-            timerStartDate: state.timerStartDate
-        ) {
-        case .liveTimer(let startDate):
-            Text(timerInterval: startDate ... Date(), countsDown: false)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-        case .staticText(let text):
-            Text(text)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .monospacedDigit()
-        }
+        Text(RecordingLiveActivityDurationPresenter.compactText(durationSeconds: state.durationSeconds))
+            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+            .monospacedDigit()
+            .lineLimit(1)
+            .frame(width: compactDurationWidth, alignment: .trailing)
     }
 
     private func iconName(for phase: RecordingLiveActivityPhase) -> String {

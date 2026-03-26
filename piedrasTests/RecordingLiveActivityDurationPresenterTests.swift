@@ -37,4 +37,18 @@ struct RecordingLiveActivityDurationPresenterTests {
 
         #expect(display == .staticText("1:01:01"))
     }
+
+    @Test
+    func compactDurationTextKeepsSecondsWhenUnderOneHour() {
+        let text = RecordingLiveActivityDurationPresenter.compactText(durationSeconds: 125)
+
+        #expect(text == "02:05")
+    }
+
+    @Test
+    func compactDurationTextDropsSecondsAfterOneHourToStayShort() {
+        let text = RecordingLiveActivityDurationPresenter.compactText(durationSeconds: 3_661)
+
+        #expect(text == "1:01")
+    }
 }
