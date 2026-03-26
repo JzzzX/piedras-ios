@@ -204,6 +204,7 @@ struct EnhanceRequestPayload: Encodable {
     let userNotes: String
     let meetingTitle: String
     let segmentCommentsContext: String
+    let noteAttachmentsContext: String
     let promptOptions: PromptOptions?
 }
 
@@ -285,6 +286,7 @@ enum MeetingPayloadMapper {
             userNotes: meeting.userNotesPlainText,
             meetingTitle: meeting.displayTitle,
             segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting),
+            noteAttachmentsContext: MeetingCommentContextBuilder.noteAttachmentsContext(for: meeting),
             promptOptions: PromptOptions(
                 meetingType: meeting.meetingType,
                 outputStyle: "平衡",

@@ -31,6 +31,27 @@ struct SegmentCommentContextTests {
     }
 
     @Test
+    func enhancePayloadIncludesMeetingNoteAttachmentsContext() throws {
+        let meeting = Meeting(
+            title: "白板拍照整理",
+            userNotesPlainText: "结合白板内容整理方案。"
+        )
+        meeting.noteAttachmentFileNames = ["board.jpg"]
+        meeting.noteAttachmentTextContext = "图片1：\n白板写着：4 月 8 日灰度，4 月 15 日全量。"
+        meeting.noteAttachmentTextStatus = .ready
+        meeting.noteAttachmentTextUpdatedAt = .now
+
+        let payload = MeetingPayloadMapper.makeEnhancePayload(from: meeting)
+        let encoded = try JSONEncoder().encode(payload)
+        let json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        let context = try #require(json["noteAttachmentsContext"] as? String)
+
+        #expect(context.contains("--- 主笔记附件资料 ---"))
+        #expect(context.contains("图片1："))
+        #expect(context.contains("4 月 8 日灰度"))
+    }
+
+    @Test
     func enhancePayloadIncludesOrderedSegmentCommentsContext() throws {
         let meeting = makeMeetingWithComments()
 

@@ -11,6 +11,13 @@ struct MeetingDetailChromeTests {
     }
 
     @Test
+    func recordingTopBarShowsAttachmentsAndMoreOnly() {
+        let actions = MeetingDetailChrome.topBarActions(isRecording: true)
+
+        #expect(actions == [.attachments, .more])
+    }
+
+    @Test
     func actionMenuChromeUsesInvisibleBackdropAndLocalShadowOnly() {
         let chrome = MeetingDetailChrome.actionMenuChrome
 
@@ -37,6 +44,20 @@ struct MeetingDetailChromeTests {
         ])
         #expect(items[1].title == AppStrings.current.regenerateNotes)
         #expect(items[1].systemName == "arrow.clockwise")
+    }
+
+    @Test
+    func recordingActionMenuOnlyKeepsCopyNotes() {
+        let items = MeetingDetailChrome.actionMenuItems(
+            isRecording: true,
+            hasTranscript: true,
+            canRetryTranscription: true
+        )
+
+        #expect(items.map(\.accessibilityIdentifier) == [
+            "MeetingDetailActionCopyNotes",
+        ])
+        #expect(items.first?.title == AppStrings.current.copyNotes)
     }
 
     @Test

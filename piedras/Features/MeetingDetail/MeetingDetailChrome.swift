@@ -8,6 +8,7 @@ enum MeetingDetailChromeKind {
 enum MeetingDetailToolbarAction: Equatable {
     case transcript
     case share
+    case attachments
     case more
 }
 
@@ -70,7 +71,7 @@ enum MeetingDetailChrome {
 
     static func topBarActions(isRecording: Bool) -> [MeetingDetailToolbarAction] {
         if isRecording {
-            return [.more]
+            return [.attachments, .more]
         }
 
         return [.transcript, .share, .more]
@@ -81,6 +82,16 @@ enum MeetingDetailChrome {
         hasTranscript: Bool,
         canRetryTranscription: Bool
     ) -> [MeetingDetailMenuItemChrome] {
+        if isRecording {
+            return [
+                MeetingDetailMenuItemChrome(
+                    title: AppStrings.current.copyNotes,
+                    systemName: "doc.on.doc",
+                    accessibilityIdentifier: "MeetingDetailActionCopyNotes"
+                ),
+            ]
+        }
+
         var items = [
             MeetingDetailMenuItemChrome(
                 title: AppStrings.current.editAINotes,
@@ -88,16 +99,13 @@ enum MeetingDetailChrome {
                 accessibilityIdentifier: "MeetingDetailActionEditAINotes"
             )
         ]
-
-        if !isRecording {
-            items.append(
-                MeetingDetailMenuItemChrome(
-                    title: AppStrings.current.regenerateNotes,
-                    systemName: "arrow.clockwise",
-                    accessibilityIdentifier: "MeetingDetailActionRegenerateNotes"
-                )
+        items.append(
+            MeetingDetailMenuItemChrome(
+                title: AppStrings.current.regenerateNotes,
+                systemName: "arrow.clockwise",
+                accessibilityIdentifier: "MeetingDetailActionRegenerateNotes"
             )
-        }
+        )
 
         items.append(
             contentsOf: [

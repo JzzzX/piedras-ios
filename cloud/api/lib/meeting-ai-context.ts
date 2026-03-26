@@ -2,6 +2,7 @@ interface MeetingMaterialContextInput {
   transcript?: string;
   userNotes?: string;
   enhancedNotes?: string;
+  noteAttachmentsContext?: string;
   segmentCommentsContext?: string;
 }
 
@@ -14,6 +15,7 @@ export function buildMeetingMaterialContext({
   transcript,
   userNotes,
   enhancedNotes,
+  noteAttachmentsContext,
   segmentCommentsContext,
 }: MeetingMaterialContextInput): string {
   const sections = [
@@ -25,6 +27,7 @@ export function buildMeetingMaterialContext({
     sections.push(`--- AI 会议纪要 ---\n${enhancedNotes || '（无）'}`);
   }
 
+  sections.push(normalizeContextSection(noteAttachmentsContext, '--- 主笔记附件资料 ---'));
   sections.push(normalizeCommentContext(segmentCommentsContext));
 
   return sections.join('\n\n');
@@ -43,14 +46,18 @@ export function buildGlobalChatContextMessage({
 }
 
 function normalizeCommentContext(segmentCommentsContext?: string): string {
-  const trimmed = segmentCommentsContext?.trim();
+  return normalizeContextSection(segmentCommentsContext, '--- 转写片段评论 ---');
+}
+
+function normalizeContextSection(content: string | undefined, header: string): string {
+  const trimmed = content?.trim();
   if (!trimmed) {
-    return '--- 转写片段评论 ---\n（无）';
+    return `${header}\n（无）`;
   }
 
   if (trimmed.startsWith('--- ')) {
     return trimmed;
   }
 
-  return `--- 转写片段评论 ---\n${trimmed}`;
+  return `${header}\n${trimmed}`;
 }

@@ -74,6 +74,9 @@ struct AppStringTable {
     var recording_suffix: String { isChinese ? "录音" : "recording" }
     var back: String { isChinese ? "返回" : "Back" }
     var share: String { isChinese ? "分享" : "Share" }
+    var attachments: String { isChinese ? "附件" : "Attachments" }
+    var noteAttachmentsTitle: String { isChinese ? "资料区" : "Attached" }
+    var noteAttachmentsHint: String { isChinese ? "图片文字会在刷新 AI 笔记时并入上下文。" : "Image text will be added to AI Notes the next time you refresh." }
     var generatingNotes: String { isChinese ? "正在生成笔记" : "Generating notes" }
     var refreshNotes: String { isChinese ? "刷新笔记" : "Refresh notes" }
     var regenerateNotes: String { isChinese ? "重新生成笔记" : "Regenerate notes" }
@@ -196,6 +199,11 @@ struct AppStringTable {
     var annotationCommentPlaceholder: String { isChinese ? "输入评论..." : "Write a comment..." }
     var annotationDeleteImage: String { isChinese ? "删除图片" : "Delete image" }
     var annotationDeleteAll: String { isChinese ? "删除标注" : "Delete annotation" }
+    var cameraUnavailable: String { isChinese ? "当前设备不支持拍照。" : "Camera is unavailable on this device." }
+
+    func noteAttachmentLimitReached(_ limit: Int) -> String {
+        isChinese ? "最多只能添加 \(limit) 张图片。" : "You can attach up to \(limit) images."
+    }
 
     // ── EnhancedNotesView ────────────────────────────────────────
 

@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import SwiftUI
+import UIKit
 
 struct FileTranscriptionStatusSnapshot: Equatable {
     let phase: AudioFileTranscriptionPhase?
@@ -62,6 +63,7 @@ final class MeetingStore {
     private static let backgroundChunkTargetDurationMS = 12_000.0
     private static let backgroundShadowBufferMaxDurationMS = 60_000.0
     private static let backgroundChunkRetryDelay: Duration = .milliseconds(300)
+    private static let maxNoteAttachmentsPerMeeting = 10
     private static let asrReconnectDelays: [Duration] = [
         .seconds(2),
         .seconds(4),
@@ -81,6 +83,7 @@ final class MeetingStore {
     private let asrService: any ASRServicing
     private let workspaceBootstrapService: WorkspaceBootstrapService
     private let meetingSyncService: any MeetingSyncServicing
+    private let noteAttachmentImageTextExtractor: any AnnotationImageTextExtracting
 
     var meetings: [Meeting] = []
     var selectedMeetingID: String?
@@ -106,6 +109,8 @@ final class MeetingStore {
     private var fileTranscriptionTasks: [String: Task<Void, Never>] = [:]
     private var chatStreamingTasks: [String: Task<Bool, Never>] = [:]
     private var backgroundTranscriptBackfillTask: Task<Void, Never>?
+    private var noteAttachmentTextTasks: [String: Task<Void, Never>] = [:]
+    private var noteAttachmentTaskTokens: [String: UUID] = [:]
     private var backgroundTranscriptPCMBuffer = Data()
     private var backgroundShadowBufferStartTimeMS: Double?
     private var shouldFlushBackgroundTranscriptTail = false
@@ -127,7 +132,8 @@ final class MeetingStore {
         apiClient: APIClient,
         asrService: any ASRServicing,
         workspaceBootstrapService: WorkspaceBootstrapService,
-        meetingSyncService: any MeetingSyncServicing
+        meetingSyncService: any MeetingSyncServicing,
+        noteAttachmentImageTextExtractor: any AnnotationImageTextExtracting = VisionAnnotationImageTextExtractor()
     ) {
         self.repository = repository
         self.chatSessionRepository = chatSessionRepository
@@ -141,6 +147,7 @@ final class MeetingStore {
         self.asrService = asrService
         self.workspaceBootstrapService = workspaceBootstrapService
         self.meetingSyncService = meetingSyncService
+        self.noteAttachmentImageTextExtractor = noteAttachmentImageTextExtractor
 
         self.audioRecorderService.onProgress = { [weak self] level, duration in
             self?.handleRecordingProgress(level: level, duration: duration)
@@ -364,6 +371,56 @@ final class MeetingStore {
         meeting.markPending()
         persistChanges()
         scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1.5))
+    }
+
+    func noteAttachmentLimit(for meeting: Meeting) -> Int {
+        max(Self.maxNoteAttachmentsPerMeeting - meeting.noteAttachmentFileNames.count, 0)
+    }
+
+    func canAddNoteAttachment(to meeting: Meeting) -> Bool {
+        noteAttachmentLimit(for: meeting) > 0
+    }
+
+    func addNoteAttachment(_ image: UIImage, to meeting: Meeting) {
+        guard canAddNoteAttachment(to: meeting) else {
+            lastErrorMessage = AppStrings.current.noteAttachmentLimitReached(Self.maxNoteAttachmentsPerMeeting)
+            return
+        }
+
+        do {
+            let fileName = try MeetingNoteAttachmentStorage.saveImage(
+                image,
+                meetingID: meeting.id
+            )
+            meeting.noteAttachmentFileNames.append(fileName)
+            meeting.updatedAt = .now
+            persistChanges()
+            scheduleNoteAttachmentTextRefresh(for: meeting)
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func removeNoteAttachment(fileName: String, from meeting: Meeting) {
+        let previousText = meeting.noteAttachmentTextContext.trimmedForImageText
+        cancelNoteAttachmentTextTask(for: meeting.id)
+        MeetingNoteAttachmentStorage.deleteImage(meetingID: meeting.id, fileName: fileName)
+        meeting.noteAttachmentFileNames.removeAll { $0 == fileName }
+        meeting.updatedAt = .now
+
+        if meeting.noteAttachmentFileNames.isEmpty {
+            clearNoteAttachmentText(for: meeting)
+            markMeetingPendingImageTextRefreshIfNeeded(
+                meeting: meeting,
+                previousText: previousText,
+                newText: ""
+            )
+            persistChanges()
+            return
+        }
+
+        persistChanges()
+        scheduleNoteAttachmentTextRefresh(for: meeting)
     }
 
     func updateMeetingType(_ meetingType: String, for meeting: Meeting) {
@@ -2512,6 +2569,12 @@ final class MeetingStore {
             task.cancel()
         }
         fileTranscriptionTasks.removeAll()
+
+        for task in noteAttachmentTextTasks.values {
+            task.cancel()
+        }
+        noteAttachmentTextTasks.removeAll()
+        noteAttachmentTaskTokens.removeAll()
         clearBackgroundShadowBuffer(keepingCapacity: false)
         shouldFlushBackgroundTranscriptTail = false
 
@@ -2566,6 +2629,7 @@ final class MeetingStore {
         scheduledSyncTasks[meeting.id] = nil
         fileTranscriptionTasks[meeting.id]?.cancel()
         fileTranscriptionTasks[meeting.id] = nil
+        cancelNoteAttachmentTextTask(for: meeting.id)
         transcribingMeetingIDs.remove(meeting.id)
         fileTranscriptionStatuses.removeValue(forKey: meeting.id)
         fileTranscriptionPartials.removeValue(forKey: meeting.id)
@@ -2575,6 +2639,7 @@ final class MeetingStore {
 
         // Clean up annotation images on disk (SwiftData cascade handles the model)
         AnnotationImageStorage.deleteAllAnnotations(meetingID: meeting.id)
+        MeetingNoteAttachmentStorage.deleteAllAttachments(meetingID: meeting.id)
 
         if selectedMeetingID == meeting.id {
             selectedMeetingID = nil
@@ -2612,11 +2677,104 @@ final class MeetingStore {
             .replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
+
+    private func scheduleNoteAttachmentTextRefresh(for meeting: Meeting) {
+        cancelNoteAttachmentTextTask(for: meeting.id)
+
+        let fileNames = meeting.noteAttachmentFileNames
+        guard !fileNames.isEmpty else {
+            clearNoteAttachmentText(for: meeting)
+            persistChanges()
+            return
+        }
+
+        meeting.noteAttachmentTextStatus = .pending
+        meeting.updatedAt = .now
+        persistChanges()
+
+        let meetingID = meeting.id
+        let taskToken = UUID()
+        let imageURLs = fileNames.map {
+            MeetingNoteAttachmentStorage.imageURL(meetingID: meetingID, fileName: $0)
+        }
+        noteAttachmentTaskTokens[meetingID] = taskToken
+
+        noteAttachmentTextTasks[meetingID] = Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            do {
+                let extractedText = try await noteAttachmentImageTextExtractor.extractText(from: imageURLs)
+                guard !Task.isCancelled else { return }
+                guard noteAttachmentTaskTokens[meetingID] == taskToken else { return }
+                guard let meeting = self.meeting(withID: meetingID) else { return }
+                applyNoteAttachmentText(extractedText, to: meeting)
+            } catch {
+                guard !Task.isCancelled else { return }
+                guard noteAttachmentTaskTokens[meetingID] == taskToken else { return }
+                guard let meeting = self.meeting(withID: meetingID) else { return }
+                meeting.noteAttachmentTextContext = ""
+                meeting.noteAttachmentTextStatus = .failed
+                meeting.noteAttachmentTextUpdatedAt = .now
+                meeting.updatedAt = .now
+                persistChanges()
+            }
+
+            noteAttachmentTextTasks[meetingID] = nil
+            noteAttachmentTaskTokens[meetingID] = nil
+        }
+    }
+
+    private func applyNoteAttachmentText(_ extractedText: String, to meeting: Meeting) {
+        let normalizedText = extractedText.trimmedForImageText
+        let previousText = meeting.noteAttachmentTextContext.trimmedForImageText
+
+        meeting.noteAttachmentTextContext = normalizedText
+        meeting.noteAttachmentTextStatus = .ready
+        meeting.noteAttachmentTextUpdatedAt = .now
+        meeting.updatedAt = .now
+        markMeetingPendingImageTextRefreshIfNeeded(
+            meeting: meeting,
+            previousText: previousText,
+            newText: normalizedText
+        )
+        persistChanges()
+    }
+
+    private func clearNoteAttachmentText(for meeting: Meeting) {
+        meeting.noteAttachmentTextContext = ""
+        meeting.noteAttachmentTextStatus = .idle
+        meeting.noteAttachmentTextUpdatedAt = nil
+        meeting.updatedAt = .now
+    }
+
+    private func markMeetingPendingImageTextRefreshIfNeeded(
+        meeting: Meeting,
+        previousText: String,
+        newText: String
+    ) {
+        guard previousText != newText,
+              !meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        meeting.hasPendingImageTextRefresh = true
+        meeting.updatedAt = .now
+    }
+
+    private func cancelNoteAttachmentTextTask(for meetingID: String) {
+        noteAttachmentTextTasks[meetingID]?.cancel()
+        noteAttachmentTextTasks[meetingID] = nil
+        noteAttachmentTaskTokens[meetingID] = nil
+    }
 }
 
 private extension String {
     func dropPrefix(_ prefix: String) -> String? {
         guard hasPrefix(prefix) else { return nil }
         return String(dropFirst(prefix.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var trimmedForImageText: String {
+        trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

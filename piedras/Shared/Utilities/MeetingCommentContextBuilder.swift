@@ -3,6 +3,7 @@ import Foundation
 enum MeetingCommentContextBuilder {
     private static let meetingHeader = "--- 转写片段评论 ---"
     private static let globalHeader = "--- 本地补充评论上下文 ---"
+    private static let noteAttachmentsHeader = "--- 主笔记附件资料 ---"
     private static let meetingCharacterLimit = 3_200
     private static let globalCharacterLimit = 4_200
     private static let maxGlobalMeetings = 3
@@ -28,6 +29,19 @@ enum MeetingCommentContextBuilder {
     static func segmentCommentsContext(for meeting: Meeting) -> String {
         let entries = commentEntries(for: meeting).map(\.formatted)
         return boundedSections(header: meetingHeader, sections: entries, limit: meetingCharacterLimit)
+    }
+
+    static func noteAttachmentsContext(for meeting: Meeting) -> String {
+        let text = meeting.noteAttachmentTextContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            return ""
+        }
+
+        return boundedSections(
+            header: noteAttachmentsHeader,
+            sections: [text],
+            limit: meetingCharacterLimit
+        )
     }
 
     static func localCommentContext(
