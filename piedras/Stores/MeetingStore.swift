@@ -366,6 +366,23 @@ final class MeetingStore {
         scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1.5))
     }
 
+    func updateMeetingType(_ meetingType: String, for meeting: Meeting) {
+        guard meeting.meetingType != meetingType else { return }
+
+        meeting.meetingType = meetingType
+        meeting.updatedAt = .now
+        persistChanges()
+
+        guard shouldAutoRefreshEnhancedNotesAfterMeetingTypeChange(for: meeting) else {
+            return
+        }
+
+        let meetingID = meeting.id
+        Task { @MainActor [weak self] in
+            await self?.generateEnhancedNotes(for: meetingID)
+        }
+    }
+
     func updateSpeakerDisplayName(_ displayName: String, for speaker: String, in meeting: Meeting) {
         let previousSpeakers = meeting.speakers
         meeting.setDisplayName(displayName, forSpeaker: speaker)
@@ -2357,6 +2374,10 @@ final class MeetingStore {
         }
 
         return Date().timeIntervalSince(lastHealthCheckAt) > 60
+    }
+
+    private func shouldAutoRefreshEnhancedNotesAfterMeetingTypeChange(for meeting: Meeting) -> Bool {
+        !meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func migrateLegacyChatSessionsIfNeeded() {

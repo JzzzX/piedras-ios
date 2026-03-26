@@ -29,6 +29,19 @@ enum MeetingRecordingMode: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum MeetingTypeOption: String, CaseIterable, Identifiable {
+    case general = "通用"
+    case interview = "访谈"
+    case speech = "演讲"
+    case brainstorming = "头脑风暴"
+    case weekly = "项目周会"
+    case requirementsReview = "需求评审"
+    case sales = "销售沟通"
+    case interviewReview = "面试复盘"
+
+    var id: String { rawValue }
+}
+
 enum SpeakerDiarizationState: String, Codable, CaseIterable, Identifiable {
     case idle
     case processing
@@ -63,6 +76,8 @@ final class Meeting {
     private var speakerDiarizationStateRawValue: String?
     var speakerDiarizationErrorMessage: String?
     var syncStateRaw: String
+    @Attribute(originalName: "meetingTypeRaw")
+    private var meetingTypeRawValue: String?
     var lastSyncedAt: Date?
     @Attribute(originalName: "hasPendingImageTextRefresh")
     private var hasPendingImageTextRefreshValue: Bool?
@@ -100,6 +115,7 @@ final class Meeting {
         speakerDiarizationState: SpeakerDiarizationState = .idle,
         speakerDiarizationErrorMessage: String? = nil,
         syncState: MeetingSyncState = .pending,
+        meetingType: String = MeetingTypeOption.general.rawValue,
         lastSyncedAt: Date? = nil,
         hasPendingImageTextRefresh: Bool = false,
         createdAt: Date = .now,
@@ -129,6 +145,7 @@ final class Meeting {
         self.speakerDiarizationStateRawValue = speakerDiarizationState.rawValue
         self.speakerDiarizationErrorMessage = speakerDiarizationErrorMessage
         self.syncStateRaw = syncState.rawValue
+        self.meetingTypeRawValue = Self.normalizedMeetingTypeRaw(meetingType)
         self.lastSyncedAt = lastSyncedAt
         self.hasPendingImageTextRefreshValue = hasPendingImageTextRefresh
         self.createdAt = createdAt
@@ -151,6 +168,16 @@ final class Meeting {
     var syncState: MeetingSyncState {
         get { MeetingSyncState(rawValue: syncStateRaw) ?? .pending }
         set { syncStateRaw = newValue.rawValue }
+    }
+
+    var meetingTypeRaw: String {
+        get { Self.normalizedMeetingTypeRaw(meetingTypeRawValue) }
+        set { meetingTypeRawValue = Self.normalizedMeetingTypeRaw(newValue) }
+    }
+
+    var meetingType: String {
+        get { meetingTypeRaw }
+        set { meetingTypeRaw = newValue }
     }
 
     var speakers: [String: String] {
@@ -257,6 +284,15 @@ final class Meeting {
         }
 
         return value
+    }
+
+    private static func normalizedMeetingTypeRaw(_ value: String?) -> String {
+        guard let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let meetingType = MeetingTypeOption(rawValue: normalized) else {
+            return MeetingTypeOption.general.rawValue
+        }
+
+        return meetingType.rawValue
     }
 
     private static func decodeSpeakers(_ rawValue: String) -> [String: String] {

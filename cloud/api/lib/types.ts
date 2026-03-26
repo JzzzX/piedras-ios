@@ -40,6 +40,9 @@ export type LlmRuntimeConfig =
 
 export type MeetingType =
   | '通用'
+  | '访谈'
+  | '演讲'
+  | '头脑风暴'
   | '项目周会'
   | '需求评审'
   | '销售沟通'

@@ -344,10 +344,10 @@ struct MeetingDetailView: View {
     }
 
     private func titleBlock(meeting: Meeting) -> some View {
-        Button {
-            openTitleRenameDialog(for: meeting)
-        } label: {
-            VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
+            Button {
+                openTitleRenameDialog(for: meeting)
+            } label: {
                 HStack(alignment: .top, spacing: 12) {
                     Text(displayTitle(for: meeting))
                         .font(AppTheme.bodyFont(size: 28, weight: .bold))
@@ -359,38 +359,40 @@ struct MeetingDetailView: View {
 
                     titleEditLabel(systemName: "pencil")
                 }
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(metaLine(for: meeting))
-                        .font(AppTheme.dataFont(size: 14))
-                        .foregroundStyle(AppTheme.subtleInk)
-
-                    if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
-                        let transcriptionBadgeLabel = recordingSessionStore.backgroundTranscriptionStatus.badgeLabel
-                            ?? (recordingSessionStore.asrState == .connected
-                                ? AppStrings.current.liveTranscription
-                                : AppStrings.current.reconnecting)
-                        let transcriptionBadgeTint = recordingSessionStore.backgroundTranscriptionStatus.badgeLabel == nil
-                            ? (recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
-                            : recordingSessionStore.backgroundTranscriptionStatus.tint
-
-                        HStack(spacing: 7) {
-                            Rectangle()
-                                .fill(transcriptionBadgeTint)
-                                .frame(width: 6, height: 6)
-
-                            Text(transcriptionBadgeLabel)
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundStyle(transcriptionBadgeTint)
-                        }
-                    }
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("MeetingDetailTitleButton")
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(metaLine(for: meeting))
+                    .font(AppTheme.dataFont(size: 14))
+                    .foregroundStyle(AppTheme.subtleInk)
+
+                if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
+                    let transcriptionBadgeLabel = recordingSessionStore.backgroundTranscriptionStatus.badgeLabel
+                        ?? (recordingSessionStore.asrState == .connected
+                            ? AppStrings.current.liveTranscription
+                            : AppStrings.current.reconnecting)
+                    let transcriptionBadgeTint = recordingSessionStore.backgroundTranscriptionStatus.badgeLabel == nil
+                        ? (recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
+                        : recordingSessionStore.backgroundTranscriptionStatus.tint
+
+                    HStack(spacing: 7) {
+                        Rectangle()
+                            .fill(transcriptionBadgeTint)
+                            .frame(width: 6, height: 6)
+
+                        Text(transcriptionBadgeLabel)
+                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .foregroundStyle(transcriptionBadgeTint)
+                    }
+                }
+            }
+
+            meetingTypeSelector(meeting: meeting)
         }
-        .buttonStyle(.plain)
-        .accessibilityIdentifier("MeetingDetailTitleButton")
     }
 
     private func actionMenuOverlay(meeting: Meeting) -> some View {
@@ -515,6 +517,8 @@ struct MeetingDetailView: View {
                 .font(AppTheme.dataFont(size: 14))
                 .foregroundStyle(AppTheme.subtleInk)
                 .accessibilityIdentifier("RecordingDetailMetaText")
+
+            meetingTypeSelector(meeting: meeting)
         }
     }
 
@@ -996,6 +1000,60 @@ struct MeetingDetailView: View {
             closeActionMenu()
             showsNotesDrawer = true
         }
+    }
+
+    private func meetingTypeSelector(meeting: Meeting) -> some View {
+        let selectedType = MeetingTypeOption(rawValue: meeting.meetingType) ?? .general
+
+        return Menu {
+            ForEach(MeetingTypeOption.allCases) { type in
+                Button {
+                    meetingStore.updateMeetingType(type.rawValue, for: meeting)
+                } label: {
+                    if type == selectedType {
+                        Label(AppStrings.current.meetingTypeName(type), systemImage: "checkmark")
+                    } else {
+                        Text(AppStrings.current.meetingTypeName(type))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(AppStrings.current.meetingTypeLabel)
+                        .font(AppTheme.dataFont(size: 11))
+                        .foregroundStyle(AppTheme.subtleInk)
+
+                    Text(AppStrings.current.meetingTypeName(selectedType))
+                        .font(AppTheme.bodyFont(size: 14, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                }
+
+                Spacer(minLength: 0)
+
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(AppStrings.current.meetingTypeHint)
+                        .font(AppTheme.dataFont(size: 11))
+                        .foregroundStyle(AppTheme.subtleInk)
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(AppTheme.subtleInk)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppTheme.surface)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(AppStrings.current.meetingTypeLabel)
+        .accessibilityValue(AppStrings.current.meetingTypeName(selectedType))
+        .accessibilityIdentifier("MeetingTypeMenu")
     }
 
     private func detailCTAButton(

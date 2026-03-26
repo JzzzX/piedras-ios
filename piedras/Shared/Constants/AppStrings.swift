@@ -65,6 +65,8 @@ struct AppStringTable {
     var recordingNotePromptTitle: String { isChinese ? "在此书写" : "Write here" }
     var recordingNotePromptHint: String { isChinese ? "点击开始记录笔记" : "Tap to start taking notes" }
     var renameTitlePrompt: String { isChinese ? "输入新的笔记标题" : "Enter a new title for the note" }
+    var meetingTypeLabel: String { isChinese ? "会议类型" : "Meeting type" }
+    var meetingTypeHint: String { isChinese ? "影响 AI 笔记结构与重点" : "Shapes AI note structure and emphasis" }
     var notesTeaserEmpty: String { isChinese ? "记下想法，会并入 AI 笔记" : "Capture thoughts to blend into AI notes" }
     var notesTeaserContinue: String { isChinese ? "继续记录你的想法" : "Keep writing your thoughts" }
     var notesMergeHint: String { isChinese ? "这些随手笔记会在下次生成或刷新 AI 笔记时并入。" : "These notes will be blended into AI Notes the next time you generate or refresh them." }
@@ -92,6 +94,27 @@ struct AppStringTable {
     var renameSpeaker: String { isChinese ? "重命名说话人" : "Rename speaker" }
     var renameSpeakerPrompt: String { isChinese ? "输入名字；留空会恢复默认标签。" : "Enter a name; leave it blank to restore the default label." }
     var speakerNamePlaceholder: String { isChinese ? "说话人名称" : "Speaker name" }
+
+    func meetingTypeName(_ type: MeetingTypeOption) -> String {
+        switch type {
+        case .general:
+            return isChinese ? "通用" : "General"
+        case .interview:
+            return isChinese ? "访谈" : "Interview"
+        case .speech:
+            return isChinese ? "演讲" : "Talk"
+        case .brainstorming:
+            return isChinese ? "头脑风暴" : "Brainstorm"
+        case .weekly:
+            return isChinese ? "项目周会" : "Project weekly"
+        case .requirementsReview:
+            return isChinese ? "需求评审" : "Requirement review"
+        case .sales:
+            return isChinese ? "销售沟通" : "Sales sync"
+        case .interviewReview:
+            return isChinese ? "面试复盘" : "Interview recap"
+        }
+    }
 
     func speakerLabel(_ index: Int) -> String {
         let normalized = max(index, 1)

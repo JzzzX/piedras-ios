@@ -204,6 +204,13 @@ struct EnhanceRequestPayload: Encodable {
     let userNotes: String
     let meetingTitle: String
     let segmentCommentsContext: String
+    let promptOptions: PromptOptions?
+}
+
+struct PromptOptions: Encodable {
+    let meetingType: String
+    let outputStyle: String
+    let includeActionItems: Bool
 }
 
 struct ChatHistoryPayload: Encodable {
@@ -277,7 +284,12 @@ enum MeetingPayloadMapper {
             transcript: transcriptText(from: meeting),
             userNotes: meeting.userNotesPlainText,
             meetingTitle: meeting.displayTitle,
-            segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting)
+            segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting),
+            promptOptions: PromptOptions(
+                meetingType: meeting.meetingType,
+                outputStyle: "平衡",
+                includeActionItems: true
+            )
         )
     }
 

@@ -4,6 +4,33 @@ import Testing
 
 struct SegmentCommentContextTests {
     @Test
+    func enhancePayloadIncludesMeetingPromptOptions() throws {
+        let meeting = Meeting(
+            title: "用户访谈",
+            userNotesPlainText: "重点问了首购转化和退款原因。",
+            segments: [
+                TranscriptSegment(
+                    speaker: "Speaker A",
+                    text: "我来负责下周五前整理访谈报告。",
+                    startTime: 3_000,
+                    endTime: 8_000,
+                    orderIndex: 0
+                )
+            ]
+        )
+        meeting.meetingType = MeetingTypeOption.interview.rawValue
+
+        let payload = MeetingPayloadMapper.makeEnhancePayload(from: meeting)
+        let encoded = try JSONEncoder().encode(payload)
+        let json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        let promptOptions = try #require(json["promptOptions"] as? [String: Any])
+
+        #expect(promptOptions["meetingType"] as? String == "访谈")
+        #expect(promptOptions["outputStyle"] as? String == "平衡")
+        #expect(promptOptions["includeActionItems"] as? Bool == true)
+    }
+
+    @Test
     func enhancePayloadIncludesOrderedSegmentCommentsContext() throws {
         let meeting = makeMeetingWithComments()
 
