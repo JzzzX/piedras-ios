@@ -234,7 +234,10 @@ struct MeetingDetailView: View {
         }
         .sheet(isPresented: $showsTranscriptSheet) {
             if let meeting = meetingStore.meeting(withID: meetingID) {
-                MeetingTranscriptSheet(meeting: meeting) {
+                MeetingTranscriptSheet(
+                    meeting: meeting,
+                    isActiveRecording: isRecordingThisMeeting
+                ) {
                     annotationStore.dismissEditor()
                     showsTranscriptSheet = false
                 }
@@ -1315,7 +1318,15 @@ private struct MeetingTranscriptSheet: View {
     @Environment(AnnotationStore.self) private var annotationStore
 
     let meeting: Meeting
+    let isActiveRecording: Bool
     let onClose: () -> Void
+
+    private var audioSectionMode: TranscriptAudioSectionMode {
+        TranscriptAudioSectionPresentation.mode(
+            for: meeting,
+            isActiveRecording: isActiveRecording
+        )
+    }
 
     var body: some View {
         MeetingDetailSurfaceSheet(
@@ -1340,9 +1351,9 @@ private struct MeetingTranscriptSheet: View {
                 }
                 .scrollDismissesKeyboard(.interactively)
 
-                if let filePath = meeting.audioLocalPath {
+                if audioSectionMode != .hidden {
                     ThinDivider()
-                    AudioPlaybackBar(filePath: filePath)
+                    transcriptAudioSection
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
                 }
@@ -1354,6 +1365,46 @@ private struct MeetingTranscriptSheet: View {
         .onDisappear {
             annotationStore.dismissEditor()
         }
+    }
+
+    @ViewBuilder
+    private var transcriptAudioSection: some View {
+        switch audioSectionMode {
+        case .hidden:
+            EmptyView()
+        case .recordingNotice:
+            TranscriptRecordingNoticeBar()
+        case let .player(sourceURL):
+            AudioPlaybackBar(sourceURL: sourceURL)
+        }
+    }
+}
+
+private struct TranscriptRecordingNoticeBar: View {
+    var body: some View {
+        VStack(spacing: 0) {
+            RetroTitleBar(label: AppStrings.current.playback)
+
+            HStack(spacing: 10) {
+                Image(systemName: "waveform")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AppTheme.highlight)
+
+                Text(AppStrings.current.transcriptRecordingNotice)
+                    .font(AppTheme.bodyFont(size: 13))
+                    .foregroundStyle(AppTheme.subtleInk)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+        }
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+        .retroHardShadow()
+        .accessibilityIdentifier("TranscriptRecordingNotice")
     }
 }
 
