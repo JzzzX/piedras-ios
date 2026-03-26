@@ -194,6 +194,7 @@ struct AppStringTable {
     // ── AudioPlaybackBar ─────────────────────────────────────────
 
     var playback: String { isChinese ? "回放" : "Playback" }
+    var transcriptRecordingNotice: String { isChinese ? "正在录音，结束后可回放原始音频" : "Recording in progress. Original audio will be available after stop." }
 
     // ── Meeting+Presentation ─────────────────────────────────────
 

@@ -3,13 +3,21 @@ import Observation
 import SwiftUI
 
 struct AudioPlaybackBar: View {
-    let filePath: String
+    let sourceURL: URL
 
     @State private var playbackController = AudioPlaybackController()
 
+    init(sourceURL: URL) {
+        self.sourceURL = sourceURL
+    }
+
+    init(filePath: String) {
+        self.sourceURL = URL(fileURLWithPath: filePath)
+    }
+
     var body: some View {
         TranscriptAudioControlBar(
-            sourceURL: URL(fileURLWithPath: filePath),
+            sourceURL: sourceURL,
             playbackController: playbackController,
             onPlaybackIntent: {}
         )
