@@ -1095,7 +1095,7 @@ final class MeetingStore {
         meeting.audioDuration = artifact.durationSeconds
         meeting.audioUpdatedAt = .now
         meeting.durationSeconds = max(meeting.durationSeconds, artifact.durationSeconds)
-        meeting.speakerDiarizationState = .processing
+        meeting.speakerDiarizationState = needsTranscriptRepair ? .processing : .idle
         meeting.speakerDiarizationErrorMessage = nil
         meeting.markPending()
 
@@ -1740,7 +1740,8 @@ final class MeetingStore {
                     into: meeting,
                     gapStartTimeMS: chunk.startTimeMS,
                     gapEndTimeMS: chunk.startTimeMS + chunk.durationMS,
-                    timestampsAreRelativeToGap: true
+                    timestampsAreRelativeToGap: true,
+                    allowsEmptyResults: true
                 )
                 return
             } catch is CancellationError {
@@ -1775,7 +1776,8 @@ final class MeetingStore {
         into meeting: Meeting,
         gapStartTimeMS: Double,
         gapEndTimeMS: Double,
-        timestampsAreRelativeToGap: Bool
+        timestampsAreRelativeToGap: Bool,
+        allowsEmptyResults: Bool = false
     ) throws {
         let effectiveGapEndTimeMS = min(
             gapEndTimeMS,
@@ -1807,6 +1809,9 @@ final class MeetingStore {
         }
 
         guard !normalizedResults.isEmpty else {
+            if allowsEmptyResults {
+                return
+            }
             throw APIClientError.requestFailed("补转写未返回任何结果。")
         }
 
