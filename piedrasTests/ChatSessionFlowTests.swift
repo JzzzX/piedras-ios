@@ -801,6 +801,247 @@ struct ChatSessionFlowTests {
 
     @MainActor
     @Test
+    func cancellingCallerTaskDoesNotInterruptMeetingChatStreaming() async throws {
+        StreamingChatMockURLProtocol.reset()
+        defer { StreamingChatMockURLProtocol.reset() }
+
+        let container = try ModelContainerFactory.makeContainer(inMemory: true)
+        let settingsStore = makeSettingsStore()
+        settingsStore.workspaceBootstrapState = .success
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StreamingChatMockURLProtocol.self]
+        let apiClient = APIClient(
+            settingsStore: settingsStore,
+            session: URLSession(configuration: configuration)
+        )
+        let meetingRepository = MeetingRepository(modelContext: container.mainContext)
+        let chatRepository = ChatSessionRepository(modelContext: container.mainContext)
+        let meetingSyncService = MeetingSyncService(
+            repository: meetingRepository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+        let meetingStore = MeetingStore(
+            repository: meetingRepository,
+            chatSessionRepository: chatRepository,
+            settingsStore: settingsStore,
+            recordingSessionStore: RecordingSessionStore(),
+            appActivityCoordinator: AppActivityCoordinator(),
+            recordingLiveActivityCoordinator: RecordingLiveActivityCoordinator(),
+            audioRecorderService: AudioRecorderService(sessionCoordinator: AudioSessionCoordinator()),
+            audioFileTranscriptionService: AudioFileTranscriptionService(apiClient: apiClient),
+            apiClient: apiClient,
+            asrService: ASRService(apiClient: apiClient),
+            workspaceBootstrapService: WorkspaceBootstrapService(
+                apiClient: apiClient,
+                settingsStore: settingsStore
+            ),
+            meetingSyncService: meetingSyncService
+        )
+
+        let meeting = try meetingRepository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "测试会议"
+        try meetingRepository.save()
+
+        StreamingChatMockURLProtocol.requestHandler = { request, client, protocolInstance in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": contentType(for: url.path)]
+                )
+            )
+
+            switch url.path {
+            case "/healthz":
+                let payload: [String: Any] = [
+                    "ok": true,
+                    "database": true,
+                    "checkedAt": Int(Date().timeIntervalSince1970 * 1000),
+                ]
+                client.urlProtocol(protocolInstance, didReceive: response, cacheStoragePolicy: .notAllowed)
+                client.urlProtocol(protocolInstance, didLoad: try JSONSerialization.data(withJSONObject: payload))
+                client.urlProtocolDidFinishLoading(protocolInstance)
+
+            case "/api/chat":
+                client.urlProtocol(protocolInstance, didReceive: response, cacheStoragePolicy: .notAllowed)
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+                    client.urlProtocol(protocolInstance, didLoad: Data("这是".utf8))
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.12) {
+                    client.urlProtocol(protocolInstance, didLoad: Data("退出后也".utf8))
+                }
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) {
+                    client.urlProtocol(protocolInstance, didLoad: Data("要继续生成。".utf8))
+                    client.urlProtocolDidFinishLoading(protocolInstance)
+                }
+
+            case "/api/meetings":
+                let body = try requestBodyData(from: request)
+                let raw = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                let chatMessages = try #require(raw["chatMessages"] as? [[String: Any]])
+                let payload: [String: Any] = [
+                    "id": raw["id"] as? String ?? meeting.id,
+                    "title": raw["title"] as? String ?? meeting.title,
+                    "date": raw["date"] as? String ?? meeting.date.ISO8601Format(),
+                    "status": raw["status"] as? String ?? meeting.status.rawValue,
+                    "duration": raw["duration"] as? Int ?? meeting.durationSeconds,
+                    "workspaceId": raw["workspaceId"] as? String ?? "workspace-1",
+                    "userNotes": raw["userNotes"] as? String ?? "",
+                    "enhancedNotes": raw["enhancedNotes"] as? String ?? "",
+                    "createdAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "updatedAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "segments": [],
+                    "chatMessages": chatMessages,
+                    "hasAudio": false,
+                    "audioUrl": NSNull(),
+                ]
+                client.urlProtocol(protocolInstance, didReceive: response, cacheStoragePolicy: .notAllowed)
+                client.urlProtocol(protocolInstance, didLoad: try JSONSerialization.data(withJSONObject: payload))
+                client.urlProtocolDidFinishLoading(protocolInstance)
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let sendTask = Task {
+            await meetingStore.sendChatMessage(question: "帮我总结", for: meeting.id)
+        }
+
+        try await waitUntil {
+            meetingStore.isStreamingChat(meetingID: meeting.id)
+        }
+
+        sendTask.cancel()
+        let didSend = await sendTask.value
+
+        try await waitUntil {
+            meetingStore.isStreamingChat(meetingID: meeting.id) == false
+                && meetingStore.chatMessages(for: meeting.id).count == 2
+                && meetingStore.chatMessages(for: meeting.id).last?.content == "这是退出后也要继续生成。"
+        }
+
+        #expect(didSend)
+        #expect(meetingStore.chatMessages(for: meeting.id).map { $0.content } == ["帮我总结", "这是退出后也要继续生成。"])
+    }
+
+    @MainActor
+    @Test
+    func regeneratingMeetingChatReusesLastQuestionWithoutDuplicatingUserMessage() async throws {
+        ChatMockURLProtocol.reset()
+        defer { ChatMockURLProtocol.reset() }
+
+        let container = try ModelContainerFactory.makeContainer(inMemory: true)
+        let settingsStore = makeSettingsStore()
+        settingsStore.workspaceBootstrapState = .success
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let meetingRepository = MeetingRepository(modelContext: container.mainContext)
+        let chatRepository = ChatSessionRepository(modelContext: container.mainContext)
+        let meetingSyncService = MeetingSyncService(
+            repository: meetingRepository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+        let meetingStore = MeetingStore(
+            repository: meetingRepository,
+            chatSessionRepository: chatRepository,
+            settingsStore: settingsStore,
+            recordingSessionStore: RecordingSessionStore(),
+            appActivityCoordinator: AppActivityCoordinator(),
+            recordingLiveActivityCoordinator: RecordingLiveActivityCoordinator(),
+            audioRecorderService: AudioRecorderService(sessionCoordinator: AudioSessionCoordinator()),
+            audioFileTranscriptionService: AudioFileTranscriptionService(apiClient: apiClient),
+            apiClient: apiClient,
+            asrService: ASRService(apiClient: apiClient),
+            workspaceBootstrapService: WorkspaceBootstrapService(
+                apiClient: apiClient,
+                settingsStore: settingsStore
+            ),
+            meetingSyncService: meetingSyncService
+        )
+
+        let meeting = try meetingRepository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "测试会议"
+
+        let session = chatRepository.makeDraftSession(scope: .meeting, meeting: meeting)
+        _ = chatRepository.appendUserMessage("主要内容?", to: session)
+        let assistant = chatRepository.appendAssistantPlaceholder(to: session)
+        assistant.content = "旧回答"
+        try chatRepository.save()
+
+        meetingStore.prepareChatSessions(for: meeting.id)
+        meetingStore.activateChatSession(session.id, for: meeting.id)
+
+        var capturedQuestion = ""
+        var capturedHistory: [[String: Any]] = []
+
+        ChatMockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": contentType(for: url.path)]
+                )
+            )
+
+            switch url.path {
+            case "/healthz":
+                let payload: [String: Any] = [
+                    "ok": true,
+                    "database": true,
+                    "checkedAt": Int(Date().timeIntervalSince1970 * 1000),
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            case "/api/chat":
+                let body = try requestBodyData(from: request)
+                let raw = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                capturedQuestion = raw["question"] as? String ?? ""
+                capturedHistory = raw["chatHistory"] as? [[String: Any]] ?? []
+                return (response, Data("新回答".utf8))
+
+            case "/api/meetings":
+                let body = try requestBodyData(from: request)
+                let raw = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                let chatMessages = try #require(raw["chatMessages"] as? [[String: Any]])
+                let payload: [String: Any] = [
+                    "id": raw["id"] as? String ?? meeting.id,
+                    "title": raw["title"] as? String ?? meeting.title,
+                    "date": raw["date"] as? String ?? meeting.date.ISO8601Format(),
+                    "status": raw["status"] as? String ?? meeting.status.rawValue,
+                    "duration": raw["duration"] as? Int ?? meeting.durationSeconds,
+                    "workspaceId": raw["workspaceId"] as? String ?? "workspace-1",
+                    "userNotes": raw["userNotes"] as? String ?? "",
+                    "enhancedNotes": raw["enhancedNotes"] as? String ?? "",
+                    "createdAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "updatedAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "segments": [],
+                    "chatMessages": chatMessages,
+                    "hasAudio": false,
+                    "audioUrl": NSNull(),
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let didRegenerate = await meetingStore.regenerateLastChatResponse(for: meeting.id)
+
+        #expect(didRegenerate)
+        #expect(capturedQuestion == "主要内容?")
+        #expect(capturedHistory.isEmpty)
+        #expect(meetingStore.chatMessages(for: meeting.id).map { $0.content } == ["主要内容?", "新回答"])
+    }
+
+    @MainActor
+    @Test
     func observingMeetingChatMessagesDoesNotReactToSessionMessageMutation() throws {
         let appContainer = AppContainer(inMemory: true)
         let repository = appContainer.chatSessionRepository
@@ -916,5 +1157,23 @@ struct ChatSessionFlowTests {
         }
 
         return data
+    }
+
+    @MainActor
+    private func waitUntil(
+        timeoutNanoseconds: UInt64 = 2_000_000_000,
+        pollNanoseconds: UInt64 = 20_000_000,
+        condition: @escaping @MainActor () -> Bool
+    ) async throws {
+        let deadline = ContinuousClock.now + .nanoseconds(Int64(timeoutNanoseconds))
+
+        while ContinuousClock.now < deadline {
+            if condition() {
+                return
+            }
+            try await Task.sleep(nanoseconds: pollNanoseconds)
+        }
+
+        Issue.record("Timed out waiting for condition")
     }
 }

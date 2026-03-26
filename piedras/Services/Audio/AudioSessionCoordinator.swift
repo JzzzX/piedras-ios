@@ -56,6 +56,7 @@ final class AudioSessionCoordinator {
             mode: .default,
             options: [.defaultToSpeaker, .allowBluetoothHFP, .allowBluetoothA2DP]
         )
+        try session.setAllowHapticsAndSystemSoundsDuringRecording(true)
         try session.setActive(true, options: .notifyOthersOnDeactivation)
     }
 

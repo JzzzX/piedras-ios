@@ -101,6 +101,18 @@ struct ChatView: View {
 
             HStack(spacing: 8) {
                 AppGlassCircleButton(
+                    systemName: "arrow.clockwise",
+                    accessibilityLabel: AppStrings.current.regenerateAnswer,
+                    size: 36
+                ) {
+                    Task {
+                        _ = await meetingStore.regenerateLastChatResponse(for: meeting.id)
+                    }
+                }
+                .accessibilityIdentifier("MeetingChatRegenerateButton")
+                .disabled(!meetingStore.canRegenerateLastChatResponse(for: meeting.id))
+
+                AppGlassCircleButton(
                     systemName: "plus",
                     accessibilityLabel: AppStrings.current.newChat,
                     size: 36
