@@ -491,6 +491,149 @@ struct MeetingDeletionSyncTests {
     }
 
     @MainActor
+    @Test
+    func failedFinalizeUploadRemainsRetryableOnNextSyncPass() async throws {
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
+        let settingsStore = makeSettingsStore()
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let syncService = MeetingSyncService(
+            repository: repository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+        let audioURL = try makeTemporaryAudioFile(named: "meeting-finalize-retry.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        let meeting = Meeting(
+            id: "meeting-finalize-retry",
+            title: "Finalize retry",
+            status: .ended,
+            audioLocalPath: audioURL.path,
+            audioMimeType: "audio/m4a",
+            audioDuration: 22,
+            audioUpdatedAt: .now,
+            hiddenWorkspaceId: "workspace-1",
+            syncState: .pending
+        )
+        meeting.speakerDiarizationState = .processing
+        repository.insert(meeting)
+        try repository.save()
+
+        var audioUploadAttempts = 0
+        MockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let statusCode: Int
+            if url.path == "/api/meetings/\(meeting.id)/audio" {
+                audioUploadAttempts += 1
+                statusCode = audioUploadAttempts == 1 ? 500 : 200
+            } else {
+                statusCode = 200
+            }
+
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: statusCode,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/meetings":
+                let payload: [String: Any] = [
+                    "id": meeting.id,
+                    "title": meeting.title,
+                    "date": meeting.date.ISO8601Format(),
+                    "status": meeting.status.rawValue,
+                    "duration": meeting.durationSeconds,
+                    "workspaceId": meeting.hiddenWorkspaceId ?? "workspace-1",
+                    "speakers": [:],
+                    "userNotes": meeting.userNotesPlainText,
+                    "enhancedNotes": meeting.enhancedNotes,
+                    "createdAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "updatedAt": Int(Date().timeIntervalSince1970 * 1000),
+                    "segments": [],
+                    "chatMessages": [],
+                    "hasAudio": false,
+                    "audioUrl": NSNull(),
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            case "/api/meetings/\(meeting.id)/audio":
+                if audioUploadAttempts == 1 {
+                    return (response, Data(#"{"error":"finalize failed"}"#.utf8))
+                }
+
+                return (
+                    response,
+                    Data(
+                        """
+                        {
+                          "id": "\(meeting.id)",
+                          "title": "Finalize retry",
+                          "date": "2026-03-24T04:00:00.000Z",
+                          "status": "ended",
+                          "duration": 22,
+                          "audioMimeType": "audio/m4a",
+                          "audioDuration": 22,
+                          "audioUpdatedAt": "2026-03-24T04:00:00.000Z",
+                          "userNotes": "",
+                          "enhancedNotes": "",
+                          "createdAt": "2026-03-24T03:50:00.000Z",
+                          "updatedAt": "2026-03-24T04:00:00.000Z",
+                          "workspaceId": "workspace-1",
+                          "speakers": {
+                            "spk_1": "说话人 1"
+                          },
+                          "segments": [
+                            {
+                              "id": "segment-1",
+                              "speaker": "spk_1",
+                              "text": "补转写成功",
+                              "startTime": 0,
+                              "endTime": 1200,
+                              "isFinal": true,
+                              "order": 0
+                            }
+                          ],
+                          "chatMessages": [],
+                          "hasAudio": true,
+                          "audioUrl": "/api/meetings/\(meeting.id)/audio?t=123"
+                        }
+                        """.utf8
+                    )
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+        defer { MockURLProtocol.reset() }
+
+        await #expect(throws: Error.self) {
+            try await syncService.syncMeeting(id: meeting.id)
+        }
+
+        let failedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(failedMeeting.syncState == .failed)
+        #expect(failedMeeting.speakerDiarizationState == .processing)
+        #expect(failedMeeting.audioLocalPath == audioURL.path)
+        #expect(FileManager.default.fileExists(atPath: audioURL.path))
+
+        let batchResult = await syncService.syncPendingMeetings()
+
+        let recoveredMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(batchResult.syncedCount == 1)
+        #expect(batchResult.failedCount == 0)
+        #expect(recoveredMeeting.syncState == .synced)
+        #expect(recoveredMeeting.speakerDiarizationState == .ready)
+        #expect(recoveredMeeting.audioLocalPath == nil)
+        #expect(recoveredMeeting.orderedSegments.map(\.text) == ["补转写成功"])
+    }
+
+    @MainActor
     private func makeAppContainer() throws -> AppContainer {
         if let container = AppContainer.currentXCTestInstance {
             return container

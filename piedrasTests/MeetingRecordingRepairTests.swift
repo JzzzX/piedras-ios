@@ -458,12 +458,73 @@ struct MeetingRecordingRepairTests {
         )
 
         let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
-        #expect(refreshedMeeting.status == .transcriptionFailed)
+        #expect(refreshedMeeting.status == .ended)
+        #expect(refreshedMeeting.speakerDiarizationState == .processing)
+        #expect(refreshedMeeting.speakerDiarizationErrorMessage == "repair failed")
         #expect(refreshedMeeting.orderedSegments.map(\.text) == ["残缺实时转写"])
         #expect(fixture.syncService.syncedMeetingIDs.isEmpty)
         let status = try #require(fixture.meetingStore.fileTranscriptionStatus(meetingID: meeting.id))
-        #expect(status.canRetry)
+        #expect(status.phase == .finalizing)
+        #expect(status.canRetry == false)
         #expect(fixture.meetingStore.lastErrorMessage == "repair failed")
+    }
+
+    @MainActor
+    @Test
+    func interruptedRepairMeetingLoadsAsRecoverableEndedMeeting() throws {
+        let container = try ModelContainerFactory.makeContainer(inMemory: true)
+        let repository = MeetingRepository(modelContext: container.mainContext)
+        let chatRepository = ChatSessionRepository(modelContext: container.mainContext)
+        let settingsStore = makeSettingsStore()
+        settingsStore.hiddenWorkspaceID = "workspace-1"
+        settingsStore.workspaceBootstrapState = .success
+        settingsStore.markBackendReachable()
+        let recordingSessionStore = RecordingSessionStore()
+        let apiClient = APIClient(settingsStore: settingsStore)
+        let recorder = StubAudioRecorderService()
+        let transcriber = StubAudioFileTranscriptionService(behavior: .succeed([]))
+        let syncService = StubMeetingSyncService(repository: repository)
+        let asrService = StubASRService()
+
+        let audioURL = try makeTemporaryAudioFile(named: "interrupted-repair.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        let meeting = try repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.status = .transcribing
+        meeting.audioLocalPath = audioURL.path
+        meeting.audioMimeType = "audio/m4a"
+        meeting.audioDuration = 9
+        meeting.speakerDiarizationState = .processing
+        meeting.markPending()
+        try repository.save()
+
+        let meetingStore = MeetingStore(
+            repository: repository,
+            chatSessionRepository: chatRepository,
+            settingsStore: settingsStore,
+            recordingSessionStore: recordingSessionStore,
+            appActivityCoordinator: AppActivityCoordinator(),
+            recordingLiveActivityCoordinator: StubRecordingLiveActivityCoordinator(),
+            audioRecorderService: recorder,
+            audioFileTranscriptionService: transcriber,
+            apiClient: apiClient,
+            asrService: asrService,
+            workspaceBootstrapService: WorkspaceBootstrapService(
+                apiClient: apiClient,
+                settingsStore: settingsStore
+            ),
+            meetingSyncService: syncService
+        )
+
+        meetingStore.loadIfNeeded()
+
+        let recoveredMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(recoveredMeeting.status == .ended)
+        #expect(recoveredMeeting.speakerDiarizationState == .processing)
+        #expect(recoveredMeeting.syncState == .pending)
+        let status = try #require(meetingStore.fileTranscriptionStatus(meetingID: meeting.id))
+        #expect(status.phase == .finalizing)
+        #expect(status.canRetry == false)
     }
 
     @MainActor

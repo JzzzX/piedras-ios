@@ -61,6 +61,12 @@ private struct BackgroundTranscriptChunk {
 final class MeetingStore {
     private static let backgroundChunkTargetDurationMS = 12_000.0
     private static let backgroundChunkRetryDelay: Duration = .milliseconds(300)
+    private static let asrReconnectDelays: [Duration] = [
+        .seconds(2),
+        .seconds(4),
+        .seconds(8),
+        .seconds(10),
+    ]
 
     private let repository: MeetingRepository
     private let chatSessionRepository: ChatSessionRepository
@@ -94,6 +100,7 @@ final class MeetingStore {
     private var didStartBackendPreparation = false
     private var backendPreparationTask: Task<Void, Never>?
     private var asrReconnectTask: Task<Void, Never>?
+    private var asrReconnectAttempt = 0
     private var scheduledSyncTasks: [String: Task<Void, Never>] = [:]
     private var fileTranscriptionTasks: [String: Task<Void, Never>] = [:]
     private var chatStreamingTasks: [String: Task<Bool, Never>] = [:]
@@ -1319,7 +1326,10 @@ final class MeetingStore {
         } catch is CancellationError {
             return
         } catch {
-            markFileTranscriptionFailed(meetingID: meetingID, message: error.localizedDescription)
+            markStoppedRecordingRepairPendingCloudFinalization(
+                meetingID: meetingID,
+                message: error.localizedDescription
+            )
             settingsStore.markASRStreamFailed(message: error.localizedDescription)
         }
     }
@@ -1355,19 +1365,42 @@ final class MeetingStore {
         loadMeetings()
     }
 
+    private func markStoppedRecordingRepairPendingCloudFinalization(meetingID: String, message: String) {
+        if let meeting = meeting(withID: meetingID) {
+            meeting.status = .ended
+            meeting.speakerDiarizationState = .processing
+            meeting.speakerDiarizationErrorMessage = message
+            meeting.audioUpdatedAt = .now
+            meeting.markPending()
+            try? repository.save()
+        }
+
+        fileTranscriptionStatuses.removeValue(forKey: meetingID)
+        fileTranscriptionPartials[meetingID] = ""
+        lastErrorMessage = message
+        loadMeetings()
+    }
+
     private func recoverInterruptedFileTranscriptionsIfNeeded() {
         let interruptedMeetings = (try? repository.fetchMeetings())?.filter { $0.status == .transcribing } ?? []
         guard !interruptedMeetings.isEmpty else { return }
 
         for meeting in interruptedMeetings {
-            meeting.status = .transcriptionFailed
-            meeting.markPending()
-            fileTranscriptionStatuses[meeting.id] = FileTranscriptionStatusSnapshot(
-                phase: nil,
-                errorMessage: AppStrings.current.fileTranscriptionInterrupted,
-                showsFailure: true
-            )
-            fileTranscriptionPartials[meeting.id] = ""
+            if meeting.speakerDiarizationState == .processing, meeting.audioLocalPath?.isEmpty == false {
+                meeting.status = .ended
+                meeting.markPending()
+                fileTranscriptionStatuses.removeValue(forKey: meeting.id)
+                fileTranscriptionPartials[meeting.id] = ""
+            } else {
+                meeting.status = .transcriptionFailed
+                meeting.markPending()
+                fileTranscriptionStatuses[meeting.id] = FileTranscriptionStatusSnapshot(
+                    phase: nil,
+                    errorMessage: AppStrings.current.fileTranscriptionInterrupted,
+                    showsFailure: true
+                )
+                fileTranscriptionPartials[meeting.id] = ""
+            }
         }
 
         try? repository.save()
@@ -2282,6 +2315,7 @@ final class MeetingStore {
 
         do {
             try await asrService.startStreaming(workspaceID: workspaceID)
+            asrReconnectAttempt = 0
         } catch {
             guard recordingSessionStore.meetingID == meetingID else { return }
             recordingSessionStore.markTranscriptCoverageGap()
@@ -2290,7 +2324,7 @@ final class MeetingStore {
             recordingSessionStore.errorBanner = nil
             settingsStore.markASRStreamFailed(message: error.localizedDescription)
             scheduleBackendPreparationIfNeeded(retryDelays: [.zero, .seconds(2)])
-            scheduleASRReconnect(for: meetingID, delay: .seconds(2))
+            scheduleASRReconnect(for: meetingID)
         }
     }
 
@@ -2307,15 +2341,16 @@ final class MeetingStore {
         appActivityCoordinator.setKeepScreenAwake(shouldKeepScreenAwake)
     }
 
-    private func scheduleASRReconnect(for meetingID: String, delay: Duration) {
+    private func scheduleASRReconnect(for meetingID: String, delay: Duration? = nil) {
         guard recordingSessionStore.meetingID == meetingID,
               recordingSessionStore.phase == .recording else {
             return
         }
 
+        let resolvedDelay = delay ?? nextASRReconnectDelay()
         asrReconnectTask?.cancel()
         asrReconnectTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: delay)
+            try? await Task.sleep(for: resolvedDelay)
             guard let self, !Task.isCancelled else { return }
             guard self.recordingSessionStore.meetingID == meetingID,
                   self.recordingSessionStore.phase == .recording,
@@ -2329,16 +2364,23 @@ final class MeetingStore {
 
             if self.recordingSessionStore.asrState != .connected,
                self.recordingSessionStore.phase == .recording {
-                self.scheduleASRReconnect(for: meetingID, delay: .seconds(4))
+                self.scheduleASRReconnect(for: meetingID)
             } else {
                 self.asrReconnectTask = nil
             }
         }
     }
 
+    private func nextASRReconnectDelay() -> Duration {
+        let index = min(asrReconnectAttempt, Self.asrReconnectDelays.count - 1)
+        asrReconnectAttempt += 1
+        return Self.asrReconnectDelays[index]
+    }
+
     private func cancelASRReconnect() {
         asrReconnectTask?.cancel()
         asrReconnectTask = nil
+        asrReconnectAttempt = 0
     }
 
     private func recordBackgroundSyncIssue(detail: String, summary: String) {

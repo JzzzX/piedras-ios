@@ -7,11 +7,13 @@ import { setTimeout as sleep } from 'node:timers/promises';
 const targetSampleRate = 16000;
 const defaultChunkDurationMS = 100;
 const defaultBackendBaseURL = process.env.PIEDRAS_BACKEND_URL ?? 'https://piedras.preview.aliyun-zeabur.cn';
+const defaultBearerToken = process.env.PIEDRAS_BEARER_TOKEN ?? process.env.PIEDRAS_AUTH_TOKEN ?? '';
 
-const [, , inputFilePath, backendBaseURL = defaultBackendBaseURL] = process.argv;
+const [, , inputFilePath, backendBaseURL = defaultBackendBaseURL, bearerToken = defaultBearerToken] = process.argv;
 
-if (!inputFilePath) {
-  console.error('Usage: node scripts/asr_smoke_test.mjs <wav-file> [backend-base-url]');
+if (!inputFilePath || !bearerToken) {
+  console.error('Usage: node scripts/asr_smoke_test.mjs <wav-file> [backend-base-url] [bearer-token]');
+  console.error('Or set PIEDRAS_BEARER_TOKEN in the environment.');
   process.exit(1);
 }
 
@@ -150,7 +152,10 @@ async function main() {
 
   const sessionResponse = await fetch(`${backendBaseURL}/api/asr/session`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${bearerToken}`,
+    },
     body: JSON.stringify({
       sampleRate: targetSampleRate,
       channels: 1,

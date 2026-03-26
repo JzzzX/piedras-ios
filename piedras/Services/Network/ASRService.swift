@@ -14,6 +14,82 @@ struct ASRFinalResult {
     let endTime: Double
 }
 
+enum ASRServiceError: LocalizedError {
+    case handshakeTimedOut
+    case connectionValidationFailed(String)
+    case bufferedAudioOverflow
+    case inactivityTimeout
+    case connectionClosed
+    case serviceError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .handshakeTimedOut:
+            return "实时转写握手超时，录音仍在继续，停止后将自动补转写。"
+        case let .connectionValidationFailed(detail):
+            return "实时转写连接校验失败：\(detail)"
+        case .bufferedAudioOverflow:
+            return "实时转写暂时中断，录音仍在继续，停止后将自动补转写。"
+        case .inactivityTimeout:
+            return "实时转写连接超时，录音仍在继续，停止后将自动补转写。"
+        case .connectionClosed:
+            return "实时转写连接已关闭，录音仍在继续，停止后将自动补转写。"
+        case let .serviceError(message):
+            return message
+        }
+    }
+}
+
+actor ASRReadyGate {
+    private enum State {
+        case idle
+        case ready
+        case failed(Error)
+    }
+
+    private var state: State = .idle
+
+    func waitUntilReady(timeout: Duration) async throws {
+        let deadline = ContinuousClock.now + timeout
+
+        while true {
+            switch state {
+            case .ready:
+                return
+            case let .failed(error):
+                throw error
+            case .idle:
+                if ContinuousClock.now >= deadline {
+                    throw ASRServiceError.handshakeTimedOut
+                }
+                try await Task.sleep(for: .milliseconds(50))
+            }
+        }
+    }
+
+    func markReady() {
+        state = .ready
+    }
+
+    func fail(_ error: Error) {
+        state = .failed(error)
+    }
+
+    func reset() {
+        state = .idle
+    }
+}
+
+enum ASRBufferPolicy {
+    static func shouldFailPendingBuffer(
+        currentBufferedBytes: Int,
+        incomingBytes: Int,
+        maxBufferedBytes: Int
+    ) -> Bool {
+        currentBufferedBytes + incomingBytes > maxBufferedBytes
+    }
+}
+
 @MainActor
 protocol ASRServicing: AnyObject {
     var onPartialText: ((String) -> Void)? { get set }
@@ -30,11 +106,17 @@ protocol ASRServicing: AnyObject {
 
 @MainActor
 final class ASRService: ASRServicing {
+    private static let handshakeTimeout: Duration = .seconds(3)
+    private static let connectionValidationTimeout: Duration = .seconds(2)
+    private static let inactivityTimeout: TimeInterval = 10
+    private static let inactivityCheckInterval: Duration = .seconds(1)
+
     private let apiClient: APIClient
     private let session: URLSession
 
     private var webSocketTask: URLSessionWebSocketTask?
     private var receiveTask: Task<Void, Never>?
+    private var inactivityWatchdogTask: Task<Void, Never>?
     private var packetByteSize = 6_400
     private var readyForAudio = false
     private var isStopping = false
@@ -42,6 +124,10 @@ final class ASRService: ASRServicing {
     private var pendingPCMChunks: [Data] = []
     private var sendQueue: [Data] = []
     private var isDrainingSendQueue = false
+    private var maxBufferedPCMBytes = 96_000
+    private var lastTransportActivityAt: Date?
+    private var transportActivityMonitoringEnabled = false
+    private let readyGate = ASRReadyGate()
 
     var onPartialText: ((String) -> Void)?
     var onFinalResult: ((ASRFinalResult) -> Void)?
@@ -57,6 +143,7 @@ final class ASRService: ASRServicing {
 
     func startStreaming(workspaceID: String?) async throws {
         await cleanupTransport(notifyDisconnected: false)
+        await readyGate.reset()
 
         onPartialText?("")
         transition(to: .connecting)
@@ -84,6 +171,10 @@ final class ASRService: ASRServicing {
             channels: descriptor.channels ?? 1,
             packetDurationMs: descriptor.packetDurationMs ?? 200
         )
+        let bytesPerSecond = max(descriptor.sampleRate ?? Int(PCMConverter.targetSampleRate), 8_000)
+            * max(descriptor.channels ?? 1, 1)
+            * 2
+        maxBufferedPCMBytes = bytesPerSecond * 30
 
         let task = session.webSocketTask(with: url)
         webSocketTask = task
@@ -93,10 +184,39 @@ final class ASRService: ASRServicing {
         receiveTask = Task { [weak self, task] in
             await self?.receiveLoop(task: task)
         }
+
+        do {
+            try await readyGate.waitUntilReady(timeout: Self.handshakeTimeout)
+            try await validateConnection(task)
+        } catch {
+            let message = error.localizedDescription
+            transition(to: .degraded)
+            onTransportEvent?(message)
+            await readyGate.fail(error)
+            await cleanupTransport(notifyDisconnected: false)
+            throw error
+        }
     }
 
     func enqueuePCM(_ data: Data) {
         guard webSocketTask != nil, !isStopping, !data.isEmpty else {
+            return
+        }
+
+        if !readyForAudio,
+           ASRBufferPolicy.shouldFailPendingBuffer(
+               currentBufferedBytes: totalBufferedPCMBytes,
+               incomingBytes: data.count,
+               maxBufferedBytes: maxBufferedPCMBytes
+           ) {
+            let message = ASRServiceError.bufferedAudioOverflow.localizedDescription
+            transition(to: .degraded)
+            onTransportEvent?(message)
+            onError?(message)
+            Task { @MainActor [weak self] in
+                await self?.readyGate.fail(ASRServiceError.bufferedAudioOverflow)
+                await self?.cleanupTransport(notifyDisconnected: false)
+            }
             return
         }
 
@@ -142,6 +262,7 @@ final class ASRService: ASRServicing {
                 }
             } catch {
                 guard !isStopping else { break }
+                await readyGate.fail(error)
                 transition(to: .degraded)
                 onError?(error.localizedDescription)
                 await cleanupTransport(notifyDisconnected: false)
@@ -159,14 +280,18 @@ final class ASRService: ASRServicing {
         switch message.type {
         case "ready":
             readyForAudio = true
+            noteTransportActivity(enableMonitoring: false)
             transition(to: .connected)
             onTransportEvent?("ASR 已就绪")
+            Task { await readyGate.markReady() }
             flushPendingChunksIfReady()
 
         case "partial":
+            noteTransportActivity()
             onPartialText?(message.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
 
         case "final":
+            noteTransportActivity()
             let result = message.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !result.isEmpty else { return }
             let startTime = message.startTimeMs ?? 0
@@ -176,13 +301,28 @@ final class ASRService: ASRServicing {
             onFinalResult?(ASRFinalResult(text: result, startTime: startTime, endTime: endTime))
 
         case "error":
+            noteTransportActivity()
             transition(to: .degraded)
-            onTransportEvent?(message.message ?? "实时转写服务异常")
-            onError?(message.message ?? "实时转写服务异常。")
+            let detail = message.message ?? "实时转写服务异常。"
+            onTransportEvent?(detail)
+            onError?(detail)
+            Task { @MainActor [weak self] in
+                await self?.readyGate.fail(ASRServiceError.serviceError(detail))
+                await self?.cleanupTransport(notifyDisconnected: false)
+            }
 
         case "closed":
+            noteTransportActivity()
             onTransportEvent?(isStopping ? "ASR 已关闭" : "ASR 连接关闭")
             transition(to: isStopping ? .disconnected : .degraded)
+            if !isStopping {
+                let error = ASRServiceError.connectionClosed
+                onError?(error.localizedDescription)
+                Task { @MainActor [weak self] in
+                    await self?.readyGate.fail(error)
+                    await self?.cleanupTransport(notifyDisconnected: false)
+                }
+            }
 
         default:
             break
@@ -223,9 +363,11 @@ final class ASRService: ASRServicing {
                 guard let webSocketTask else { break }
                 do {
                     try await webSocketTask.send(.data(payload))
+                    noteTransportActivity(enableMonitoring: true)
                     onPCMChunkSent?(payload.count)
                 } catch {
                     guard !isStopping else { break }
+                    await readyGate.fail(error)
                     transition(to: .degraded)
                     onTransportEvent?(error.localizedDescription)
                     onError?(error.localizedDescription)
@@ -243,6 +385,12 @@ final class ASRService: ASRServicing {
         return sendQueue.removeFirst()
     }
 
+    private var totalBufferedPCMBytes: Int {
+        pendingPCMBuffer.count
+            + pendingPCMChunks.reduce(0) { $0 + $1.count }
+            + sendQueue.reduce(0) { $0 + $1.count }
+    }
+
     private func waitForQueueToDrain(timeoutMS: Int) async throws {
         let deadline = Date().addingTimeInterval(Double(timeoutMS) / 1000)
         while (!sendQueue.isEmpty || isDrainingSendQueue) && Date() < deadline {
@@ -255,6 +403,70 @@ final class ASRService: ASRServicing {
         try await webSocketTask.send(.string("{\"type\":\"stop\"}"))
     }
 
+    private func validateConnection(_ task: URLSessionWebSocketTask) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await withCheckedThrowingContinuation { continuation in
+                    task.sendPing { error in
+                        if let error {
+                            continuation.resume(throwing: error)
+                        } else {
+                            continuation.resume(returning: ())
+                        }
+                    }
+                }
+            }
+
+            group.addTask {
+                try await Task.sleep(for: Self.connectionValidationTimeout)
+                throw ASRServiceError.connectionValidationFailed("WebSocket ping 超时。")
+            }
+
+            _ = try await group.next()
+            group.cancelAll()
+        }
+    }
+
+    private func noteTransportActivity(enableMonitoring: Bool? = nil) {
+        if let enableMonitoring {
+            transportActivityMonitoringEnabled = enableMonitoring || transportActivityMonitoringEnabled
+        }
+
+        lastTransportActivityAt = .now
+        startInactivityWatchdogIfNeeded()
+    }
+
+    private func startInactivityWatchdogIfNeeded() {
+        guard inactivityWatchdogTask == nil else { return }
+        inactivityWatchdogTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled {
+                try? await Task.sleep(for: Self.inactivityCheckInterval)
+                await self.handleInactivityWatchdogTick()
+            }
+        }
+    }
+
+    private func handleInactivityWatchdogTick() async {
+        guard transportActivityMonitoringEnabled,
+              readyForAudio,
+              !isStopping,
+              webSocketTask != nil,
+              let lastTransportActivityAt else {
+            return
+        }
+
+        guard Date().timeIntervalSince(lastTransportActivityAt) >= Self.inactivityTimeout else {
+            return
+        }
+
+        let error = ASRServiceError.inactivityTimeout
+        transition(to: .degraded)
+        onTransportEvent?(error.localizedDescription)
+        onError?(error.localizedDescription)
+        await readyGate.fail(error)
+        await cleanupTransport(notifyDisconnected: false)
+    }
+
     private func transition(to state: ASRConnectionState) {
         onStateChange?(state)
     }
@@ -262,6 +474,8 @@ final class ASRService: ASRServicing {
     private func cleanupTransport(notifyDisconnected: Bool) async {
         receiveTask?.cancel()
         receiveTask = nil
+        inactivityWatchdogTask?.cancel()
+        inactivityWatchdogTask = nil
 
         if let webSocketTask {
             webSocketTask.cancel(with: .goingAway, reason: nil)
@@ -274,6 +488,9 @@ final class ASRService: ASRServicing {
         pendingPCMChunks.removeAll(keepingCapacity: false)
         sendQueue.removeAll(keepingCapacity: false)
         isDrainingSendQueue = false
+        transportActivityMonitoringEnabled = false
+        lastTransportActivityAt = nil
+        await readyGate.reset()
 
         onPartialText?("")
         onTransportEvent?(notifyDisconnected ? "ASR 已断开" : "等待连接")

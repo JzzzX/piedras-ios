@@ -64,7 +64,7 @@ final class MeetingSyncService: MeetingSyncServicing {
             return
         }
 
-        guard meeting.status != .transcribing, meeting.status != .transcriptionFailed else {
+        guard meeting.status != .transcribing else {
             return
         }
 
@@ -98,7 +98,7 @@ final class MeetingSyncService: MeetingSyncServicing {
             try pruneLocalAudioIfNeeded(for: meeting)
         } catch {
             if meeting.speakerDiarizationState == .processing {
-                meeting.speakerDiarizationState = .failed
+                meeting.status = .ended
                 meeting.speakerDiarizationErrorMessage = error.localizedDescription
             }
             meeting.syncState = .failed
@@ -123,7 +123,7 @@ final class MeetingSyncService: MeetingSyncServicing {
 
         let fallbackDuration = max(meeting.audioDuration, meeting.durationSeconds)
 
-        if meeting.speakerDiarizationState == .processing {
+        if meeting.speakerDiarizationState == .processing || meeting.speakerDiarizationState == .failed {
             let remoteMeeting = try await apiClient.uploadAudioAndFinalizeTranscript(
                 meetingID: meeting.id,
                 fileURL: URL(fileURLWithPath: audioLocalPath),

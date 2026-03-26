@@ -3,11 +3,75 @@ import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 
-const STORAGE_ROOT = path.join(process.cwd(), 'storage', 'meetings');
 const AUDIO_FILE_NAME = 'audio.bin';
+const STORAGE_ROOT_ENV_KEY = 'MEETING_AUDIO_STORAGE_ROOT';
+const DEFAULT_STORAGE_SEGMENTS = ['storage', 'meetings'] as const;
+
+export interface MeetingAudioStorageConfig {
+  rootPath: string;
+  configured: boolean;
+  persistent: boolean;
+  message: string;
+}
+
+interface MeetingAudioStorageConfigOptions {
+  env?: NodeJS.ProcessEnv;
+  cwd?: string;
+  nodeEnv?: string;
+}
+
+export function resolveMeetingAudioStorageRoot(
+  options: Pick<MeetingAudioStorageConfigOptions, 'env' | 'cwd'> = {}
+) {
+  const env = options.env ?? process.env;
+  const cwd = options.cwd ?? process.cwd();
+  const configuredRoot = env[STORAGE_ROOT_ENV_KEY]?.trim();
+
+  if (configuredRoot) {
+    return path.isAbsolute(configuredRoot)
+      ? configuredRoot
+      : path.resolve(cwd, configuredRoot);
+  }
+
+  return path.join(cwd, ...DEFAULT_STORAGE_SEGMENTS);
+}
+
+export function getMeetingAudioStorageConfig(
+  options: MeetingAudioStorageConfigOptions = {}
+): MeetingAudioStorageConfig {
+  const env = options.env ?? process.env;
+  const nodeEnv = options.nodeEnv ?? env.NODE_ENV ?? 'development';
+  const configuredRoot = env[STORAGE_ROOT_ENV_KEY]?.trim();
+  const rootPath = resolveMeetingAudioStorageRoot(options);
+
+  if (configuredRoot) {
+    return {
+      rootPath,
+      configured: true,
+      persistent: true,
+      message: `会议音频使用持久化目录：${rootPath}`,
+    };
+  }
+
+  if (nodeEnv === 'production') {
+    return {
+      rootPath,
+      configured: false,
+      persistent: false,
+      message: `${STORAGE_ROOT_ENV_KEY} 未配置，生产环境重启后会议音频可能丢失`,
+    };
+  }
+
+  return {
+    rootPath,
+    configured: true,
+    persistent: false,
+    message: `未配置 ${STORAGE_ROOT_ENV_KEY}，当前使用本地目录：${rootPath}`,
+  };
+}
 
 function getMeetingAudioDir(meetingId: string) {
-  return path.join(STORAGE_ROOT, meetingId);
+  return path.join(resolveMeetingAudioStorageRoot(), meetingId);
 }
 
 export function getMeetingAudioPath(meetingId: string) {

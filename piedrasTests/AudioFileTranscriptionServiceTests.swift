@@ -4,6 +4,46 @@ import Testing
 
 struct AudioFileTranscriptionServiceTests {
     @Test
+    func liveAsrReadyGateTimesOutWithoutReadySignal() async throws {
+        let gate = ASRReadyGate()
+
+        await #expect(throws: Error.self) {
+            try await gate.waitUntilReady(timeout: .milliseconds(50))
+        }
+    }
+
+    @Test
+    func liveAsrReadyGateCompletesAfterReadySignal() async throws {
+        let gate = ASRReadyGate()
+
+        let waiter = Task {
+            try await gate.waitUntilReady(timeout: .seconds(1))
+        }
+
+        try await Task.sleep(for: .milliseconds(20))
+        await gate.markReady()
+        try await waiter.value
+    }
+
+    @Test
+    func liveAsrBufferPolicyFlagsOverflowWhenIncomingAudioExceedsCap() {
+        #expect(
+            ASRBufferPolicy.shouldFailPendingBuffer(
+                currentBufferedBytes: 30_000,
+                incomingBytes: 2_001,
+                maxBufferedBytes: 32_000
+            )
+        )
+        #expect(
+            ASRBufferPolicy.shouldFailPendingBuffer(
+                currentBufferedBytes: 30_000,
+                incomingBytes: 2_000,
+                maxBufferedBytes: 32_000
+            ) == false
+        )
+    }
+
+    @Test
     func treatsPostStopNormalCloseAsGracefulCompletion() {
         let context = AudioFileTranscriptionTransportFailureContext(
             didBeginFinalization: true,
