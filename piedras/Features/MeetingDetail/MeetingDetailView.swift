@@ -1,3 +1,4 @@
+import PhotosUI
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -72,6 +73,10 @@ struct MeetingDetailView: View {
     @State private var currentNotesOverride: String?
     @State private var enhancedNotesDraft = ""
     @State private var toastMessage: String?
+    @State private var showsAttachmentMenu = false
+    @State private var showsNoteAttachmentCamera = false
+    @State private var showsNoteAttachmentPhotosPicker = false
+    @State private var selectedNoteAttachmentItems: [PhotosPickerItem] = []
     @FocusState private var isTitleRenameFocused: Bool
     @State private var recBadgePulse = false
     @State private var recordingNoteFocusRequest = 0
@@ -80,6 +85,8 @@ struct MeetingDetailView: View {
     private let topAnchorID = "MeetingDetailTopAnchor"
     private let actionMenuTopInset: CGFloat = 70
     private let actionMenuHorizontalInset: CGFloat = 24
+    private let attachmentMenuTopInset: CGFloat = 70
+    private let attachmentMenuHorizontalInset: CGFloat = 76
 
     var body: some View {
         Group {
@@ -190,6 +197,11 @@ struct MeetingDetailView: View {
             }
         }
         .overlay {
+            if showsAttachmentMenu {
+                attachmentMenuOverlay(meeting: meeting)
+            }
+        }
+        .overlay {
             if showsTitleRenameDialog {
                 titleRenameOverlay(meeting: meeting)
             }
@@ -222,12 +234,22 @@ struct MeetingDetailView: View {
         .sheet(isPresented: $showsNotesDrawer) {
             if let meeting = meetingStore.meeting(withID: meetingID) {
                 MeetingNotesDrawer(
+                    meeting: meeting,
                     initialText: currentNotesText(for: meeting),
                     onClose: {
                         closeNotesDrawer(for: meeting)
                     },
                     onTextChange: { newValue in
                         scheduleNoteSave(newValue, for: meeting)
+                    },
+                    onTakePhoto: {
+                        openNoteAttachmentCamera(for: meeting)
+                    },
+                    onSelectPhotos: {
+                        openNoteAttachmentPhotos(for: meeting)
+                    },
+                    onDeleteAttachment: { fileName in
+                        meetingStore.removeNoteAttachment(fileName: fileName, from: meeting)
                     }
                 )
             }
@@ -242,6 +264,19 @@ struct MeetingDetailView: View {
                     showsTranscriptSheet = false
                 }
             }
+        }
+        .fullScreenCover(isPresented: $showsNoteAttachmentCamera) {
+            CameraImagePicker(onImageCaptured: handleCapturedNoteAttachment)
+                .ignoresSafeArea()
+        }
+        .photosPicker(
+            isPresented: $showsNoteAttachmentPhotosPicker,
+            selection: $selectedNoteAttachmentItems,
+            maxSelectionCount: max(noteAttachmentSelectionLimit, 1),
+            matching: .images
+        )
+        .onChange(of: selectedNoteAttachmentItems) { _, items in
+            handleSelectedNoteAttachments(items)
         }
     }
 
@@ -265,6 +300,7 @@ struct MeetingDetailView: View {
     private func topBar(meeting: Meeting) -> some View {
         HStack(alignment: .center, spacing: 12) {
             AppGlassCircleButton(systemName: "chevron.left", accessibilityLabel: AppStrings.current.back) {
+                closeAttachmentMenu()
                 closeActionMenu()
                 dismiss()
             }
@@ -313,6 +349,7 @@ struct MeetingDetailView: View {
         switch action {
         case .transcript:
             Button {
+                closeAttachmentMenu()
                 closeActionMenu()
                 showsTranscriptSheet = true
             } label: {
@@ -330,8 +367,24 @@ struct MeetingDetailView: View {
             .accessibilityLabel(AppStrings.current.share)
             .accessibilityIdentifier("MeetingShareButton")
 
+        case .attachments:
+            Button {
+                closeActionMenu()
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
+                    showsAttachmentMenu.toggle()
+                }
+            } label: {
+                detailToolLabel(systemName: "paperclip")
+            }
+            .buttonStyle(.plain)
+            .disabled(!meetingStore.canAddNoteAttachment(to: meeting))
+            .opacity(meetingStore.canAddNoteAttachment(to: meeting) ? 1 : 0.4)
+            .accessibilityLabel(AppStrings.current.attachments)
+            .accessibilityIdentifier("MeetingDetailAttachmentButton")
+
         case .more:
             Button {
+                closeAttachmentMenu()
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
                     showsActionMenu.toggle()
                 }
@@ -418,6 +471,29 @@ struct MeetingDetailView: View {
         .accessibilityIdentifier("MeetingDetailActionMenu")
     }
 
+    private func attachmentMenuOverlay(meeting: Meeting) -> some View {
+        let chrome = MeetingDetailChrome.actionMenuChrome
+
+        return ZStack(alignment: .topTrailing) {
+            Rectangle()
+                .fill(Color.black.opacity(chrome.backdropOpacity))
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .accessibilityIdentifier("MeetingDetailAttachmentMenuBackdrop")
+                .onTapGesture {
+                    closeAttachmentMenu()
+                }
+
+            attachmentMenu(meeting: meeting)
+                .padding(.top, attachmentMenuTopInset)
+                .padding(.trailing, attachmentMenuHorizontalInset)
+                .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("MeetingDetailAttachmentMenu")
+    }
+
     private func documentPage(meeting: Meeting) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             if isRecordingThisMeeting {
@@ -469,6 +545,25 @@ struct MeetingDetailView: View {
                 ) {
                     recordingNotePrompt(chrome: chrome)
                 }
+            }
+
+            if meeting.hasNoteAttachments {
+                MeetingNoteAttachmentsSection(
+                    meeting: meeting,
+                    showsInlineAddActions: false,
+                    canAddMore: meetingStore.canAddNoteAttachment(to: meeting),
+                    showsRefreshHint: meeting.hasPendingImageTextRefresh,
+                    onTakePhoto: {
+                        openNoteAttachmentCamera(for: meeting)
+                    },
+                    onSelectPhotos: {
+                        openNoteAttachmentPhotos(for: meeting)
+                    },
+                    onDelete: { fileName in
+                        meetingStore.removeNoteAttachment(fileName: fileName, from: meeting)
+                    }
+                )
+                .padding(.top, 18)
             }
 
             HStack {
@@ -706,6 +801,63 @@ struct MeetingDetailView: View {
         )
     }
 
+    private func attachmentMenu(meeting: Meeting) -> some View {
+        let chrome = MeetingDetailChrome.actionMenuChrome
+
+        return HStack(spacing: 10) {
+            attachmentMenuButton(
+                systemName: "photo.on.rectangle.angled",
+                label: AppStrings.current.annotationAddImage
+            ) {
+                openNoteAttachmentPhotos(for: meeting)
+            }
+
+            attachmentMenuButton(
+                systemName: "camera",
+                label: AppStrings.current.annotationTakePhoto
+            ) {
+                openNoteAttachmentCamera(for: meeting)
+            }
+        }
+        .padding(10)
+        .background(AppTheme.surface)
+        .background {
+            ZStack(alignment: .topLeading) {
+                Rectangle()
+                    .fill(AppTheme.backgroundSecondary.opacity(chrome.haloOpacity))
+                    .padding(-chrome.haloExpansion)
+
+                Rectangle()
+                    .fill(AppTheme.mutedInk.opacity(chrome.shadowOpacity))
+                    .offset(x: chrome.shadowOffset, y: chrome.shadowOffset)
+            }
+        }
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+        )
+    }
+
+    private func attachmentMenuButton(
+        systemName: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemName)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(AppTheme.ink)
+                .frame(width: 44, height: 44)
+                .background(AppTheme.background)
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
     private func actionItems(meeting: Meeting) -> [MeetingActionItem] {
         let transcript = meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
         let menuItems = MeetingDetailChrome.actionMenuItems(
@@ -749,8 +901,7 @@ struct MeetingDetailView: View {
                     isDisabled: false
                 ) {
                     closeActionMenu()
-                    let content = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let content = copyNotesContent(for: meeting)
                     UIPasteboard.general.string = content
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     showToast(AppStrings.current.copiedNotes)
@@ -805,6 +956,7 @@ struct MeetingDetailView: View {
     private func openTitleRenameDialog(for meeting: Meeting) {
         titleDraft = currentRawTitle(for: meeting)
         closeActionMenu()
+        closeAttachmentMenu()
         showsTitleRenameDialog = true
         Task { @MainActor in
             isTitleRenameFocused = true
@@ -814,6 +966,7 @@ struct MeetingDetailView: View {
     private func openEnhancedNotesEditor(for meeting: Meeting) {
         enhancedNotesDraft = meeting.enhancedNotes
         closeActionMenu()
+        closeAttachmentMenu()
         activeSheet = .enhancedNotesEditor
     }
 
@@ -828,18 +981,21 @@ struct MeetingDetailView: View {
         return "\(meeting.displayTitle)\n\n\(body)"
     }
 
-    private func copyCurrentContent(for meeting: Meeting) {
-        let content = MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
-        let toast = AppStrings.current.copiedNotes
+    private func copyNotesContent(for meeting: Meeting) -> String {
+        if isRecordingThisMeeting {
+            return currentNotesText(for: meeting).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
 
-        UIPasteboard.general.string = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        UINotificationFeedbackGenerator().notificationOccurred(.success)
-        closeActionMenu()
-        showToast(toast)
+        return MarkdownDocumentFormatter.plainText(from: meeting.enhancedNotes)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func closeActionMenu() {
         showsActionMenu = false
+    }
+
+    private func closeAttachmentMenu() {
+        showsAttachmentMenu = false
     }
 
     private func showToast(_ message: String) {
@@ -914,6 +1070,69 @@ struct MeetingDetailView: View {
         }
 
         return 160  // notesTeaser + chatCTA
+    }
+
+    private var noteAttachmentSelectionLimit: Int {
+        guard let meeting = meetingStore.meeting(withID: meetingID) else {
+            return 0
+        }
+
+        return meetingStore.noteAttachmentLimit(for: meeting)
+    }
+
+    private func openNoteAttachmentCamera(for meeting: Meeting) {
+        closeActionMenu()
+        closeAttachmentMenu()
+
+        guard meetingStore.canAddNoteAttachment(to: meeting) else {
+            showToast(AppStrings.current.noteAttachmentLimitReached(10))
+            return
+        }
+
+        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+            showToast(AppStrings.current.cameraUnavailable)
+            return
+        }
+
+        showsNoteAttachmentCamera = true
+    }
+
+    private func openNoteAttachmentPhotos(for meeting: Meeting) {
+        closeActionMenu()
+        closeAttachmentMenu()
+
+        guard meetingStore.canAddNoteAttachment(to: meeting) else {
+            showToast(AppStrings.current.noteAttachmentLimitReached(10))
+            return
+        }
+
+        showsNoteAttachmentPhotosPicker = true
+    }
+
+    private func handleCapturedNoteAttachment(_ image: UIImage) {
+        guard let meeting = meetingStore.meeting(withID: meetingID) else { return }
+        meetingStore.addNoteAttachment(image, to: meeting)
+    }
+
+    private func handleSelectedNoteAttachments(_ items: [PhotosPickerItem]) {
+        guard let meeting = meetingStore.meeting(withID: meetingID) else {
+            selectedNoteAttachmentItems = []
+            return
+        }
+
+        let allowedItems = Array(items.prefix(meetingStore.noteAttachmentLimit(for: meeting)))
+        for item in allowedItems {
+            Task {
+                guard let data = try? await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { return }
+
+                await MainActor.run {
+                    guard let meeting = meetingStore.meeting(withID: meetingID) else { return }
+                    meetingStore.addNoteAttachment(image, to: meeting)
+                }
+            }
+        }
+        selectedNoteAttachmentItems = []
     }
 
     @ViewBuilder
@@ -1303,20 +1522,32 @@ private struct MeetingDetailSurfaceSheet<Content: View>: View {
 }
 
 private struct MeetingNotesDrawer: View {
+    let meeting: Meeting
     let initialText: String
     let onClose: () -> Void
     let onTextChange: (String) -> Void
+    let onTakePhoto: () -> Void
+    let onSelectPhotos: () -> Void
+    let onDeleteAttachment: (String) -> Void
 
     @State private var draft: String
 
     init(
+        meeting: Meeting,
         initialText: String,
         onClose: @escaping () -> Void,
-        onTextChange: @escaping (String) -> Void
+        onTextChange: @escaping (String) -> Void,
+        onTakePhoto: @escaping () -> Void,
+        onSelectPhotos: @escaping () -> Void,
+        onDeleteAttachment: @escaping (String) -> Void
     ) {
+        self.meeting = meeting
         self.initialText = initialText
         self.onClose = onClose
         self.onTextChange = onTextChange
+        self.onTakePhoto = onTakePhoto
+        self.onSelectPhotos = onSelectPhotos
+        self.onDeleteAttachment = onDeleteAttachment
         _draft = State(initialValue: initialText)
     }
 
@@ -1341,6 +1572,18 @@ private struct MeetingNotesDrawer: View {
                 )
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
+
+                MeetingNoteAttachmentsSection(
+                    meeting: meeting,
+                    showsInlineAddActions: true,
+                    canAddMore: meeting.noteAttachmentFileNames.count < 10,
+                    showsRefreshHint: meeting.hasPendingImageTextRefresh,
+                    onTakePhoto: onTakePhoto,
+                    onSelectPhotos: onSelectPhotos,
+                    onDelete: onDeleteAttachment
+                )
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
                 .padding(.bottom, 36)
             }
             .scrollDismissesKeyboard(.interactively)

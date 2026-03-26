@@ -74,6 +74,7 @@ final class AppContainer {
             settingsStore: settingsStore,
             apiClient: apiClient
         )
+        annotationImageTextExtractor = VisionAnnotationImageTextExtractor()
         meetingStore = MeetingStore(
             repository: meetingRepository,
             chatSessionRepository: chatSessionRepository,
@@ -86,7 +87,8 @@ final class AppContainer {
             apiClient: apiClient,
             asrService: asrService,
             workspaceBootstrapService: workspaceBootstrapService,
-            meetingSyncService: meetingSyncService
+            meetingSyncService: meetingSyncService,
+            noteAttachmentImageTextExtractor: annotationImageTextExtractor
         )
         globalChatStore = GlobalChatStore(
             apiClient: apiClient,
@@ -96,7 +98,6 @@ final class AppContainer {
             meetingRepository: meetingRepository
         )
         annotationRepository = AnnotationRepository(modelContext: modelContainer.mainContext)
-        annotationImageTextExtractor = VisionAnnotationImageTextExtractor()
         annotationStore = AnnotationStore(
             repository: annotationRepository,
             imageTextExtractor: annotationImageTextExtractor

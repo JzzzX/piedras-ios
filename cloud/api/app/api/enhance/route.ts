@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
       userNotes,
       meetingTitle,
       segmentCommentsContext,
+      noteAttachmentsContext,
       recipePrompt,
       promptOptions,
       llmRuntimeConfig,
@@ -51,6 +52,7 @@ export async function POST(req: NextRequest) {
 ${buildMeetingMaterialContext({
   transcript,
   userNotes,
+  noteAttachmentsContext,
   segmentCommentsContext,
 })}
 

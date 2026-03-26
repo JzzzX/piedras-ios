@@ -144,6 +144,10 @@ struct SchemaMigrationCompatibilityTests {
         #expect(meetings.first?.hasPendingImageTextRefresh == false)
         #expect(meetings.first?.meetingTypeRaw == "通用")
         #expect(meetings.first?.meetingType == "通用")
+        #expect(meetings.first?.noteAttachmentFileNames == [])
+        #expect(meetings.first?.noteAttachmentTextContext == "")
+        #expect(meetings.first?.noteAttachmentTextStatus == .idle)
+        #expect(meetings.first?.noteAttachmentTextUpdatedAt == nil)
         #expect(meetings.first?.speakers == [:])
         #expect(meetings.first?.speakerDiarizationState == .idle)
 

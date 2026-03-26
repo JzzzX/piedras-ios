@@ -61,6 +61,13 @@ final class Meeting {
     var durationSeconds: Int
     var userNotesPlainText: String
     var enhancedNotes: String
+    @Attribute(originalName: "noteAttachmentFileNames")
+    private var noteAttachmentFileNamesValue: [String]?
+    @Attribute(originalName: "noteAttachmentTextContext")
+    private var noteAttachmentTextContextValue: String?
+    @Attribute(originalName: "noteAttachmentTextStatusRaw")
+    private var noteAttachmentTextStatusRawValue: String?
+    var noteAttachmentTextUpdatedAt: Date?
     var audioLocalPath: String?
     var audioRemotePath: String?
     var audioMimeType: String?
@@ -102,6 +109,10 @@ final class Meeting {
         durationSeconds: Int = 0,
         userNotesPlainText: String = "",
         enhancedNotes: String = "",
+        noteAttachmentFileNames: [String] = [],
+        noteAttachmentTextContext: String = "",
+        noteAttachmentTextStatus: AnnotationImageTextStatus = .idle,
+        noteAttachmentTextUpdatedAt: Date? = nil,
         audioLocalPath: String? = nil,
         audioRemotePath: String? = nil,
         audioMimeType: String? = nil,
@@ -132,6 +143,10 @@ final class Meeting {
         self.durationSeconds = durationSeconds
         self.userNotesPlainText = userNotesPlainText
         self.enhancedNotes = enhancedNotes
+        self.noteAttachmentFileNamesValue = noteAttachmentFileNames
+        self.noteAttachmentTextContextValue = noteAttachmentTextContext
+        self.noteAttachmentTextStatusRawValue = noteAttachmentTextStatus.rawValue
+        self.noteAttachmentTextUpdatedAt = noteAttachmentTextUpdatedAt
         self.audioLocalPath = audioLocalPath
         self.audioRemotePath = audioRemotePath
         self.audioMimeType = audioMimeType
@@ -180,6 +195,21 @@ final class Meeting {
         set { meetingTypeRaw = newValue }
     }
 
+    var noteAttachmentFileNames: [String] {
+        get { noteAttachmentFileNamesValue ?? [] }
+        set { noteAttachmentFileNamesValue = newValue }
+    }
+
+    var noteAttachmentTextContext: String {
+        get { noteAttachmentTextContextValue ?? "" }
+        set { noteAttachmentTextContextValue = newValue }
+    }
+
+    var noteAttachmentTextStatus: AnnotationImageTextStatus {
+        get { AnnotationImageTextStatus(rawValue: noteAttachmentTextStatusRawValue ?? "") ?? .idle }
+        set { noteAttachmentTextStatusRawValue = newValue.rawValue }
+    }
+
     var speakers: [String: String] {
         get { Self.decodeSpeakers(speakersRawValue ?? Self.encodeSpeakers([:])) }
         set { speakersRawValue = Self.encodeSpeakers(newValue) }
@@ -193,6 +223,14 @@ final class Meeting {
     var hasPendingImageTextRefresh: Bool {
         get { hasPendingImageTextRefreshValue ?? false }
         set { hasPendingImageTextRefreshValue = newValue }
+    }
+
+    var hasNoteAttachments: Bool {
+        !noteAttachmentFileNames.isEmpty
+    }
+
+    var hasNoteAttachmentText: Bool {
+        !noteAttachmentTextContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     var displayTitle: String {
