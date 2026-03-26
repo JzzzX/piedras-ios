@@ -3,13 +3,50 @@ import SwiftUI
 struct AppRootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(AppRouter.self) private var router
+    @Environment(AuthStore.self) private var authStore
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(MeetingStore.self) private var meetingStore
+    @State private var didAttemptSessionRestore = false
 
     var body: some View {
+        Group {
+            if isResolvingSession {
+                sessionLoadingView
+            } else if authStore.isAuthenticated {
+                authenticatedContent
+            } else {
+                AuthView()
+            }
+        }
+        .task {
+            guard !authStore.isAuthenticated else {
+                didAttemptSessionRestore = true
+                return
+            }
+
+            guard !didAttemptSessionRestore else { return }
+            didAttemptSessionRestore = true
+            await authStore.restoreSession()
+        }
+        .onChange(of: authStore.phase, initial: true) { _, newPhase in
+            guard newPhase == .authenticated else { return }
+            didAttemptSessionRestore = true
+            handleAuthenticatedAppearance()
+        }
+        .onChange(of: scenePhase, initial: true) { _, newPhase in
+            guard authStore.isAuthenticated else { return }
+            meetingStore.handleScenePhaseChange(newPhase)
+        }
+        .onChange(of: settingsStore.requiresInitialBackendSetup, initial: true) { _, requiresSetup in
+            guard authStore.isAuthenticated, requiresSetup else { return }
+            presentSettingsIfNeeded()
+        }
+    }
+
+    private var authenticatedContent: some View {
         @Bindable var router = router
 
-        NavigationStack(path: $router.path) {
+        return NavigationStack(path: $router.path) {
             MeetingListView()
                 .navigationDestination(for: AppRoute.self) { route in
                     switch route {
@@ -18,9 +55,7 @@ struct AppRootView: View {
                     }
                 }
                 .task {
-                    meetingStore.loadIfNeeded()
-                    meetingStore.handleScenePhaseChange(scenePhase)
-                    presentSettingsIfNeeded()
+                    handleAuthenticatedAppearance()
                 }
         }
         .sheet(item: $router.sheet) { sheet in
@@ -42,17 +77,38 @@ struct AppRootView: View {
                 .interactiveDismissDisabled(settingsStore.requiresInitialBackendSetup)
             }
         }
-        .onChange(of: scenePhase, initial: true) { _, newPhase in
-            meetingStore.handleScenePhaseChange(newPhase)
-        }
-        .onChange(of: settingsStore.requiresInitialBackendSetup, initial: true) { _, requiresSetup in
-            guard requiresSetup else { return }
-            presentSettingsIfNeeded()
+    }
+
+    private var sessionLoadingView: some View {
+        ZStack {
+            AppGlassBackdrop()
+
+            VStack(spacing: 14) {
+                ProgressView()
+                    .tint(AppTheme.ink)
+
+                Text(AppStrings.current.authRestoringSession)
+                    .font(AppTheme.bodyFont(size: 15, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 20)
+            .softCard()
         }
     }
 
     private func presentSettingsIfNeeded() {
         guard settingsStore.requiresInitialBackendSetup else { return }
         router.showSettings()
+    }
+
+    private var isResolvingSession: Bool {
+        authStore.phase == .restoring || (!didAttemptSessionRestore && !authStore.isAuthenticated)
+    }
+
+    private func handleAuthenticatedAppearance() {
+        meetingStore.loadIfNeeded()
+        meetingStore.handleScenePhaseChange(scenePhase)
+        presentSettingsIfNeeded()
     }
 }

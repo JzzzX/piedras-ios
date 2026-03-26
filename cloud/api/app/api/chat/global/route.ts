@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, textResponse } from '@/lib/api-error';
 import { buildGlobalChatContextMessage } from '@/lib/meeting-ai-context';
 import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
@@ -117,6 +118,11 @@ function buildNoResultMessage(filters: GlobalChatFilters): string {
 
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/chat/global');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const {
@@ -148,7 +154,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const fallbackRetrieval = await retrieveGlobalMeetingContext(q, (filters || {}) as GlobalChatFilters);
+    const scopedFilters = {
+      ...(filters || {}),
+      workspaceId: auth.workspace.id,
+    } as GlobalChatFilters;
+
+    const fallbackRetrieval = await retrieveGlobalMeetingContext(q, scopedFilters);
     const retrieval = selectRetrievalResult({
       localRetrievalContext,
       localRetrievalSources,
@@ -156,7 +167,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (retrieval.sources.length === 0) {
-      return textResponse(context, buildNoResultMessage((filters || {}) as GlobalChatFilters), {
+      return textResponse(context, buildNoResultMessage(scopedFilters), {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }

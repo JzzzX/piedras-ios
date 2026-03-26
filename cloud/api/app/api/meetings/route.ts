@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
+import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
-import { resolveWorkspaceId } from '@/lib/default-workspace';
 
 interface SegmentPayload {
   id: string;
@@ -24,6 +24,11 @@ interface ChatMessagePayload {
 // GET /api/meetings — 获取会议列表
 export async function GET(req: NextRequest) {
   const context = createRequestContext(req, '/api/meetings');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const { searchParams } = new URL(req.url);
@@ -31,13 +36,9 @@ export async function GET(req: NextRequest) {
     const dateFrom = searchParams.get('dateFrom');
     const dateTo = searchParams.get('dateTo');
     const collectionId = searchParams.get('collectionId');
-    const workspaceId = searchParams.get('workspaceId');
-
-    const where: Record<string, unknown> = {};
-
-    if (workspaceId) {
-      where.workspaceId = workspaceId;
-    }
+    const where: Record<string, unknown> = {
+      workspaceId: auth.workspace.id,
+    };
 
     if (query) {
       where.OR = [
@@ -109,6 +110,10 @@ export async function GET(req: NextRequest) {
 
     return jsonResponse(context, meetings);
   } catch (error) {
+    if (error instanceof Error && error.message === '当前账号无权修改该会议') {
+      return errorResponse(context, 403, error.message, error);
+    }
+
     return errorResponse(
       context,
       500,
@@ -121,6 +126,11 @@ export async function GET(req: NextRequest) {
 // POST /api/meetings — 创建或保存会议
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/meetings');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const body = await req.json();
@@ -131,7 +141,6 @@ export async function POST(req: NextRequest) {
       status,
       duration,
       collectionId,
-      workspaceId,
       userNotes,
       enhancedNotes,
       enhanceRecipeId,
@@ -147,45 +156,46 @@ export async function POST(req: NextRequest) {
     const normalizedDate = date ? new Date(date) : new Date();
     const normalizedSegments = (segments || []) as SegmentPayload[];
     const normalizedChatMessages = (chatMessages || []) as ChatMessagePayload[];
-    const resolvedWorkspaceId = await resolveWorkspaceId(workspaceId);
-
     const meeting = await prisma.$transaction(async (tx: any) => {
-      const upsertedMeeting = await tx.meeting.upsert({
-        where: { id: id || '' },
-        create: {
-          id: id || undefined,
-          title: title || '',
-          date: normalizedDate,
-          status: status || 'ended',
-          duration: duration || 0,
-          collectionId: collectionId || null,
-          workspaceId: resolvedWorkspaceId,
-          userNotes: userNotes || '',
-          enhancedNotes: enhancedNotes || '',
-          enhanceRecipeId: enhanceRecipeId || null,
-          roundLabel: roundLabel || '',
-          interviewerName: interviewerName || '',
-          recommendation: recommendation || 'pending',
-          handoffNote: handoffNote || '',
-          speakers: JSON.stringify(speakers || {}),
-        },
-        update: {
-          title: title || '',
-          date: normalizedDate,
-          status: status || 'ended',
-          duration: duration || 0,
-          collectionId: collectionId || null,
-          workspaceId: resolvedWorkspaceId,
-          userNotes: userNotes || '',
-          enhancedNotes: enhancedNotes || '',
-          enhanceRecipeId: enhanceRecipeId || null,
-          roundLabel: roundLabel || '',
-          interviewerName: interviewerName || '',
-          recommendation: recommendation || 'pending',
-          handoffNote: handoffNote || '',
-          speakers: JSON.stringify(speakers || {}),
-        },
-      });
+      const existingMeeting = id
+        ? await tx.meeting.findUnique({
+            where: { id },
+            select: { id: true, workspaceId: true },
+          })
+        : null;
+
+      if (existingMeeting && existingMeeting.workspaceId !== auth.workspace.id) {
+        throw new Error('当前账号无权修改该会议');
+      }
+
+      const meetingData = {
+        title: title || '',
+        date: normalizedDate,
+        status: status || 'ended',
+        duration: duration || 0,
+        collectionId: collectionId || null,
+        workspaceId: auth.workspace.id,
+        userNotes: userNotes || '',
+        enhancedNotes: enhancedNotes || '',
+        enhanceRecipeId: enhanceRecipeId || null,
+        roundLabel: roundLabel || '',
+        interviewerName: interviewerName || '',
+        recommendation: recommendation || 'pending',
+        handoffNote: handoffNote || '',
+        speakers: JSON.stringify(speakers || {}),
+      };
+
+      const upsertedMeeting = existingMeeting
+        ? await tx.meeting.update({
+            where: { id: existingMeeting.id },
+            data: meetingData,
+          })
+        : await tx.meeting.create({
+            data: {
+              id: id || undefined,
+              ...meetingData,
+            },
+          });
 
       await tx.transcriptSegment.deleteMany({
         where: { meetingId: upsertedMeeting.id },

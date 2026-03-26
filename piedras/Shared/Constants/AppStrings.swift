@@ -131,6 +131,7 @@ struct AppStringTable {
     var resetConversation: String { isChinese ? "重置对话" : "Reset conversation" }
     var settings: String { isChinese ? "设置" : "Settings" }
     var newChat: String { isChinese ? "新对话" : "New chat" }
+    var regenerateAnswer: String { isChinese ? "重新生成回答" : "Regenerate answer" }
     var chatHistoryEmpty: String { isChinese ? "开始一个新问题，或点击 ⟲ 查看历史对话。" : "Start a new question, or tap ⟲ to view chat history." }
     var chatHistoryTitle: String { isChinese ? "历史对话" : "Chat History" }
     var chatHistoryDrawerEmpty: String { isChinese ? "暂无历史对话" : "No chat history" }
@@ -225,12 +226,36 @@ struct AppStringTable {
     // ── SettingsView ─────────────────────────────────────────────
 
     var settingsTitle: String { isChinese ? "设置" : "Settings" }
+    var accountSectionTitle: String { isChinese ? "账号" : "Account" }
     var languageLabel: String { isChinese ? "语言" : "Language" }
     var about: String { isChinese ? "关于" : "About" }
     var version: String { isChinese ? "版本" : "Version" }
     var serviceMode: String { isChinese ? "服务模式" : "Service mode" }
     var developerMode: String { isChinese ? "开发者模式" : "Developer Mode" }
     var developerDiagnostics: String { isChinese ? "诊断与调试工具" : "Diagnostics and debug tools" }
+    var logoutAction: String { isChinese ? "退出登录" : "Log out" }
+
+    // ── AuthView ────────────────────────────────────────────────
+
+    var authSubtitle: String { isChinese ? "使用邮箱账号隔离你的录音与笔记数据。" : "Use your email account to isolate recordings and notes." }
+    var authLoginTab: String { isChinese ? "登录" : "Sign In" }
+    var authRegisterTab: String { isChinese ? "注册" : "Register" }
+    var authLoginAction: String { isChinese ? "登录账号" : "Sign In" }
+    var authRegisterAction: String { isChinese ? "注册并进入" : "Register" }
+    var authEmailLabel: String { isChinese ? "邮箱" : "Email" }
+    var authPasswordLabel: String { isChinese ? "密码" : "Password" }
+    var authInviteCodeLabel: String { isChinese ? "邀请码" : "Invite code" }
+    var authDisplayNameLabel: String { isChinese ? "昵称（可选）" : "Display name (optional)" }
+    var authWorkspaceLabel: String { isChinese ? "工作区" : "Workspace" }
+    var authPasswordPlaceholder: String { isChinese ? "至少 8 位" : "At least 8 characters" }
+    var authInviteCodePlaceholder: String { isChinese ? "输入内部邀请码" : "Enter your invite code" }
+    var authDisplayNamePlaceholder: String { isChinese ? "用于内部识别" : "Shown internally" }
+    var authRestoringSession: String { isChinese ? "正在恢复登录状态..." : "Restoring session..." }
+    var authResetHint: String { isChinese ? "V1 暂不支持自助找回密码，如需重置请联系内部同学。" : "Password reset is not self-service in V1. Please contact the team for help." }
+    var authSwitchHint: String { isChinese ? "切换账号请先退出当前账号，再重新登录。" : "To switch accounts, log out first and then sign in again." }
+    var authForceLogoutTitle: String { isChinese ? "放弃未同步数据并退出？" : "Discard unsynced data and log out?" }
+    var authForceLogoutAction: String { isChinese ? "强制退出" : "Force logout" }
+    var authForceLogoutMessage: String { isChinese ? "本地还有未同步数据，强制退出会直接清空这些本地内容。" : "There is unsynced local data. Force logout will remove it from this device." }
 
     // ── DeveloperSettingsView ────────────────────────────────────
 

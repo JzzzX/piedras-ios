@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
 import {
@@ -16,12 +17,20 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const context = createRequestContext(req, '/api/meetings/[id]/audio');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const { id } = await params;
 
-    const meeting = await prisma.meeting.findUnique({
-      where: { id },
+    const meeting = await prisma.meeting.findFirst({
+      where: {
+        id,
+        workspaceId: auth.workspace.id,
+      },
       select: { id: true, audioMimeType: true },
     });
 
@@ -50,6 +59,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const context = createRequestContext(req, '/api/meetings/[id]/audio');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const { id } = await params;
@@ -63,8 +77,11 @@ export async function POST(
       return errorResponse(context, 400, '缺少音频文件');
     }
 
-    const meeting = await prisma.meeting.findUnique({
-      where: { id },
+    const meeting = await prisma.meeting.findFirst({
+      where: {
+        id,
+        workspaceId: auth.workspace.id,
+      },
       select: { id: true },
     });
 

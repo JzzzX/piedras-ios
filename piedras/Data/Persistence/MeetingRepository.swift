@@ -60,6 +60,14 @@ final class MeetingRepository {
         try save()
     }
 
+    func deleteAllMeetings() throws {
+        let meetings = try fetchMeetings(includeDeleted: true)
+        for meeting in meetings {
+            modelContext.delete(meeting)
+        }
+        try save()
+    }
+
     func delete(_ chatMessage: ChatMessage) {
         modelContext.delete(chatMessage)
     }

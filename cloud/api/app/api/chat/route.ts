@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, textResponse } from '@/lib/api-error';
 import { buildMeetingMaterialContext } from '@/lib/meeting-ai-context';
 import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
@@ -67,6 +68,11 @@ function buildChatSystemPrompt(
 
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/chat');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const {

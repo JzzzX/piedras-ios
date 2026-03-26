@@ -2,10 +2,11 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AuthStore.self) private var authStore
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(MeetingStore.self) private var meetingStore
 
-    @State private var showDeveloperSettings = false
+    @State private var showForceLogoutConfirmation = false
 
     var body: some View {
         ZStack {
@@ -14,6 +15,45 @@ struct SettingsView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
                     header
+
+                    if let currentUser = authStore.currentUser {
+                        VStack(alignment: .leading, spacing: 8) {
+                            SectionLabel(title: AppStrings.current.accountSectionTitle)
+
+                            VStack(alignment: .leading, spacing: 12) {
+                                aboutRow(title: AppStrings.current.authEmailLabel, value: currentUser.email)
+
+                                if let workspace = authStore.currentWorkspace {
+                                    ThinDivider(inset: 0)
+                                    aboutRow(title: AppStrings.current.authWorkspaceLabel, value: workspace.name)
+                                }
+
+                                Button {
+                                    attemptLogout()
+                                } label: {
+                                    Text(
+                                        authStore.phase == .submitting
+                                            ? AppStrings.current.processing
+                                            : AppStrings.current.logoutAction
+                                    )
+                                    .font(AppTheme.bodyFont(size: 14, weight: .semibold))
+                                    .foregroundStyle(AppTheme.surface)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 42)
+                                    .background(Color(red: 0.68, green: 0.16, blue: 0.14))
+                                    .overlay(
+                                        Rectangle()
+                                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                                    )
+                                    .retroHardShadow()
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(authStore.phase == .submitting)
+                            }
+                            .padding(16)
+                            .softCard()
+                        }
+                    }
 
                     VStack(alignment: .leading, spacing: 8) {
                         SectionLabel(title: AppStrings.current.languageLabel)
@@ -69,6 +109,21 @@ struct SettingsView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .confirmationDialog(
+            AppStrings.current.authForceLogoutTitle,
+            isPresented: $showForceLogoutConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(AppStrings.current.authForceLogoutAction, role: .destructive) {
+                Task {
+                    _ = await authStore.logout(force: true)
+                    dismiss()
+                }
+            }
+            Button(AppStrings.current.cancel, role: .cancel) {}
+        } message: {
+            Text(authStore.logoutBlockedMessage ?? AppStrings.current.authForceLogoutMessage)
+        }
     }
 
     private var header: some View {
@@ -127,5 +182,16 @@ struct SettingsView: View {
                 .multilineTextAlignment(.trailing)
         }
         .padding(.vertical, 11)
+    }
+
+    private func attemptLogout() {
+        Task {
+            let didLogout = await authStore.logout()
+            if didLogout {
+                dismiss()
+            } else if authStore.logoutBlockedMessage != nil {
+                showForceLogoutConfirmation = true
+            }
+        }
     }
 }

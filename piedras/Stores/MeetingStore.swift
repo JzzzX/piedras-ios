@@ -96,6 +96,7 @@ final class MeetingStore {
     private var asrReconnectTask: Task<Void, Never>?
     private var scheduledSyncTasks: [String: Task<Void, Never>] = [:]
     private var fileTranscriptionTasks: [String: Task<Void, Never>] = [:]
+    private var chatStreamingTasks: [String: Task<Bool, Never>] = [:]
     private var backgroundTranscriptBackfillTask: Task<Void, Never>?
     private var backgroundTranscriptPCMBuffer = Data()
     private var shouldFlushBackgroundTranscriptTail = false
@@ -208,6 +209,59 @@ final class MeetingStore {
     var activeRecordingMeeting: Meeting? {
         guard let meetingID = recordingSessionStore.meetingID else { return nil }
         return meeting(withID: meetingID)
+    }
+
+    func logoutBlockingMessage() -> String? {
+        if recordingSessionStore.phase != .idle {
+            return "当前仍有录音进行中，请先结束录音。"
+        }
+
+        let pendingMeetings = ((try? repository.fetchMeetings(includeDeleted: true)) ?? [])
+            .filter { $0.syncState != .synced }
+
+        guard !pendingMeetings.isEmpty else {
+            return nil
+        }
+
+        return "还有 \(pendingMeetings.count) 条未同步数据，请先同步或确认放弃。"
+    }
+
+    func resetLocalAccountData() {
+        cancelAllBackgroundTasks()
+        stopActiveRecordingAndDiscardArtifactIfNeeded()
+
+        let allMeetings = ((try? repository.fetchMeetings(includeDeleted: true)) ?? [])
+        for meeting in allMeetings {
+            discardLocalMeetingState(for: meeting)
+            removeLocalAudioIfNeeded(for: meeting)
+        }
+
+        var resetErrorMessage: String?
+        do {
+            try repository.deleteAllMeetings()
+            try chatSessionRepository.deleteAllSessions()
+        } catch {
+            resetErrorMessage = error.localizedDescription
+        }
+
+        meetings = []
+        selectedMeetingID = nil
+        lastErrorMessage = resetErrorMessage
+        enhancingMeetingIDs.removeAll()
+        generatingTitleMeetingIDs.removeAll()
+        streamingChatMeetingIDs.removeAll()
+        transcribingMeetingIDs.removeAll()
+        activeChatSessionIDs.removeAll()
+        draftChatMeetingIDs.removeAll()
+        fileTranscriptionStatuses.removeAll()
+        fileTranscriptionPartials.removeAll()
+        settingsStore.hiddenWorkspaceID = nil
+        settingsStore.workspaceBootstrapState = .idle
+        settingsStore.workspaceStatusMessage = "等待登录"
+        settingsStore.syncStatusMessage = ""
+        settingsStore.resetRemoteStatus()
+        didLoad = false
+        didStartBackendPreparation = false
     }
 
     func loadIfNeeded() {
@@ -824,54 +878,19 @@ final class MeetingStore {
     func sendChatMessage(question: String, for meetingID: String) async -> Bool {
         let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuestion.isEmpty else { return false }
-        guard let meeting = meeting(withID: meetingID) else { return false }
-        guard !streamingChatMeetingIDs.contains(meetingID) else { return false }
-        prepareChatSessions(for: meetingID)
-        guard await ensureBackendReachable(force: false) else {
-            lastErrorMessage = "\(AppEnvironment.cloudName) 暂时不可用。"
-            return false
+        return await enqueueMeetingChatTask(for: meetingID) { [weak self] in
+            guard let self else { return false }
+            return await self.performSendChatMessage(
+                question: trimmedQuestion,
+                for: meetingID
+            )
         }
+    }
 
-        let session = activeChatSession(for: meetingID) ?? chatSessionRepository.makeDraftSession(scope: .meeting, meeting: meeting)
-        let payload = MeetingPayloadMapper.makeChatPayload(from: meeting, session: session, question: trimmedQuestion)
-        _ = chatSessionRepository.appendUserMessage(trimmedQuestion, to: session)
-        let assistantMessage = chatSessionRepository.appendAssistantPlaceholder(to: session)
-        draftChatMeetingIDs.remove(meetingID)
-        activeChatSessionIDs[meetingID] = session.id
-        meeting.markPending()
-
-        do {
-            try chatSessionRepository.save()
-        } catch {
-            lastErrorMessage = error.localizedDescription
-            return false
-        }
-
-        streamingChatMeetingIDs.insert(meetingID)
-        defer {
-            streamingChatMeetingIDs.remove(meetingID)
-            loadMeetings()
-        }
-
-        do {
-            let stream = try await apiClient.streamChat(payload)
-            for try await partialContent in stream {
-                assistantMessage.content = partialContent
-            }
-            assistantMessage.timestamp = .now
-            session.updatedAt = assistantMessage.timestamp
-            meeting.markPending()
-            try chatSessionRepository.save()
-            settingsStore.markLLMRequestSucceeded()
-            await syncMeetingIfPossible(meetingID: meetingID)
-            return true
-        } catch {
-            session.messages.removeAll(where: { $0.id == assistantMessage.id })
-            repository.delete(assistantMessage)
-            try? repository.save()
-            lastErrorMessage = error.localizedDescription
-            settingsStore.markLLMRequestFailed(message: error.localizedDescription)
-            return false
+    func regenerateLastChatResponse(for meetingID: String) async -> Bool {
+        await enqueueMeetingChatTask(for: meetingID) { [weak self] in
+            guard let self else { return false }
+            return await self.performRegenerateLastChatResponse(for: meetingID)
         }
     }
 
@@ -885,6 +904,15 @@ final class MeetingStore {
 
     func isStreamingChat(meetingID: String) -> Bool {
         streamingChatMeetingIDs.contains(meetingID)
+    }
+
+    func canRegenerateLastChatResponse(for meetingID: String) -> Bool {
+        guard !streamingChatMeetingIDs.contains(meetingID),
+              let session = activeChatSession(for: meetingID) else {
+            return false
+        }
+
+        return session.orderedMessages.contains(where: { $0.role == "user" })
     }
 
     func prepareChatSessions(for meetingID: String) {
@@ -1868,6 +1896,163 @@ final class MeetingStore {
         return settingsStore.apiReachable
     }
 
+    private func enqueueMeetingChatTask(
+        for meetingID: String,
+        operation: @escaping @MainActor () async -> Bool
+    ) async -> Bool {
+        guard chatStreamingTasks[meetingID] == nil else { return false }
+
+        let task = Task { @MainActor [weak self] in
+            defer {
+                self?.chatStreamingTasks.removeValue(forKey: meetingID)
+            }
+            return await operation()
+        }
+
+        chatStreamingTasks[meetingID] = task
+        return await task.value
+    }
+
+    private func performSendChatMessage(question: String, for meetingID: String) async -> Bool {
+        guard let meeting = meeting(withID: meetingID) else { return false }
+
+        prepareChatSessions(for: meetingID)
+        guard await ensureBackendReachable(force: false) else {
+            lastErrorMessage = "\(AppEnvironment.cloudName) 暂时不可用。"
+            return false
+        }
+
+        let session = activeChatSession(for: meetingID)
+            ?? chatSessionRepository.makeDraftSession(scope: .meeting, meeting: meeting)
+        let payload = MeetingPayloadMapper.makeChatPayload(
+            from: meeting,
+            session: session,
+            question: question
+        )
+        _ = chatSessionRepository.appendUserMessage(question, to: session)
+        let assistantMessage = chatSessionRepository.appendAssistantPlaceholder(to: session)
+        draftChatMeetingIDs.remove(meetingID)
+        activeChatSessionIDs[meetingID] = session.id
+        meeting.markPending()
+
+        do {
+            try chatSessionRepository.save()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            return false
+        }
+
+        return await streamMeetingChat(
+            payload: payload,
+            meeting: meeting,
+            session: session,
+            assistantMessage: assistantMessage,
+            meetingID: meetingID
+        ) {
+            session.messages.removeAll(where: { $0.id == assistantMessage.id })
+            repository.delete(assistantMessage)
+            try? repository.save()
+        }
+    }
+
+    private func performRegenerateLastChatResponse(for meetingID: String) async -> Bool {
+        guard let meeting = meeting(withID: meetingID) else { return false }
+
+        prepareChatSessions(for: meetingID)
+        guard await ensureBackendReachable(force: false) else {
+            lastErrorMessage = "\(AppEnvironment.cloudName) 暂时不可用。"
+            return false
+        }
+
+        guard let session = activeChatSession(for: meetingID) else {
+            return false
+        }
+
+        let orderedMessages = session.orderedMessages
+        guard let lastUserIndex = orderedMessages.lastIndex(where: { $0.role == "user" }) else {
+            return false
+        }
+
+        let question = orderedMessages[lastUserIndex].content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !question.isEmpty else { return false }
+
+        let history = Array(orderedMessages.prefix(lastUserIndex))
+        let trailingMessages = Array(orderedMessages.suffix(from: lastUserIndex + 1))
+        let reusableAssistant = trailingMessages.last(where: { $0.role == "assistant" })
+
+        for message in trailingMessages where message.id != reusableAssistant?.id {
+            session.messages.removeAll(where: { $0.id == message.id })
+            repository.delete(message)
+        }
+
+        let payload = MeetingPayloadMapper.makeChatPayload(
+            from: meeting,
+            history: history,
+            question: question
+        )
+        let assistantMessage = reusableAssistant ?? chatSessionRepository.appendAssistantPlaceholder(to: session)
+        let previousAssistantContent = assistantMessage.content
+        let previousAssistantTimestamp = assistantMessage.timestamp
+        assistantMessage.content = ""
+        meeting.markPending()
+
+        do {
+            try chatSessionRepository.save()
+        } catch {
+            assistantMessage.content = previousAssistantContent
+            assistantMessage.timestamp = previousAssistantTimestamp
+            lastErrorMessage = error.localizedDescription
+            return false
+        }
+
+        return await streamMeetingChat(
+            payload: payload,
+            meeting: meeting,
+            session: session,
+            assistantMessage: assistantMessage,
+            meetingID: meetingID
+        ) {
+            assistantMessage.content = previousAssistantContent
+            assistantMessage.timestamp = previousAssistantTimestamp
+            try? chatSessionRepository.save()
+        }
+    }
+
+    private func streamMeetingChat(
+        payload: ChatRequestPayload,
+        meeting: Meeting,
+        session: ChatSession,
+        assistantMessage: ChatMessage,
+        meetingID: String,
+        onFailure: @MainActor () -> Void
+    ) async -> Bool {
+        streamingChatMeetingIDs.insert(meetingID)
+        defer {
+            streamingChatMeetingIDs.remove(meetingID)
+            loadMeetings()
+        }
+
+        do {
+            let stream = try await apiClient.streamChat(payload)
+            for try await partialContent in stream {
+                assistantMessage.content = partialContent
+            }
+
+            assistantMessage.timestamp = .now
+            session.updatedAt = assistantMessage.timestamp
+            meeting.markPending()
+            try chatSessionRepository.save()
+            settingsStore.markLLMRequestSucceeded()
+            await syncMeetingIfPossible(meetingID: meetingID)
+            return true
+        } catch {
+            onFailure()
+            lastErrorMessage = error.localizedDescription
+            settingsStore.markLLMRequestFailed(message: error.localizedDescription)
+            return false
+        }
+    }
+
     private func scheduleMeetingSync(meetingID: String, delay: Duration) {
         scheduledSyncTasks[meetingID]?.cancel()
         scheduledSyncTasks[meetingID] = Task { @MainActor [weak self] in
@@ -2159,6 +2344,41 @@ final class MeetingStore {
     private func recordBackgroundSyncIssue(detail: String, summary: String) {
         settingsStore.syncStatusMessage = summary
         settingsStore.workspaceStatusMessage = detail
+    }
+
+    private func cancelAllBackgroundTasks() {
+        backendPreparationTask?.cancel()
+        backendPreparationTask = nil
+        asrReconnectTask?.cancel()
+        asrReconnectTask = nil
+        backgroundTranscriptBackfillTask?.cancel()
+        backgroundTranscriptBackfillTask = nil
+
+        for task in scheduledSyncTasks.values {
+            task.cancel()
+        }
+        scheduledSyncTasks.removeAll()
+
+        for task in fileTranscriptionTasks.values {
+            task.cancel()
+        }
+        fileTranscriptionTasks.removeAll()
+
+        Task { [weak asrService] in
+            await asrService?.stopStreaming()
+        }
+    }
+
+    private func stopActiveRecordingAndDiscardArtifactIfNeeded() {
+        guard recordingSessionStore.phase != .idle else { return }
+
+        if let artifact = try? audioRecorderService.stopRecording(),
+           FileManager.default.fileExists(atPath: artifact.fileURL.path) {
+            try? FileManager.default.removeItem(at: artifact.fileURL)
+        }
+
+        recordingSessionStore.reset()
+        updateKeepScreenAwake()
     }
 
     private func removeLocalAudioIfNeeded(for meeting: Meeting) {

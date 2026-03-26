@@ -12,6 +12,18 @@ private struct MeetingTitleRequestPayload: Encodable {
     let meetingDate: String
 }
 
+private struct AuthLoginRequestPayload: Encodable {
+    let email: String
+    let password: String
+}
+
+private struct AuthRegisterRequestPayload: Encodable {
+    let email: String
+    let password: String
+    let inviteCode: String
+    let displayName: String?
+}
+
 enum APIClientError: LocalizedError {
     case missingBaseURL
     case invalidResponse
@@ -33,15 +45,21 @@ enum APIClientError: LocalizedError {
 }
 
 @MainActor
-final class APIClient {
+final class APIClient: AuthNetworking {
     private static let requestIDHeader = "X-Request-Id"
     private let settingsStore: SettingsStore
+    private let authTokenStore: any AuthTokenStoring
     private let session: URLSession
     private let encoder = JSONEncoder()
     private let decoder: JSONDecoder
 
-    init(settingsStore: SettingsStore, session: URLSession = .shared) {
+    init(
+        settingsStore: SettingsStore,
+        authTokenStore: (any AuthTokenStoring)? = nil,
+        session: URLSession = .shared
+    ) {
         self.settingsStore = settingsStore
+        self.authTokenStore = authTokenStore ?? UserDefaultsAuthTokenStore()
         self.session = session
         self.decoder = Self.makeJSONDecoder()
     }
@@ -69,6 +87,46 @@ final class APIClient {
 
     func fetchLLMStatus() async throws -> RemoteLLMStatus {
         try await sendJSONRequest(path: "/api/llm/status", method: "GET", responseType: RemoteLLMStatus.self)
+    }
+
+    func login(email: String, password: String) async throws -> RemoteAuthResponse {
+        try await sendJSONRequest(
+            path: "/api/auth/login",
+            method: "POST",
+            body: AuthLoginRequestPayload(email: email, password: password)
+        )
+    }
+
+    func register(
+        email: String,
+        password: String,
+        inviteCode: String,
+        displayName: String?
+    ) async throws -> RemoteAuthResponse {
+        try await sendJSONRequest(
+            path: "/api/auth/register",
+            method: "POST",
+            body: AuthRegisterRequestPayload(
+                email: email,
+                password: password,
+                inviteCode: inviteCode,
+                displayName: displayName
+            )
+        )
+    }
+
+    func fetchAuthSession() async throws -> RemoteAuthSessionState {
+        try await sendJSONRequest(
+            path: "/api/auth/session",
+            method: "GET",
+            responseType: RemoteAuthSessionState.self
+        )
+    }
+
+    func logout() async throws {
+        let request = try makeRequest(path: "/api/auth/logout", method: "POST")
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data, fallback: "退出登录失败。")
     }
 
     func createASRSession(
@@ -311,6 +369,9 @@ final class APIClient {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = 30
+        if let sessionToken = authTokenStore.sessionToken?.nilIfBlank {
+            request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+        }
         return request
     }
 

@@ -1,18 +1,25 @@
 import { NextRequest } from 'next/server';
+import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
-import { ensureDefaultWorkspace } from '@/lib/default-workspace';
+import { ensureDefaultWorkspaceForUser } from '@/lib/user-workspace-db';
 
 export async function GET(req: NextRequest) {
   const context = createRequestContext(req, '/api/workspaces');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     let workspaces = await prisma.workspace.findMany({
+      where: { ownerUserId: auth.user.id },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
 
     if (workspaces.length === 0) {
-      workspaces = [await ensureDefaultWorkspace()];
+      workspaces = [await ensureDefaultWorkspaceForUser(prisma, { userId: auth.user.id })];
     }
 
     return jsonResponse(context, workspaces);
@@ -28,6 +35,11 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/workspaces');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const body = (await req.json()) as {
@@ -44,10 +56,14 @@ export async function POST(req: NextRequest) {
       return errorResponse(context, 400, '工作区名称不能为空');
     }
 
-    const lastWorkspace = await prisma.workspace.findFirst({
-      orderBy: { sortOrder: 'desc' },
-      select: { sortOrder: true },
+    const existingWorkspace = await prisma.workspace.findFirst({
+      where: { ownerUserId: auth.user.id },
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
     });
+
+    if (existingWorkspace) {
+      return errorResponse(context, 409, '当前账号已存在默认工作区');
+    }
 
     const workspace = await prisma.workspace.create({
       data: {
@@ -57,7 +73,8 @@ export async function POST(req: NextRequest) {
         color: body.color?.trim() || '#94a3b8',
         workflowMode: body.workflowMode === 'interview' ? 'interview' : 'general',
         modeLabel: body.modeLabel?.trim() || '',
-        sortOrder: (lastWorkspace?.sortOrder || 0) + 1,
+        sortOrder: 1,
+        ownerUserId: auth.user.id,
       },
     });
 

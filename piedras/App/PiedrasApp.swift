@@ -14,6 +14,7 @@ struct PiedrasApp: App {
             AppRootView()
                 .modelContainer(appContainer.modelContainer)
                 .environment(appContainer.router)
+                .environment(appContainer.authStore)
                 .environment(appContainer.settingsStore)
                 .environment(appContainer.recordingSessionStore)
                 .environment(appContainer.meetingStore)

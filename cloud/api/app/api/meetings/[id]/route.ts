@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
+import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
 import { deleteMeetingAudioFile, hasMeetingAudioFile } from '@/lib/meeting-audio';
-import { resolveWorkspaceId } from '@/lib/default-workspace';
 
 // GET /api/meetings/[id] — 获取单个会议详情
 export async function GET(
@@ -11,12 +11,20 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const context = createRequestContext(req, '/api/meetings/[id]');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const { id } = await params;
 
-    const meeting = await prisma.meeting.findUnique({
-      where: { id },
+    const meeting = await prisma.meeting.findFirst({
+      where: {
+        id,
+        workspaceId: auth.workspace.id,
+      },
       include: {
         collection: true,
         segments: { orderBy: { order: 'asc' } },
@@ -55,6 +63,11 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const context = createRequestContext(req, '/api/meetings/[id]');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const { id } = await params;
@@ -64,7 +77,6 @@ export async function PUT(
       status,
       duration,
       collectionId,
-      workspaceId,
       userNotes,
       enhancedNotes,
       enhanceRecipeId,
@@ -76,15 +88,24 @@ export async function PUT(
       segments,
       chatMessages,
     } = body;
-    const resolvedWorkspaceId =
-      workspaceId !== undefined ? await resolveWorkspaceId(workspaceId) : undefined;
+    const existingMeeting = await prisma.meeting.findFirst({
+      where: {
+        id,
+        workspaceId: auth.workspace.id,
+      },
+      select: { id: true },
+    });
+
+    if (!existingMeeting) {
+      return errorResponse(context, 404, '会议不存在');
+    }
 
     const updateData: Record<string, unknown> = {};
     if (title !== undefined) updateData.title = title;
     if (status !== undefined) updateData.status = status;
     if (duration !== undefined) updateData.duration = duration;
     if (collectionId !== undefined) updateData.collectionId = collectionId || null;
-    if (resolvedWorkspaceId !== undefined) updateData.workspaceId = resolvedWorkspaceId;
+    updateData.workspaceId = auth.workspace.id;
     if (userNotes !== undefined) updateData.userNotes = userNotes;
     if (enhancedNotes !== undefined) updateData.enhancedNotes = enhancedNotes;
     if (enhanceRecipeId !== undefined) updateData.enhanceRecipeId = enhanceRecipeId || null;
@@ -178,9 +199,26 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const context = createRequestContext(req, '/api/meetings/[id]');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const { id } = await params;
+
+    const existingMeeting = await prisma.meeting.findFirst({
+      where: {
+        id,
+        workspaceId: auth.workspace.id,
+      },
+      select: { id: true },
+    });
+
+    if (!existingMeeting) {
+      return jsonResponse(context, { success: true });
+    }
 
     await deleteMeetingAudioFile(id);
     await prisma.meeting.delete({ where: { id } });

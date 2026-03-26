@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
 import type { PromptOptions } from '@/lib/types';
@@ -189,6 +190,11 @@ function buildHeuristicTitle(transcript: string, durationSeconds?: number, meeti
 
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/meetings/title');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
 
   try {
     const { transcript, durationSeconds, meetingDate, promptOptions, llmRuntimeConfig } = await req.json();

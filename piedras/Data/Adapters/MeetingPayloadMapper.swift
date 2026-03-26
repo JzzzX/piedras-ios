@@ -1,6 +1,6 @@
 import Foundation
 
-struct RemoteWorkspace: Decodable {
+struct RemoteWorkspace: Decodable, Equatable {
     let id: String
     let name: String
 }
@@ -281,28 +281,31 @@ enum MeetingPayloadMapper {
         )
     }
 
-    static func makeChatPayload(from meeting: Meeting, question: String) -> ChatRequestPayload {
+    static func makeChatPayload(from meeting: Meeting, history: [ChatMessage], question: String) -> ChatRequestPayload {
         ChatRequestPayload(
             transcript: transcriptText(from: meeting),
             userNotes: meeting.userNotesPlainText,
             enhancedNotes: meeting.enhancedNotes,
             segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting),
-            chatHistory: meeting.orderedChatMessages.suffix(10).map {
+            chatHistory: history.suffix(10).map {
                 ChatHistoryPayload(role: $0.role, content: $0.content)
             },
             question: question
         )
     }
 
+    static func makeChatPayload(from meeting: Meeting, question: String) -> ChatRequestPayload {
+        makeChatPayload(
+            from: meeting,
+            history: meeting.orderedChatMessages,
+            question: question
+        )
+    }
+
     static func makeChatPayload(from meeting: Meeting, session: ChatSession, question: String) -> ChatRequestPayload {
-        ChatRequestPayload(
-            transcript: transcriptText(from: meeting),
-            userNotes: meeting.userNotesPlainText,
-            enhancedNotes: meeting.enhancedNotes,
-            segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting),
-            chatHistory: session.orderedMessages.suffix(10).map {
-                ChatHistoryPayload(role: $0.role, content: $0.content)
-            },
+        makeChatPayload(
+            from: meeting,
+            history: session.orderedMessages,
             question: question
         )
     }

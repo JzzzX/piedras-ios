@@ -39,6 +39,13 @@ final class WorkspaceBootstrapService {
             return existing.id
         }
 
+        if let existing = workspaces.first {
+            settingsStore.hiddenWorkspaceID = existing.id
+            settingsStore.workspaceBootstrapState = .success
+            settingsStore.workspaceStatusMessage = "已连接账号工作区"
+            return existing.id
+        }
+
         let created = try await apiClient.createWorkspace(
             WorkspaceCreatePayload(
                 name: Constants.hiddenWorkspaceName,

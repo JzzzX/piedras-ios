@@ -1,5 +1,7 @@
 import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAuthenticatedRequest } from '@/lib/api-auth';
+import { createRequestContext } from '@/lib/api-error';
 import {
   getAsrRuntimeStatus,
   getAsrStatus,
@@ -86,6 +88,12 @@ function buildDoubaoSession(
 }
 
 export async function POST(req: NextRequest) {
+  const authContext = createRequestContext(req, '/api/asr/session');
+  const auth = await requireAuthenticatedRequest(req, authContext);
+  if (auth instanceof Response) {
+    return auth;
+  }
+
   const configuredStatus = getAsrStatus();
   const payload = (await req.json()) as AsrSessionRequest;
 
@@ -121,7 +129,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(buildDoubaoSession(req, payload, runtimeStatus));
+    return NextResponse.json(
+      buildDoubaoSession(
+        req,
+        {
+          ...payload,
+          workspaceId: auth.workspace.id,
+        },
+        runtimeStatus
+      )
+    );
   } catch (error) {
     return NextResponse.json(
       {

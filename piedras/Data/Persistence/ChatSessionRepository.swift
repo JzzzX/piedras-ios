@@ -51,6 +51,15 @@ final class ChatSessionRepository {
         try save()
     }
 
+    func deleteAllSessions() throws {
+        let descriptor = FetchDescriptor<ChatSession>()
+        let sessions = try modelContext.fetch(descriptor)
+        for session in sessions {
+            modelContext.delete(session)
+        }
+        try save()
+    }
+
     func migrateLegacyMeetingChatsIfNeeded(for meeting: Meeting) throws {
         guard !meeting.chatMessages.isEmpty else { return }
         guard meeting.chatSessions.isEmpty else { return }
