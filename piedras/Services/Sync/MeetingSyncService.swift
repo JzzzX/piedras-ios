@@ -193,23 +193,15 @@ final class MeetingSyncService: MeetingSyncServicing {
             return
         }
 
-        guard meeting.audioRemotePath != nil else {
-            return
-        }
-
         guard let audioLocalPath = meeting.audioLocalPath else {
             return
         }
 
-        let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: audioLocalPath) else {
+        // Keep the local recording available for transcript playback after sync.
+        guard FileManager.default.fileExists(atPath: audioLocalPath) else {
             meeting.audioLocalPath = nil
             try repository.save()
             return
         }
-
-        try fileManager.removeItem(atPath: audioLocalPath)
-        meeting.audioLocalPath = nil
-        try repository.save()
     }
 }

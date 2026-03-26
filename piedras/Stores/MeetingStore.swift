@@ -1499,9 +1499,8 @@ final class MeetingStore {
             recordingSessionStore.markBackgroundChunkBufferDuration(
                 backgroundChunkDurationMS(forPCMByteCount: backgroundTranscriptPCMBuffer.count)
             )
+            recordingSessionStore.markTranscriptCoverageGap()
         }
-
-        recordingSessionStore.markTranscriptCoverageGap()
     }
 
     private func trimBackgroundShadowBuffer(through confirmedEndTimeMS: Double) {
@@ -1583,15 +1582,13 @@ final class MeetingStore {
             return
         }
 
-        if recordingSessionStore.isBackgroundChunkingActive
-            || (!backgroundTranscriptPCMBuffer.isEmpty && backgroundShadowBufferStartTimeMS != nil) {
-            shouldFlushBackgroundTranscriptTail = true
-            if !recordingSessionStore.isBackgroundChunkingActive {
-                enterBackgroundChunkTranscriptionIfNeeded(for: meetingID)
-            }
-            scheduleBackgroundChunkTranscriptionIfNeeded(for: meetingID, forceFlushTail: true)
-            await waitForBackgroundChunkTranscriptionToSettle()
+        guard recordingSessionStore.isBackgroundChunkingActive else {
+            return
         }
+
+        shouldFlushBackgroundTranscriptTail = true
+        scheduleBackgroundChunkTranscriptionIfNeeded(for: meetingID, forceFlushTail: true)
+        await waitForBackgroundChunkTranscriptionToSettle()
     }
 
     private func waitForBackgroundChunkTranscriptionToSettle(timeoutSeconds: TimeInterval = 15) async {

@@ -274,9 +274,9 @@ struct MeetingDeletionSyncTests {
 
         let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
         #expect(refreshedMeeting.syncState == .synced)
-        #expect(refreshedMeeting.audioLocalPath == nil)
+        #expect(refreshedMeeting.audioLocalPath == audioURL.path)
         #expect(refreshedMeeting.audioRemotePath == "https://example.com/api/meetings/meeting-upload-success/audio?t=123")
-        #expect(FileManager.default.fileExists(atPath: audioURL.path) == false)
+        #expect(FileManager.default.fileExists(atPath: audioURL.path))
         #expect(MockURLProtocol.requests.count == 2)
         #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings", "/api/meetings/\(meeting.id)/audio"])
         #expect(MockURLProtocol.requests.last?.httpMethod == "POST")
@@ -399,13 +399,14 @@ struct MeetingDeletionSyncTests {
         let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
         #expect(refreshedMeeting.syncState == .synced)
         #expect(refreshedMeeting.speakerDiarizationState == .ready)
-        #expect(refreshedMeeting.audioLocalPath == nil)
+        #expect(refreshedMeeting.audioLocalPath == audioURL.path)
         #expect(refreshedMeeting.speakers == [
             "spk_1": "面试官",
             "spk_2": "候选人",
         ])
         #expect(refreshedMeeting.orderedSegments.map { $0.speaker } == ["spk_1"])
         #expect(refreshedMeeting.orderedSegments.map { $0.text } == ["请做个自我介绍。"])
+        #expect(FileManager.default.fileExists(atPath: audioURL.path))
         #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings", "/api/meetings/\(meeting.id)/audio"])
     }
 
@@ -629,8 +630,9 @@ struct MeetingDeletionSyncTests {
         #expect(batchResult.failedCount == 0)
         #expect(recoveredMeeting.syncState == .synced)
         #expect(recoveredMeeting.speakerDiarizationState == .ready)
-        #expect(recoveredMeeting.audioLocalPath == nil)
+        #expect(recoveredMeeting.audioLocalPath == audioURL.path)
         #expect(recoveredMeeting.orderedSegments.map(\.text) == ["补转写成功"])
+        #expect(FileManager.default.fileExists(atPath: audioURL.path))
     }
 
     @MainActor
