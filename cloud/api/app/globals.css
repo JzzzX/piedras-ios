@@ -74,3 +74,207 @@ a {
   padding-left: 18px;
   line-height: 1.7;
 }
+
+.admin-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  display: grid;
+  gap: 20px;
+}
+
+.admin-topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.admin-topbar-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.admin-title {
+  margin: 16px 0 10px;
+  font-size: 34px;
+}
+
+.admin-subtitle {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.ghost-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  text-decoration: none;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.success-banner {
+  border-color: rgba(76, 217, 100, 0.38);
+}
+
+.error-banner {
+  border-color: rgba(255, 107, 107, 0.38);
+}
+
+.section-title {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+
+.section-number {
+  margin: 0 0 6px;
+  font-size: 30px;
+}
+
+.small-label {
+  margin-top: 0;
+}
+
+.admin-split-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+.admin-form-card {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-form-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.field-block {
+  display: grid;
+  gap: 6px;
+}
+
+.field-block span {
+  font-size: 13px;
+  color: rgba(245, 247, 251, 0.72);
+}
+
+.field-block input,
+.field-block select,
+.inline-action-form input {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(7, 10, 14, 0.56);
+  color: inherit;
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: inherit;
+  cursor: pointer;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, rgba(76, 217, 100, 0.28), rgba(89, 157, 255, 0.28));
+}
+
+.secondary-button {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.admin-pre {
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 18px;
+  overflow-x: auto;
+  background: rgba(7, 10, 14, 0.56);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 780px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 14px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-table th {
+  color: rgba(245, 247, 251, 0.72);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.table-primary {
+  font-weight: 600;
+}
+
+.table-secondary {
+  margin-top: 4px;
+  color: rgba(245, 247, 251, 0.72);
+  font-size: 13px;
+}
+
+.mono-text {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.inline-action-form {
+  display: grid;
+  gap: 8px;
+}
+
+.empty-cell {
+  color: rgba(245, 247, 251, 0.72);
+}
+
+@media (max-width: 720px) {
+  .page-shell {
+    padding: 24px 14px 40px;
+  }
+
+  .admin-title {
+    font-size: 28px;
+  }
+
+  .ghost-link,
+  .primary-button,
+  .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .admin-topbar-actions {
+    width: 100%;
+  }
+}

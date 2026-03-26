@@ -6,6 +6,7 @@ const { URL } = require('node:url');
 const zlib = require('node:zlib');
 const next = require('next');
 const { WebSocketServer, WebSocket } = require('ws');
+const { bootstrapAuthRuntime } = require('./lib/auth-startup-bootstrap.cjs');
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOSTNAME || '0.0.0.0';
@@ -735,6 +736,16 @@ function attachAsrProxy(server) {
 }
 
 async function main() {
+  const bootstrapResult = await bootstrapAuthRuntime((event, detail = {}) => {
+    log(event, detail);
+  });
+
+  log('startup_bootstrap_state', {
+    schemaReady: bootstrapResult.schemaStatus.ready,
+    missingItems: bootstrapResult.schemaStatus.missingItems,
+    legacyUsers: bootstrapResult.legacyUsers,
+  });
+
   const app = next({
     dev: false,
     dir: __dirname,

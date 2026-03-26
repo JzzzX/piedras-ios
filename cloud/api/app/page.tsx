@@ -71,6 +71,7 @@ export default async function HomePage() {
             <li><a href="/api/llm/status">/api/llm/status</a></li>
             <li><a href="/api/asr/status">/api/asr/status</a></li>
             <li><a href="/api/workspaces">/api/workspaces</a></li>
+            <li><a href="/admin">/admin</a></li>
           </ul>
         </section>
       </div>

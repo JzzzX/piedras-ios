@@ -58,6 +58,7 @@ cloud/api
 
 ```bash
 DATABASE_URL=
+ADMIN_API_SECRET=
 ASR_MODE=doubao
 
 OPENAI_API_KEY=
@@ -73,6 +74,7 @@ ASR_PROXY_WS_PATH=/ws/asr
 DOUBAO_ASR_APP_ID=
 DOUBAO_ASR_ACCESS_TOKEN=
 DOUBAO_ASR_RESOURCE_ID=volc.seedasr.sauc.duration
+LEGACY_BOOTSTRAP_PASSWORD=
 ```
 
 可选变量：
@@ -84,8 +86,12 @@ DOUBAO_ASR_WS_URL=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
 说明：
 
 - 你现在提供的 Zeabur 环境变量里只有豆包凭据和 `ZBPACK_DOCKERFILE_NAME`
-- 还必须补上 `DATABASE_URL`、`ASR_MODE`、`ASR_PROXY_PUBLIC_BASE_URL`、`ASR_PROXY_HEALTH_PATH`、`ASR_PROXY_WS_PATH`，以及现有 `OPENAI_*` 变量
+- 还必须补上 `DATABASE_URL`、`ADMIN_API_SECRET`、`ASR_MODE`、`ASR_PROXY_PUBLIC_BASE_URL`、`ASR_PROXY_HEALTH_PATH`、`ASR_PROXY_WS_PATH`，以及现有 `OPENAI_*` 变量
 - `ASR_PROXY_PUBLIC_BASE_URL` 必须写成实际公网域名，当前就是 `https://piedras.preview.aliyun-zeabur.cn`
+- 如果现在线上数据库还是旧版共享数据结构，新增代码会在服务启动时自动补账号 schema
+- 如果你希望旧数据自动挂到两个可登录测试账号，再补一个 `LEGACY_BOOTSTRAP_PASSWORD`；服务首次启动后会自动创建：
+  - `legacy-main@piedras.local`
+  - `legacy-archive@piedras.local`
 
 ## iOS 对应配置
 

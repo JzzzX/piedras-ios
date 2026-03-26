@@ -33,3 +33,5 @@ npm run dev
 - `ASR_PROXY_PUBLIC_BASE_URL` 应指向当前公网域名
 - 如使用一体化入口，建议同时设置 `ASR_PROXY_HEALTH_PATH=/asr-proxy/healthz`
 - 一体化入口默认 WebSocket 路径为 `ASR_PROXY_WS_PATH=/ws/asr`
+- 管理后台与邀请码接口依赖 `ADMIN_API_SECRET`
+- 若线上还是旧版共享数据库结构，可设置 `LEGACY_BOOTSTRAP_PASSWORD`，启动时会自动补账号 schema 并为两份 legacy 数据创建测试账号
