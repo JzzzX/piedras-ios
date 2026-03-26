@@ -27,7 +27,7 @@ function redirectWithStatus(kind: 'error' | 'message', message: string): never {
   const params = new URLSearchParams({
     [kind]: message,
   });
-  redirect(`/admin?${params.toString()}`);
+  redirect(`/?${params.toString()}#account-admin`);
 }
 
 async function requireAdminSession() {
@@ -89,7 +89,7 @@ export async function createManagedUserAction(formData: FormData) {
     handleActionError(error);
   }
 
-  revalidatePath('/admin');
+  revalidatePath('/');
   redirectWithStatus(
     'message',
     `已创建账号 ${result.user.email}，当前工作区：${result.workspace.name}`
@@ -109,7 +109,7 @@ export async function assignLegacyWorkspaceAction(formData: FormData) {
     handleActionError(error);
   }
 
-  revalidatePath('/admin');
+  revalidatePath('/');
   redirectWithStatus(
     'message',
     `已把 legacy 工作区 ${result.workspace.name} 交给 ${result.user.email}`
@@ -129,7 +129,7 @@ export async function resetManagedUserPasswordAction(formData: FormData) {
     handleActionError(error);
   }
 
-  revalidatePath('/admin');
+  revalidatePath('/');
   redirectWithStatus('message', `已重置 ${result.email} 的密码`);
 }
 
@@ -146,7 +146,7 @@ export async function createInviteCodeAction(formData: FormData) {
     handleActionError(error);
   }
 
-  revalidatePath('/admin');
+  revalidatePath('/');
   redirectWithStatus('message', `已生成邀请码 ${inviteCode.code}`);
 }
 
@@ -162,6 +162,6 @@ export async function revokeInviteCodeAction(formData: FormData) {
     handleActionError(error);
   }
 
-  revalidatePath('/admin');
+  revalidatePath('/');
   redirectWithStatus('message', `已停用邀请码 ${inviteCode.code}`);
 }

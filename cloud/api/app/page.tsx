@@ -1,6 +1,9 @@
 import { getAsrRuntimeStatus } from "@/lib/asr";
+import { readAdminSessionState } from "@/lib/admin-auth";
+import { loadAdminDashboardData } from "@/lib/admin-management";
 import { prisma } from "@/lib/db";
 import { getConfiguredProviders } from "@/lib/llm-provider";
+import { AdminConsole } from "./admin/AdminConsole";
 
 export const dynamic = "force-dynamic";
 
@@ -13,16 +16,33 @@ async function getDatabaseReachable() {
   }
 }
 
-export default async function HomePage() {
-  const [asr, dbReachable] = await Promise.all([
+function firstSearchParam(value: string | string[] | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] ?? "";
+  }
+
+  return value ?? "";
+}
+
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const message = firstSearchParam(params.message);
+  const error = firstSearchParam(params.error);
+  const [asr, dbReachable, session] = await Promise.all([
     getAsrRuntimeStatus().catch(() => null),
     getDatabaseReachable(),
+    readAdminSessionState(),
   ]);
   const llmProviders = getConfiguredProviders();
+  const dashboard = session.authenticated ? await loadAdminDashboardData(prisma) : null;
 
   return (
     <main className="page-shell">
-      <div style={{ maxWidth: 1040, margin: "0 auto", display: "grid", gap: 20 }}>
+      <div className="admin-shell">
         <section className="glass-card">
           <div className="pill">
             <span className="dot" />
@@ -72,8 +92,16 @@ export default async function HomePage() {
             <li><a href="/api/asr/status">/api/asr/status</a></li>
             <li><a href="/api/workspaces">/api/workspaces</a></li>
             <li><a href="/admin">/admin</a></li>
+            <li><a href="#account-admin">账号管理区</a></li>
           </ul>
         </section>
+
+        <AdminConsole
+          message={message}
+          error={error}
+          session={session}
+          dashboard={dashboard}
+        />
       </div>
     </main>
   );
