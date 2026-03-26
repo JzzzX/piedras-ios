@@ -363,14 +363,22 @@ struct MeetingDetailView: View {
                         .foregroundStyle(AppTheme.subtleInk)
 
                     if recordingSessionStore.meetingID == meeting.id && recordingSessionStore.phase != .idle {
+                        let transcriptionBadgeLabel = recordingSessionStore.backgroundTranscriptionStatus.badgeLabel
+                            ?? (recordingSessionStore.asrState == .connected
+                                ? AppStrings.current.liveTranscription
+                                : AppStrings.current.reconnecting)
+                        let transcriptionBadgeTint = recordingSessionStore.backgroundTranscriptionStatus.badgeLabel == nil
+                            ? (recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
+                            : recordingSessionStore.backgroundTranscriptionStatus.tint
+
                         HStack(spacing: 7) {
                             Rectangle()
-                                .fill(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
+                                .fill(transcriptionBadgeTint)
                                 .frame(width: 6, height: 6)
 
-                            Text(recordingSessionStore.asrState == .connected ? AppStrings.current.liveTranscription : AppStrings.current.reconnecting)
+                            Text(transcriptionBadgeLabel)
                                 .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
+                                .foregroundStyle(transcriptionBadgeTint)
                         }
                     }
                 }

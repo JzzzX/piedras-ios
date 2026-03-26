@@ -198,111 +198,71 @@ struct MeetingRecordingRepairTests {
 
     @MainActor
     @Test
-    func backgroundingActiveRecordingKeepsRepairDeferredUntilAsrActuallyDrops() async throws {
+    func backgroundingActiveRecordingStopsLiveAsrAndBeginsBackgroundChunking() async throws {
         let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
         let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
         fixture.meetingStore.loadMeetings()
 
         fixture.recordingSessionStore.meetingID = meeting.id
         fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.asrState = .connected
+        fixture.recordingSessionStore.durationSeconds = 2
+        fixture.recorder.currentDurationSecondsValue = 2
 
         fixture.meetingStore.handleScenePhaseChange(.background)
+        try await waitUntil { fixture.asrService.stopCalls == 1 }
 
         #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop == false)
-        #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == nil)
+        #expect(fixture.recordingSessionStore.backgroundTranscriptionStatus == .chunking)
+        #expect(fixture.recordingSessionStore.backgroundChunkStartTimeMS == 2_000)
+        #expect(fixture.recordingSessionStore.backgroundChunkBufferedDurationMS == 0)
         #expect(fixture.recordingSessionStore.infoBanner == nil)
     }
 
     @MainActor
     @Test
-    func foregroundRecoveryBackfillsOnlyBackgroundGapAndRestartsAsr() async throws {
+    func backgroundChunkFlushesWhileStillBackgrounded() async throws {
         let transcribedResults = [
-            ASRFinalResult(text: "前台已有", startTime: 500, endTime: 900),
-            ASRFinalResult(text: "后台缺口补齐", startTime: 1_500, endTime: 2_200),
-            ASRFinalResult(text: "前台恢复后已有", startTime: 3_400, endTime: 3_800),
+            ASRFinalResult(text: "后台分片", startTime: 500, endTime: 2_200)
         ]
         let fixture = try makeFixture(transcriptionBehavior: .succeed(transcribedResults))
         let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
         meeting.recordingMode = .microphone
         meeting.status = .recording
-        meeting.audioLocalPath = "/tmp/live-recording.m4a"
-        meeting.audioMimeType = "audio/m4a"
-        meeting.segments = [
-            TranscriptSegment(
-                speaker: "麦克风",
-                text: "前台已有",
-                startTime: 0,
-                endTime: 1_000,
-                orderIndex: 0
-            ),
-            TranscriptSegment(
-                speaker: "麦克风",
-                text: "前台恢复后已有",
-                startTime: 3_200,
-                endTime: 4_000,
-                orderIndex: 1
-            ),
-        ]
         try fixture.repository.save()
         fixture.meetingStore.loadMeetings()
 
         fixture.recordingSessionStore.meetingID = meeting.id
         fixture.recordingSessionStore.phase = .recording
-        fixture.recordingSessionStore.durationSeconds = 1
-        fixture.recorder.currentDurationSecondsValue = 1
-        fixture.recorder.snapshotArtifact = RecordingSnapshotArtifact(
-            fileURL: try makeTemporaryAudioFile(named: "background-gap-snapshot.m4a"),
-            mimeType: "audio/m4a",
-            durationSeconds: 4
-        )
-
-        fixture.meetingStore.handleScenePhaseChange(.background)
-        fixture.asrService.onError?("socket closed")
-
-        #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == 1_000)
-
-        fixture.recorder.currentDurationSecondsValue = 4
-        fixture.meetingStore.handleScenePhaseChange(.active)
-        try await waitUntil { fixture.transcriber.transcribeCalls == 1 }
-
-        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
-        #expect(refreshedMeeting.orderedSegments.map(\.text) == ["前台已有", "后台缺口补齐", "前台恢复后已有"])
-        #expect(refreshedMeeting.orderedSegments.map(\.startTime) == [0, 1_500, 3_200])
-        #expect(fixture.recordingSessionStore.isBackfillingBackgroundTranscript == false)
-        #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == nil)
-        #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop == false)
-        #expect(fixture.recordingSessionStore.infoBanner == nil)
-        #expect(fixture.recordingSessionStore.errorBanner == nil)
-        #expect(fixture.asrService.startCalls == 1)
-    }
-
-    @MainActor
-    @Test
-    func backgroundAsrDropStaysSilentUntilUserActionIsNeeded() async throws {
-        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
-        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
-        meeting.recordingMode = .microphone
-        meeting.status = .recording
-        try fixture.repository.save()
-        fixture.meetingStore.loadMeetings()
-
-        fixture.recordingSessionStore.meetingID = meeting.id
-        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.asrState = .connected
         fixture.recordingSessionStore.durationSeconds = 2
         fixture.recorder.currentDurationSecondsValue = 2
 
         fixture.meetingStore.handleScenePhaseChange(.background)
-        fixture.asrService.onError?("socket closed")
+        try await waitUntil { fixture.asrService.stopCalls == 1 }
+        fixture.recorder.emitPCM(makePCMChunk(durationMS: 12_500))
+        try await waitUntil { fixture.transcriber.transcribeCalls == 1 }
 
-        #expect(fixture.recordingSessionStore.backgroundTranscriptGapStartTimeMS == 2_000)
+        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.orderedSegments.map(\.text) == ["后台分片"])
+        #expect(refreshedMeeting.orderedSegments.map(\.startTime) == [2_500])
+        #expect(fixture.recordingSessionStore.backgroundTranscriptionStatus == .chunking)
+        #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop == false)
         #expect(fixture.recordingSessionStore.infoBanner == nil)
         #expect(fixture.recordingSessionStore.errorBanner == nil)
+        #expect(fixture.asrService.startCalls == 0)
     }
 
     @MainActor
     @Test
-    func foregroundRecoveryFailurePausesMeetingAndStopsPretendingToRecord() async throws {
-        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+    func returningForegroundFlushesTailChunkAndRestartsLiveAsr() async throws {
+        let transcribedResults = [
+            ASRFinalResult(text: "后台尾段", startTime: 0, endTime: 900)
+        ]
+        let fixture = try makeFixture(transcriptionBehavior: .succeed(transcribedResults))
         let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
         meeting.recordingMode = .microphone
         meeting.status = .recording
@@ -311,16 +271,53 @@ struct MeetingRecordingRepairTests {
 
         fixture.recordingSessionStore.meetingID = meeting.id
         fixture.recordingSessionStore.phase = .recording
-        fixture.recordingSessionStore.asrState = .degraded
-        fixture.recorder.reconcileResult = .needsUserResume("录音在后台被系统打断，请返回应用后继续。")
+        fixture.recordingSessionStore.asrState = .connected
+        fixture.recordingSessionStore.durationSeconds = 3
+        fixture.recorder.currentDurationSecondsValue = 3
 
+        fixture.meetingStore.handleScenePhaseChange(.background)
+        try await waitUntil { fixture.asrService.stopCalls == 1 }
+
+        fixture.recorder.emitPCM(makePCMChunk(durationMS: 5_000))
         fixture.meetingStore.handleScenePhaseChange(.active)
-        try await waitUntil { fixture.recordingSessionStore.phase == .paused }
+        try await waitUntil {
+            fixture.transcriber.transcribeCalls == 1 && fixture.asrService.startCalls == 1
+        }
 
         let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
-        #expect(refreshedMeeting.status == .paused)
-        #expect(fixture.recordingSessionStore.pauseReason == .systemInterruption)
-        #expect(fixture.recordingSessionStore.infoBanner == "录音在后台被系统打断，请返回应用后继续。")
+        #expect(refreshedMeeting.orderedSegments.map(\.text) == ["后台尾段"])
+        #expect(refreshedMeeting.orderedSegments.map(\.startTime) == [3_000])
+        #expect(fixture.recordingSessionStore.backgroundTranscriptionStatus == .inactive)
+        #expect(fixture.recordingSessionStore.infoBanner == nil)
+        #expect(fixture.recordingSessionStore.errorBanner == nil)
+    }
+
+    @MainActor
+    @Test
+    func backgroundChunkFailureRetriesOnceThenFallsBackToStopRepair() async throws {
+        let fixture = try makeFixture(transcriptionBehavior: .fail("chunk failed"))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.asrState = .connected
+        fixture.recordingSessionStore.durationSeconds = 2
+        fixture.recorder.currentDurationSecondsValue = 2
+
+        fixture.meetingStore.handleScenePhaseChange(.background)
+        try await waitUntil { fixture.asrService.stopCalls == 1 }
+        fixture.recorder.emitPCM(makePCMChunk(durationMS: 12_500))
+        try await waitUntil { fixture.transcriber.transcribeCalls == 2 }
+
+        #expect(fixture.recordingSessionStore.backgroundChunkFailureNeedsRepair)
+        #expect(fixture.recordingSessionStore.backgroundTranscriptionStatus == .failedNeedsRepair)
+        #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop)
+        #expect(fixture.recordingSessionStore.infoBanner == nil)
+        #expect(fixture.recordingSessionStore.errorBanner == nil)
         #expect(fixture.asrService.stopCalls == 1)
         #expect(fixture.asrService.startCalls == 0)
     }
@@ -550,6 +547,12 @@ struct MeetingRecordingRepairTests {
         )
         try Data("audio".utf8).write(to: url)
         return url
+    }
+
+    private func makePCMChunk(durationMS: Int) -> Data {
+        let bytesPerMillisecond = (Double(Int(PCMConverter.targetSampleRate)) * 2) / 1000
+        let byteCount = Int((Double(durationMS) * bytesPerMillisecond).rounded())
+        return Data(repeating: 0, count: max(byteCount, 0))
     }
 
     @MainActor

@@ -254,6 +254,9 @@ struct AppStringTable {
 
     var liveTranscription: String { "LIVE TRANSCRIPTION" }
     var reconnecting: String { isChinese ? "重连中" : "RECONNECTING" }
+    var backgroundTranscribing: String { isChinese ? "后台转写中" : "BACKGROUND TRANSCRIBING" }
+    var finalizingBackgroundTranscript: String { isChinese ? "后台转写收尾中" : "FINALIZING BACKGROUND TRANSCRIPT" }
+    var backgroundTranscriptRepairOnStop: String { isChinese ? "停止后修复" : "REPAIR ON STOP" }
     var source: String { isChinese ? "音源" : "Source" }
     var backgroundRecordingBestEffort: String { isChinese ? "应用已切到后台，录音会继续；实时转写会尽量保持。" : "The app is in the background. Recording continues and live transcription will continue when possible." }
     var backgroundTranscriptWillCatchUp: String { isChinese ? "后台实时转写已中断，回到前台后会自动补齐缺失片段。" : "Background live transcription was interrupted. Missing transcript will be filled in when you return." }

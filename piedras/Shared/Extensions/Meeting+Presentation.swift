@@ -221,6 +221,58 @@ extension ASRConnectionState {
     }
 }
 
+extension BackgroundTranscriptionStatus {
+    var badgeLabel: String? {
+        switch self {
+        case .inactive:
+            return nil
+        case .chunking:
+            return AppStrings.current.backgroundTranscribing
+        case .flushing:
+            return AppStrings.current.finalizingBackgroundTranscript
+        case .failedNeedsRepair:
+            return AppStrings.current.backgroundTranscriptRepairOnStop
+        }
+    }
+
+    var bannerMessage: String? {
+        switch self {
+        case .inactive:
+            return nil
+        case .chunking:
+            return AppStrings.current.backgroundTranscribing
+        case .flushing:
+            return AppStrings.current.finalizingBackgroundTranscript
+        case .failedNeedsRepair:
+            return AppStrings.current.backgroundTranscriptPendingRepair
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .inactive:
+            return .secondary
+        case .chunking, .flushing:
+            return AppTheme.highlight
+        case .failedNeedsRepair:
+            return .red
+        }
+    }
+
+    var debugLabel: String? {
+        switch self {
+        case .inactive:
+            return nil
+        case .chunking:
+            return "ASR:BG"
+        case .flushing:
+            return "ASR:TAIL"
+        case .failedNeedsRepair:
+            return "ASR:FIX"
+        }
+    }
+}
+
 extension RecordingInputMode {
     var meetingMode: MeetingRecordingMode {
         switch self {

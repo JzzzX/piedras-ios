@@ -46,9 +46,9 @@ struct RecordingControlBar: View {
 
                 Spacer()
 
-                Text(recordingSessionStore.asrState == .connected ? "ASR:OK" : "ASR:ERR")
+                Text(asrStatusLabel)
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
-                    .foregroundStyle(recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight)
+                    .foregroundStyle(asrStatusTint)
             }
 
             WaveformView(samples: recordingSessionStore.waveformSamples)
@@ -184,7 +184,27 @@ struct RecordingControlBar: View {
             return info
         }
 
+        if let backgroundMessage = recordingSessionStore.backgroundTranscriptionStatus.bannerMessage {
+            return backgroundMessage
+        }
+
         return nil
+    }
+
+    private var asrStatusLabel: String {
+        if let backgroundLabel = recordingSessionStore.backgroundTranscriptionStatus.debugLabel {
+            return backgroundLabel
+        }
+
+        return recordingSessionStore.asrState == .connected ? "ASR:OK" : "ASR:ERR"
+    }
+
+    private var asrStatusTint: Color {
+        if recordingSessionStore.backgroundTranscriptionStatus != .inactive {
+            return recordingSessionStore.backgroundTranscriptionStatus.tint
+        }
+
+        return recordingSessionStore.asrState == .connected ? AppTheme.success : AppTheme.highlight
     }
 
     private var sourcePlaybackStrip: some View {

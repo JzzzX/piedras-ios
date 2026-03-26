@@ -36,6 +36,13 @@ enum RecordingInputMode: String {
     }
 }
 
+enum BackgroundTranscriptionStatus: String {
+    case inactive
+    case chunking
+    case flushing
+    case failedNeedsRepair
+}
+
 @MainActor
 @Observable
 final class RecordingSessionStore {
@@ -61,6 +68,10 @@ final class RecordingSessionStore {
     var sourceAudioCurrentTime: TimeInterval = 0
     var sourceAudioDuration: TimeInterval = 0
     var isSourceAudioPlaying = false
+    var backgroundTranscriptionStatus: BackgroundTranscriptionStatus = .inactive
+    var backgroundChunkStartTimeMS: Double?
+    var backgroundChunkBufferedDurationMS: Double = 0
+    var backgroundChunkFailureNeedsRepair = false
     var backgroundTranscriptGapStartTimeMS: Double?
     var backgroundTranscriptGapEndTimeMS: Double?
     var isBackfillingBackgroundTranscript = false
@@ -89,6 +100,10 @@ final class RecordingSessionStore {
         sourceAudioCurrentTime = 0
         sourceAudioDuration = 0
         isSourceAudioPlaying = false
+        backgroundTranscriptionStatus = .inactive
+        backgroundChunkStartTimeMS = nil
+        backgroundChunkBufferedDurationMS = 0
+        backgroundChunkFailureNeedsRepair = false
         backgroundTranscriptGapStartTimeMS = nil
         backgroundTranscriptGapEndTimeMS = nil
         isBackfillingBackgroundTranscript = false
@@ -123,6 +138,10 @@ final class RecordingSessionStore {
         self.sourceAudioDuration = sourceAudioDuration
         isSourceAudioPlaying = false
         pauseReason = nil
+        backgroundTranscriptionStatus = .inactive
+        backgroundChunkStartTimeMS = nil
+        backgroundChunkBufferedDurationMS = 0
+        backgroundChunkFailureNeedsRepair = false
         backgroundTranscriptGapStartTimeMS = nil
         backgroundTranscriptGapEndTimeMS = nil
         isBackfillingBackgroundTranscript = false
@@ -149,6 +168,56 @@ final class RecordingSessionStore {
 
     func markTranscriptCoverageGap() {
         needsTranscriptRepairAfterStop = true
+    }
+
+    var isBackgroundChunkingActive: Bool {
+        switch backgroundTranscriptionStatus {
+        case .chunking, .flushing:
+            return true
+        case .inactive, .failedNeedsRepair:
+            return false
+        }
+    }
+
+    func beginBackgroundChunking(at startTimeMS: Double) {
+        guard !isBackgroundChunkingActive else { return }
+        backgroundTranscriptionStatus = .chunking
+        backgroundChunkStartTimeMS = max(0, startTimeMS)
+        backgroundChunkBufferedDurationMS = 0
+        backgroundChunkFailureNeedsRepair = false
+    }
+
+    func markBackgroundChunkBufferDuration(_ durationMS: Double) {
+        backgroundChunkBufferedDurationMS = max(0, durationMS)
+    }
+
+    func markBackgroundChunkFlushInProgress() {
+        guard backgroundTranscriptionStatus != .failedNeedsRepair else { return }
+        backgroundTranscriptionStatus = .flushing
+    }
+
+    func markBackgroundChunkReadyForMore() {
+        guard backgroundTranscriptionStatus != .failedNeedsRepair else { return }
+        backgroundTranscriptionStatus = .chunking
+    }
+
+    func markBackgroundChunkFailureNeedsRepair() {
+        backgroundTranscriptionStatus = .failedNeedsRepair
+        backgroundChunkFailureNeedsRepair = true
+        backgroundChunkStartTimeMS = nil
+        backgroundChunkBufferedDurationMS = 0
+        needsTranscriptRepairAfterStop = true
+    }
+
+    func deactivateBackgroundChunking() {
+        backgroundTranscriptionStatus = .inactive
+        backgroundChunkStartTimeMS = nil
+        backgroundChunkBufferedDurationMS = 0
+    }
+
+    func clearBackgroundChunkingState() {
+        deactivateBackgroundChunking()
+        backgroundChunkFailureNeedsRepair = false
     }
 
     var hasBackgroundTranscriptGap: Bool {
