@@ -1,6 +1,16 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+private extension View {
+    func appHeaderFont() -> some View {
+        self.font(.system(size: 28, weight: .bold, design: .monospaced))
+    }
+
+    func ptrDateFont() -> some View {
+        self.font(.custom("STSong", size: 14))
+    }
+}
+
 private enum MeetingHomeBucket: String, CaseIterable, Identifiable {
     case processing = "Processing"
     case today = "Today"
@@ -37,15 +47,22 @@ struct MeetingListView: View {
     @Environment(SettingsStore.self) private var settingsStore
 
     @State private var isImportingSourceAudio = false
+    @State private var scrollOffset: CGFloat = 0
+    @State private var currentSectionTitle: String = ""
 
     var body: some View {
-        ZStack {
+        ZStack(alignment: .top) {
             AppGlassBackdrop()
 
-            VStack(spacing: 14) {
-                header
+            VStack(spacing: 0) {
+                // 折叠后的紧凑型顶栏
+                compactHeader
                     .padding(.horizontal, 18)
-                    .padding(.top, 18)
+                    .padding(.top, 14)
+                    .padding(.bottom, 8)
+                    .background(AppTheme.background.opacity(scrollOffset > 30 ? 0.9 : 0))
+                    .opacity(scrollOffset > 30 ? 1 : 0)
+                    .zIndex(2)
 
                 feedList
             }
@@ -74,10 +91,11 @@ struct MeetingListView: View {
     private var header: some View {
         HStack(alignment: .top, spacing: 14) {
             Text(AppStrings.current.appTitle)
-                .font(.system(size: 28, weight: .bold, design: .monospaced))
+                .appHeaderFont()
                 .foregroundStyle(AppTheme.ink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                .opacity(max(0, 1.0 - Double(scrollOffset) / 30.0))
 
             Spacer()
 
@@ -85,24 +103,110 @@ struct MeetingListView: View {
                 headerToolButton(
                     systemName: "magnifyingglass",
                     accessibilityLabel: AppStrings.current.search,
-                    identifier: "HomeSearchButton"
-                ) {
-                    router.showSearch()
-                }
+                    identifier: "HomeSearchButton",
+                    action: {
+                        router.showSearch()
+                    }
+                )
 
                 headerToolButton(
                     systemName: "slider.horizontal.3",
                     accessibilityLabel: AppStrings.current.settings,
-                    identifier: "HomeSettingsButton"
-                ) {
-                    router.showSettings()
-                }
+                    identifier: "HomeSettingsButton",
+                    action: {
+                        router.showSettings()
+                    }
+                )
             }
         }
     }
 
+    private var compactHeader: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Text(currentSectionTitle.isEmpty ? "" : currentSectionTitle.uppercased())
+                .font(AppTheme.bodyFont(size: 14, weight: .bold))
+                .foregroundStyle(AppTheme.ink)
+                .lineLimit(1)
+                .animation(.easeInOut, value: currentSectionTitle)
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                headerToolButton(
+                    systemName: "magnifyingglass",
+                    accessibilityLabel: AppStrings.current.search,
+                    identifier: "HomeSearchButton",
+                    size: 32,
+                    iconSize: 14,
+                    action: {
+                        router.showSearch()
+                    }
+                )
+
+                headerToolButton(
+                    systemName: "slider.horizontal.3",
+                    accessibilityLabel: AppStrings.current.settings,
+                    identifier: "HomeSettingsButton",
+                    size: 32,
+                    iconSize: 14,
+                    action: {
+                        router.showSettings()
+                    }
+                )
+            }
+        }
+    }
+
+    private var pullToRefreshDateHeader: some View {
+        VStack(spacing: 4) {
+            Text(formattedCurrentDate)
+                .ptrDateFont() // 优先使用宋体
+                .foregroundStyle(AppTheme.subtleInk)
+                .frame(maxWidth: .infinity)
+                .opacity(min(1.0, max(0.0, (Double(scrollOffset) + 60.0) / 40.0))) // 随拉动显示
+        }
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+        .frame(height: max(0, scrollOffset > 0 ? 0 : -scrollOffset))
+    }
+
+    private var formattedCurrentDate: String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: settingsStore.appLanguage.rawValue)
+        formatter.dateFormat = "MMMM d, EEEE"
+        if settingsStore.appLanguage == .chinese {
+            // 中文特殊格式
+            let month = Calendar.current.component(.month, from: .now)
+            let day = Calendar.current.component(.day, from: .now)
+            let weekday = formatter.weekdaySymbols[Calendar.current.component(.weekday, from: .now) - 1]
+            return "\(numberToChinese(month))月\(numberToChinese(day))日，\(weekday)"
+        }
+        return formatter.string(from: .now)
+    }
+
+    private func numberToChinese(_ n: Int) -> String {
+        let chineseNumbers = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "二十一", "二十二", "二十三", "二十四", "二十五", "二十六", "二十七", "二十八", "二十九", "三十", "三十一"]
+        if n < chineseNumbers.count {
+            return chineseNumbers[n]
+        }
+        return "\(n)"
+    }
+
     private var feedList: some View {
         List {
+            // 下拉刷新日期指示器 (Granola 风格)
+            pullToRefreshDateHeader
+
+            // 大标题头部
+            Section {
+                header
+                    .listRowInsets(EdgeInsets(top: 10, leading: 18, bottom: 10, trailing: 18))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+            .id("HeaderSection")
+
             if homeSections.isEmpty {
                 Section {
                     emptyState
@@ -129,11 +233,23 @@ struct MeetingListView: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                         }
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear
+                                    .onAppear { updateCurrentSection(section.title, minY: geo.frame(in: .global).minY) }
+                                    .onChange(of: geo.frame(in: .global).minY) { old, new in
+                                        updateCurrentSection(section.title, minY: new)
+                                    }
+                            }
+                        )
                     } header: {
                         Text(section.title.uppercased())
                             .font(AppTheme.bodyFont(size: 12, weight: .semibold))
                             .foregroundStyle(AppTheme.subtleInk)
                             .textCase(nil)
+                            .padding(.vertical, 4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(AppTheme.background.opacity(0.8)) // Sticky header 背景
                     }
                 }
             }
@@ -143,7 +259,33 @@ struct MeetingListView: View {
         .scrollContentBackground(.hidden)
         .background(Color.clear)
         .contentMargins(.horizontal, 16, for: .scrollContent)
+        .refreshable {
+            await syncWithCloud()
+        }
+        .background(
+            GeometryReader { geo in
+                Color.clear
+                    .onChange(of: geo.frame(in: .global).minY) { old, new in
+                        scrollOffset = -new + 100 // 补偿初始位置
+                    }
+            }
+        )
         .id(feedStructureIdentity)
+    }
+
+    private func updateCurrentSection(_ title: String, minY: CGFloat) {
+        // 当 section 的顶部接近顶栏时，更新当前显示的标题
+        if minY < 150 && minY > 50 {
+            currentSectionTitle = title
+        } else if minY > 150 && currentSectionTitle == title && title == homeSections.first?.title {
+            // 如果滚回到顶部
+            currentSectionTitle = ""
+        }
+    }
+
+    private func syncWithCloud() async {
+        // 调用同步服务
+        await meetingStore.syncAllMeetings()
     }
 
     private var emptyState: some View {
@@ -300,13 +442,15 @@ struct MeetingListView: View {
         systemName: String,
         accessibilityLabel: String,
         identifier: String,
+        size: CGFloat = 40,
+        iconSize: CGFloat = 16,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 16, weight: .bold))
+                .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(AppTheme.mutedInk)
-                .frame(width: 40, height: 40)
+                .frame(width: size, height: size)
                 .overlay(
                     Rectangle()
                         .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
