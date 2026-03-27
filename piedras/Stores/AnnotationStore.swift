@@ -226,7 +226,7 @@ final class AnnotationStore {
             return
         }
 
-        meeting.hasPendingImageTextRefresh = true
+        meeting.aiNotesFreshnessState = meeting.aiNotesFreshnessState.settingAttachmentChanges(true)
         meeting.updatedAt = .now
     }
 

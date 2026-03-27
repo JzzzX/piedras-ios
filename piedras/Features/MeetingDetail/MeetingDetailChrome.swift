@@ -80,7 +80,8 @@ enum MeetingDetailChrome {
     static func actionMenuItems(
         isRecording: Bool,
         hasTranscript: Bool,
-        canRetryTranscription: Bool
+        canRetryTranscription: Bool,
+        showsNotesRefreshHint: Bool
     ) -> [MeetingDetailMenuItemChrome] {
         if isRecording {
             return [
@@ -101,7 +102,7 @@ enum MeetingDetailChrome {
         ]
         items.append(
             MeetingDetailMenuItemChrome(
-                title: AppStrings.current.regenerateNotes,
+                title: showsNotesRefreshHint ? AppStrings.current.refreshNotes : AppStrings.current.regenerateNotes,
                 systemName: "arrow.clockwise",
                 accessibilityIdentifier: "MeetingDetailActionRegenerateNotes"
             )

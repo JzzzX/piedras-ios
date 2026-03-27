@@ -631,7 +631,7 @@ struct MeetingDeletionSyncTests {
         #expect(recoveredMeeting.syncState == .synced)
         #expect(recoveredMeeting.speakerDiarizationState == .ready)
         #expect(recoveredMeeting.audioLocalPath == audioURL.path)
-        #expect(recoveredMeeting.orderedSegments.map(\.text) == ["补转写成功"])
+        #expect(recoveredMeeting.orderedSegments.map { $0.text } == ["补转写成功"])
         #expect(FileManager.default.fileExists(atPath: audioURL.path))
     }
 

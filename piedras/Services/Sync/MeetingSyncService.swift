@@ -34,8 +34,8 @@ final class MeetingSyncService: MeetingSyncServicing {
         let candidates = (try? repository.fetchMeetings(includeDeleted: true))?
             .filter {
                 ($0.syncState == .pending || $0.syncState == .failed || $0.syncState == .deleted)
-                    && $0.status != .transcribing
-                    && $0.status != .transcriptionFailed
+                    && $0.transcriptPipelineState != .initializing
+                    && $0.transcriptPipelineState != .failed
             } ?? []
 
         var syncedCount = 0
@@ -64,7 +64,7 @@ final class MeetingSyncService: MeetingSyncServicing {
             return
         }
 
-        guard meeting.status != .transcribing else {
+        guard meeting.transcriptPipelineState != .initializing else {
             return
         }
 
@@ -82,6 +82,7 @@ final class MeetingSyncService: MeetingSyncServicing {
                 MeetingPayloadMapper.makeMeetingUpsertPayload(from: meeting, workspaceID: workspaceID)
             )
             MeetingPayloadMapper.apply(remote: remoteMeeting, to: meeting, repository: repository, baseURL: apiClient.baseURL)
+            reconcileTranscriptState(for: meeting)
             if let finalizedMeeting = try await uploadLocalAudioIfNeeded(for: meeting) {
                 MeetingPayloadMapper.apply(
                     remote: finalizedMeeting,
@@ -89,6 +90,7 @@ final class MeetingSyncService: MeetingSyncServicing {
                     repository: repository,
                     baseURL: apiClient.baseURL
                 )
+                reconcileTranscriptState(for: meeting)
             }
 
             meeting.syncState = .synced
@@ -99,6 +101,7 @@ final class MeetingSyncService: MeetingSyncServicing {
         } catch {
             if meeting.speakerDiarizationState == .processing {
                 meeting.status = .ended
+                meeting.transcriptPipelineState = .refining
                 meeting.speakerDiarizationErrorMessage = error.localizedDescription
             }
             meeting.syncState = .failed
@@ -131,6 +134,7 @@ final class MeetingSyncService: MeetingSyncServicing {
                 mimeType: meeting.audioMimeType ?? "audio/m4a"
             )
             meeting.speakerDiarizationState = .ready
+            meeting.transcriptPipelineState = .ready
             meeting.speakerDiarizationErrorMessage = nil
             try repository.save()
             return remoteMeeting
@@ -203,5 +207,35 @@ final class MeetingSyncService: MeetingSyncServicing {
             try repository.save()
             return
         }
+    }
+
+    private func reconcileTranscriptState(for meeting: Meeting) {
+        switch meeting.status {
+        case .transcribing:
+            meeting.transcriptPipelineState = .initializing
+        case .transcriptionFailed:
+            meeting.transcriptPipelineState = .failed
+        case .ended:
+            meeting.transcriptPipelineState = meeting.speakerDiarizationState == .processing ? .refining : .ready
+        case .idle, .recording, .paused:
+            meeting.transcriptPipelineState = .idle
+        }
+
+        updateTranscriptNotesFreshnessIfNeeded(for: meeting)
+    }
+
+    private func updateTranscriptNotesFreshnessIfNeeded(for meeting: Meeting) {
+        let notes = meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !notes.isEmpty else {
+            meeting.aiNotesFreshnessState = meeting.aiNotesFreshnessState.settingTranscriptChanges(false)
+            return
+        }
+
+        guard let lastTranscriptFingerprint = meeting.lastAINotesTranscriptFingerprint else {
+            return
+        }
+
+        let hasTranscriptChanged = lastTranscriptFingerprint != meeting.transcriptFingerprint
+        meeting.aiNotesFreshnessState = meeting.aiNotesFreshnessState.settingTranscriptChanges(hasTranscriptChanged)
     }
 }

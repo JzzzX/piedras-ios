@@ -150,6 +150,7 @@ private final class StubMeetingSyncService: MeetingSyncServicing {
         if let meeting = try repository.meeting(withID: id) {
             if meeting.speakerDiarizationState == .processing {
                 meeting.speakerDiarizationState = .ready
+                meeting.transcriptPipelineState = .ready
                 meeting.speakerDiarizationErrorMessage = nil
             }
             meeting.syncState = .synced
@@ -338,6 +339,7 @@ struct MeetingRecordingRepairTests {
 
         let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
         #expect(refreshedMeeting.status == .ended)
+        #expect(refreshedMeeting.transcriptPipelineState == .ready)
         #expect(fixture.transcriber.transcribeCalls == 0)
         #expect(fixture.meetingStore.fileTranscriptionStatus(meetingID: meeting.id) == nil)
     }
@@ -377,6 +379,7 @@ struct MeetingRecordingRepairTests {
         let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
         #expect(refreshedMeeting.status == .ended)
         #expect(refreshedMeeting.speakerDiarizationState == .idle)
+        #expect(refreshedMeeting.transcriptPipelineState == .ready)
         #expect(fixture.meetingStore.fileTranscriptionStatus(meetingID: meeting.id) == nil)
 
         fixture.syncService.resumeSync()
@@ -573,6 +576,7 @@ struct MeetingRecordingRepairTests {
                 orderIndex: 0
             )
         ]
+        meeting.lastAINotesTranscriptFingerprint = meeting.transcriptFingerprint
         try fixture.repository.save()
         fixture.meetingStore.loadMeetings()
 
@@ -594,7 +598,10 @@ struct MeetingRecordingRepairTests {
 
         let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
         #expect(refreshedMeeting.status == .ended)
+        #expect(refreshedMeeting.transcriptPipelineState == .ready)
         #expect(refreshedMeeting.orderedSegments.map(\.text) == ["完整补转写"])
+        #expect(refreshedMeeting.enhancedNotes == "已有 AI 笔记")
+        #expect(refreshedMeeting.aiNotesFreshnessState == .staleFromTranscript)
         #expect(fixture.transcriber.transcribeCalls == 1)
         #expect(fixture.syncService.syncedMeetingIDs == [meeting.id])
         #expect(fixture.syncService.transcriptSnapshotsAtSync == ["完整补转写"])
@@ -641,6 +648,7 @@ struct MeetingRecordingRepairTests {
 
         let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
         #expect(refreshedMeeting.status == .ended)
+        #expect(refreshedMeeting.transcriptPipelineState == .refining)
         #expect(refreshedMeeting.speakerDiarizationState == .processing)
         #expect(refreshedMeeting.speakerDiarizationErrorMessage == "repair failed")
         #expect(refreshedMeeting.orderedSegments.map(\.text) == ["残缺实时转写"])
@@ -702,6 +710,7 @@ struct MeetingRecordingRepairTests {
 
         let recoveredMeeting = try #require(try repository.meeting(withID: meeting.id))
         #expect(recoveredMeeting.status == .ended)
+        #expect(recoveredMeeting.transcriptPipelineState == .refining)
         #expect(recoveredMeeting.speakerDiarizationState == .processing)
         #expect(recoveredMeeting.syncState == .pending)
         let status = try #require(meetingStore.fileTranscriptionStatus(meetingID: meeting.id))

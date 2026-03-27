@@ -325,11 +325,12 @@ enum MeetingPayloadMapper {
     }
 
     static func makeMeeting(from remote: RemoteMeetingDetail, baseURL: URL?) -> Meeting {
-        Meeting(
+        let status = mapStatus(remote.status)
+        return Meeting(
             id: remote.id,
             title: remote.title ?? "",
             date: remote.date,
-            status: mapStatus(remote.status),
+            status: status,
             durationSeconds: remote.duration ?? 0,
             userNotesPlainText: PlainTextHTMLAdapter.plainText(from: remote.userNotes ?? ""),
             enhancedNotes: remote.enhancedNotes ?? "",
@@ -340,6 +341,7 @@ enum MeetingPayloadMapper {
             audioUpdatedAt: remote.audioUpdatedAt,
             hiddenWorkspaceId: remote.workspaceId,
             speakers: remote.speakers ?? [:],
+            transcriptPipelineState: status == .ended ? .ready : (status == .transcriptionFailed ? .failed : .idle),
             syncState: .synced,
             lastSyncedAt: .now,
             createdAt: remote.createdAt ?? remote.date,
@@ -358,6 +360,16 @@ enum MeetingPayloadMapper {
         meeting.title = remote.title ?? ""
         meeting.date = remote.date
         meeting.status = mapStatus(remote.status)
+        switch meeting.status {
+        case .transcribing:
+            meeting.transcriptPipelineState = .initializing
+        case .transcriptionFailed:
+            meeting.transcriptPipelineState = .failed
+        case .ended:
+            meeting.transcriptPipelineState = meeting.speakerDiarizationState == .processing ? .refining : .ready
+        case .idle, .recording, .paused:
+            meeting.transcriptPipelineState = .idle
+        }
         meeting.durationSeconds = remote.duration ?? meeting.durationSeconds
         meeting.userNotesPlainText = PlainTextHTMLAdapter.plainText(from: remote.userNotes ?? "")
         meeting.enhancedNotes = remote.enhancedNotes ?? ""

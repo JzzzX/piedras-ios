@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftData
 
@@ -51,6 +52,69 @@ enum SpeakerDiarizationState: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum TranscriptPipelineState: String, Codable, CaseIterable, Identifiable {
+    case idle
+    case initializing
+    case refining
+    case ready
+    case failed
+
+    var id: String { rawValue }
+}
+
+enum AINotesFreshnessState: String, Codable, CaseIterable, Identifiable {
+    case fresh
+    case staleFromTranscript
+    case staleFromAttachments
+    case staleFromTranscriptAndAttachments
+
+    var id: String { rawValue }
+
+    var includesTranscriptChanges: Bool {
+        switch self {
+        case .fresh, .staleFromAttachments:
+            return false
+        case .staleFromTranscript, .staleFromTranscriptAndAttachments:
+            return true
+        }
+    }
+
+    var includesAttachmentChanges: Bool {
+        switch self {
+        case .fresh, .staleFromTranscript:
+            return false
+        case .staleFromAttachments, .staleFromTranscriptAndAttachments:
+            return true
+        }
+    }
+
+    func settingTranscriptChanges(_ includesTranscriptChanges: Bool) -> Self {
+        switch (includesTranscriptChanges, includesAttachmentChanges) {
+        case (false, false):
+            return .fresh
+        case (true, false):
+            return .staleFromTranscript
+        case (false, true):
+            return .staleFromAttachments
+        case (true, true):
+            return .staleFromTranscriptAndAttachments
+        }
+    }
+
+    func settingAttachmentChanges(_ includesAttachmentChanges: Bool) -> Self {
+        switch (includesTranscriptChanges, includesAttachmentChanges) {
+        case (false, false):
+            return .fresh
+        case (true, false):
+            return .staleFromTranscript
+        case (false, true):
+            return .staleFromAttachments
+        case (true, true):
+            return .staleFromTranscriptAndAttachments
+        }
+    }
+}
+
 @Model
 final class Meeting {
     @Attribute(.unique) var id: String
@@ -82,10 +146,13 @@ final class Meeting {
     @Attribute(originalName: "speakerDiarizationStateRaw")
     private var speakerDiarizationStateRawValue: String?
     var speakerDiarizationErrorMessage: String?
+    private var transcriptPipelineStateRawValue: String?
     var syncStateRaw: String
     @Attribute(originalName: "meetingTypeRaw")
     private var meetingTypeRawValue: String?
     var lastSyncedAt: Date?
+    private var aiNotesFreshnessStateRawValue: String?
+    var lastAINotesTranscriptFingerprint: String?
     @Attribute(originalName: "hasPendingImageTextRefresh")
     private var hasPendingImageTextRefreshValue: Bool?
     var createdAt: Date
@@ -125,9 +192,12 @@ final class Meeting {
         speakers: [String: String] = [:],
         speakerDiarizationState: SpeakerDiarizationState = .idle,
         speakerDiarizationErrorMessage: String? = nil,
+        transcriptPipelineState: TranscriptPipelineState = .idle,
         syncState: MeetingSyncState = .pending,
         meetingType: String = MeetingTypeOption.general.rawValue,
         lastSyncedAt: Date? = nil,
+        aiNotesFreshnessState: AINotesFreshnessState = .fresh,
+        lastAINotesTranscriptFingerprint: String? = nil,
         hasPendingImageTextRefresh: Bool = false,
         createdAt: Date = .now,
         updatedAt: Date = .now,
@@ -159,9 +229,12 @@ final class Meeting {
         self.speakersRawValue = Self.encodeSpeakers(speakers)
         self.speakerDiarizationStateRawValue = speakerDiarizationState.rawValue
         self.speakerDiarizationErrorMessage = speakerDiarizationErrorMessage
+        self.transcriptPipelineStateRawValue = transcriptPipelineState.rawValue
         self.syncStateRaw = syncState.rawValue
         self.meetingTypeRawValue = Self.normalizedMeetingTypeRaw(meetingType)
         self.lastSyncedAt = lastSyncedAt
+        self.aiNotesFreshnessStateRawValue = aiNotesFreshnessState.rawValue
+        self.lastAINotesTranscriptFingerprint = lastAINotesTranscriptFingerprint
         self.hasPendingImageTextRefreshValue = hasPendingImageTextRefresh
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -220,9 +293,38 @@ final class Meeting {
         set { speakerDiarizationStateRawValue = newValue.rawValue }
     }
 
+    var transcriptPipelineState: TranscriptPipelineState {
+        get {
+            if let rawValue = transcriptPipelineStateRawValue,
+               let state = TranscriptPipelineState(rawValue: rawValue) {
+                return state
+            }
+
+            return Self.legacyTranscriptPipelineState(
+                status: status,
+                speakerDiarizationState: speakerDiarizationState
+            )
+        }
+        set { transcriptPipelineStateRawValue = newValue.rawValue }
+    }
+
+    var aiNotesFreshnessState: AINotesFreshnessState {
+        get {
+            var state = AINotesFreshnessState(rawValue: aiNotesFreshnessStateRawValue ?? "") ?? .fresh
+            if hasPendingImageTextRefreshValue == true {
+                state = state.settingAttachmentChanges(true)
+            }
+            return state
+        }
+        set {
+            aiNotesFreshnessStateRawValue = newValue.rawValue
+            hasPendingImageTextRefreshValue = newValue.includesAttachmentChanges
+        }
+    }
+
     var hasPendingImageTextRefresh: Bool {
-        get { hasPendingImageTextRefreshValue ?? false }
-        set { hasPendingImageTextRefreshValue = newValue }
+        get { aiNotesFreshnessState.includesAttachmentChanges }
+        set { aiNotesFreshnessState = aiNotesFreshnessState.settingAttachmentChanges(newValue) }
     }
 
     var hasNoteAttachments: Bool {
@@ -267,6 +369,18 @@ final class Meeting {
 
     var transcriptText: String {
         orderedSegments.map(\.text).joined(separator: "\n")
+    }
+
+    var transcriptFingerprint: String? {
+        Self.transcriptFingerprint(from: transcriptText)
+    }
+
+    var hasTranscriptNotesRefreshHint: Bool {
+        aiNotesFreshnessState.includesTranscriptChanges
+    }
+
+    var hasAttachmentNotesRefreshHint: Bool {
+        aiNotesFreshnessState.includesAttachmentChanges
     }
 
     var searchIndexText: String {
@@ -347,5 +461,28 @@ final class Meeting {
         guard speaker.hasPrefix("spk_") else { return nil }
         guard let index = Int(speaker.dropFirst(4)), index > 0 else { return nil }
         return index
+    }
+
+    private static func legacyTranscriptPipelineState(
+        status: MeetingStatus,
+        speakerDiarizationState: SpeakerDiarizationState
+    ) -> TranscriptPipelineState {
+        switch status {
+        case .transcribing:
+            return speakerDiarizationState == .processing ? .refining : .initializing
+        case .transcriptionFailed:
+            return .failed
+        case .ended:
+            return .ready
+        case .idle, .recording, .paused:
+            return .idle
+        }
+    }
+
+    private static func transcriptFingerprint(from transcript: String) -> String? {
+        let normalizedTranscript = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedTranscript.isEmpty else { return nil }
+        let digest = SHA256.hash(data: Data(normalizedTranscript.utf8))
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }

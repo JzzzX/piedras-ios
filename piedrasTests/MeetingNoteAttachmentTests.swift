@@ -148,7 +148,7 @@ struct MeetingNoteAttachmentTests {
         }
 
         #expect(meeting.noteAttachmentTextContext.contains("4 月 8 日灰度发布"))
-        #expect(meeting.hasPendingImageTextRefresh)
+        #expect(meeting.aiNotesFreshnessState == .staleFromAttachments)
         #expect(meeting.enhancedNotes == "现有 AI 笔记")
     }
 
