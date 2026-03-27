@@ -48,7 +48,7 @@ struct AnnotationStoreOCRTests {
         let annotation = try await waitForAnnotation(on: segment)
         #expect(annotation.imageTextStatus == .ready)
         #expect(annotation.imageTextContext.contains("4 月 8 日开始灰度"))
-        #expect(meeting.hasPendingImageTextRefresh)
+        #expect(meeting.aiNotesFreshnessState == .staleFromAttachments)
     }
 
     @MainActor

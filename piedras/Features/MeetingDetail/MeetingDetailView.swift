@@ -552,7 +552,7 @@ struct MeetingDetailView: View {
                     meeting: meeting,
                     showsInlineAddActions: false,
                     canAddMore: meetingStore.canAddNoteAttachment(to: meeting),
-                    showsRefreshHint: meeting.hasPendingImageTextRefresh,
+                    showsRefreshHint: meeting.hasAttachmentNotesRefreshHint,
                     onTakePhoto: {
                         openNoteAttachmentCamera(for: meeting)
                     },
@@ -863,7 +863,8 @@ struct MeetingDetailView: View {
         let menuItems = MeetingDetailChrome.actionMenuItems(
             isRecording: isRecordingThisMeeting,
             hasTranscript: !transcript.isEmpty,
-            canRetryTranscription: meetingStore.fileTranscriptionStatus(meetingID: meeting.id)?.canRetry == true
+            canRetryTranscription: meetingStore.fileTranscriptionStatus(meetingID: meeting.id)?.canRetry == true,
+            showsNotesRefreshHint: meeting.hasTranscriptNotesRefreshHint || meeting.hasAttachmentNotesRefreshHint
         )
 
         return menuItems.map { item in
@@ -1577,7 +1578,7 @@ private struct MeetingNotesDrawer: View {
                     meeting: meeting,
                     showsInlineAddActions: true,
                     canAddMore: meeting.noteAttachmentFileNames.count < 10,
-                    showsRefreshHint: meeting.hasPendingImageTextRefresh,
+                    showsRefreshHint: meeting.hasAttachmentNotesRefreshHint,
                     onTakePhoto: onTakePhoto,
                     onSelectPhotos: onSelectPhotos,
                     onDelete: onDeleteAttachment

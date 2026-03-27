@@ -534,6 +534,7 @@ final class MeetingStore {
         if meeting.speakerDiarizationState == .failed {
             meeting.speakerDiarizationState = .processing
             meeting.speakerDiarizationErrorMessage = nil
+            meeting.transcriptPipelineState = .refining
             meeting.markPending()
             try? repository.save()
             loadMeetings()
@@ -941,13 +942,16 @@ final class MeetingStore {
             return
         }
 
+        let transcriptFingerprint = meeting.transcriptFingerprint
+
         enhancingMeetingIDs.insert(meetingID)
         defer { enhancingMeetingIDs.remove(meetingID) }
 
         do {
             let response = try await apiClient.enhanceNotes(MeetingPayloadMapper.makeEnhancePayload(from: meeting))
             meeting.enhancedNotes = normalizeGeneratedNotes(response.content)
-            meeting.hasPendingImageTextRefresh = false
+            meeting.aiNotesFreshnessState = .fresh
+            meeting.lastAINotesTranscriptFingerprint = transcriptFingerprint
             meeting.markPending()
             try repository.save()
             settingsStore.markLLMRequestSucceeded(provider: response.provider)
@@ -1072,8 +1076,20 @@ final class MeetingStore {
     }
 
     func isFileTranscribing(meetingID: String) -> Bool {
-        transcribingMeetingIDs.contains(meetingID)
-            || meeting(withID: meetingID)?.status == .transcribing
+        if transcribingMeetingIDs.contains(meetingID) {
+            return true
+        }
+
+        guard let meeting = meeting(withID: meetingID) else {
+            return false
+        }
+
+        switch meeting.transcriptPipelineState {
+        case .initializing, .refining:
+            return true
+        case .idle, .ready, .failed:
+            return false
+        }
     }
 
     func fileTranscriptionStatus(meetingID: String) -> FileTranscriptionStatusSnapshot? {
@@ -1085,10 +1101,10 @@ final class MeetingStore {
             return nil
         }
 
-        switch meeting.speakerDiarizationState {
+        switch meeting.transcriptPipelineState {
         case .idle, .ready:
             return nil
-        case .processing:
+        case .initializing, .refining:
             return FileTranscriptionStatusSnapshot(
                 phase: .finalizing,
                 errorMessage: nil
@@ -1146,14 +1162,16 @@ final class MeetingStore {
         clearBackgroundShadowBuffer(keepingCapacity: false)
         shouldFlushBackgroundTranscriptTail = false
 
-        meeting.status = needsTranscriptRepair ? .transcribing : .ended
+        meeting.status = .ended
         meeting.audioLocalPath = artifact.fileURL.path
         meeting.audioMimeType = artifact.mimeType
         meeting.audioDuration = artifact.durationSeconds
         meeting.audioUpdatedAt = .now
         meeting.durationSeconds = max(meeting.durationSeconds, artifact.durationSeconds)
+        meeting.transcriptPipelineState = needsTranscriptRepair ? .refining : .ready
         meeting.speakerDiarizationState = needsTranscriptRepair ? .processing : .idle
         meeting.speakerDiarizationErrorMessage = nil
+        updateTranscriptNotesFreshnessIfNeeded(for: meeting)
         meeting.markPending()
 
         do {
@@ -1180,7 +1198,6 @@ final class MeetingStore {
                 return
             }
 
-            self.primeEnhancingStateIfNeeded(meetingID: meetingID)
             await self.finalizeStoppedMeeting(meetingID: meetingID)
         }
     }
@@ -1197,6 +1214,7 @@ final class MeetingStore {
         meeting.date = .now
         meeting.status = .transcribing
         meeting.recordingMode = .microphone
+        meeting.transcriptPipelineState = .initializing
         meeting.speakerDiarizationState = .idle
         meeting.speakerDiarizationErrorMessage = nil
         meeting.audioLocalPath = importedAudio.fileURL.path
@@ -1293,9 +1311,11 @@ final class MeetingStore {
             guard let meeting = meeting(withID: meetingID) else { return }
 
             meeting.status = .ended
+            meeting.transcriptPipelineState = .ready
             meeting.audioDuration = importedAudio.durationSeconds
             meeting.durationSeconds = importedAudio.durationSeconds
             meeting.audioUpdatedAt = .now
+            updateTranscriptNotesFreshnessIfNeeded(for: meeting)
             meeting.markPending()
             try repository.save()
             settingsStore.markASRStreamSucceeded()
@@ -1383,6 +1403,7 @@ final class MeetingStore {
 
             repository.replaceSegments(for: meeting, with: replacementSegments)
             meeting.status = .ended
+            meeting.transcriptPipelineState = .refining
             meeting.audioLocalPath = artifact.fileURL.path
             meeting.audioMimeType = artifact.mimeType
             meeting.audioDuration = artifact.durationSeconds
@@ -1396,7 +1417,7 @@ final class MeetingStore {
                 errorMessage: nil
             )
             fileTranscriptionPartials[meetingID] = ""
-            primeEnhancingStateIfNeeded(meetingID: meetingID)
+            updateTranscriptNotesFreshnessIfNeeded(for: meeting)
             await finalizeStoppedMeeting(meetingID: meetingID)
             fileTranscriptionStatuses.removeValue(forKey: meetingID)
             fileTranscriptionPartials.removeValue(forKey: meetingID)
@@ -1417,16 +1438,11 @@ final class MeetingStore {
         appendTranscriptSegment(result, to: meeting, speaker: "音频文件")
     }
 
-    private func primeEnhancingStateIfNeeded(meetingID: String) {
-        guard let meeting = meeting(withID: meetingID) else { return }
-        if !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            enhancingMeetingIDs.insert(meetingID)
-        }
-    }
-
     private func markFileTranscriptionFailed(meetingID: String, message: String) {
         if let meeting = meeting(withID: meetingID) {
             meeting.status = .transcriptionFailed
+            meeting.transcriptPipelineState = .failed
+            meeting.speakerDiarizationErrorMessage = message
             meeting.audioUpdatedAt = .now
             meeting.markPending()
             try? repository.save()
@@ -1445,6 +1461,7 @@ final class MeetingStore {
     private func markStoppedRecordingRepairPendingCloudFinalization(meetingID: String, message: String) {
         if let meeting = meeting(withID: meetingID) {
             meeting.status = .ended
+            meeting.transcriptPipelineState = .refining
             meeting.speakerDiarizationState = .processing
             meeting.speakerDiarizationErrorMessage = message
             meeting.audioUpdatedAt = .now
@@ -1465,11 +1482,13 @@ final class MeetingStore {
         for meeting in interruptedMeetings {
             if meeting.speakerDiarizationState == .processing, meeting.audioLocalPath?.isEmpty == false {
                 meeting.status = .ended
+                meeting.transcriptPipelineState = .refining
                 meeting.markPending()
                 fileTranscriptionStatuses.removeValue(forKey: meeting.id)
                 fileTranscriptionPartials[meeting.id] = ""
             } else {
                 meeting.status = .transcriptionFailed
+                meeting.transcriptPipelineState = .failed
                 meeting.markPending()
                 fileTranscriptionStatuses[meeting.id] = FileTranscriptionStatusSnapshot(
                     phase: nil,
@@ -2356,7 +2375,7 @@ final class MeetingStore {
         }
 
         guard let meeting = meeting(withID: meetingID) else { return }
-        if meeting.speakerDiarizationState == .processing || meeting.speakerDiarizationState == .failed {
+        if meeting.transcriptPipelineState == .initializing || meeting.transcriptPipelineState == .failed {
             loadMeetings()
             return
         }
@@ -2398,13 +2417,15 @@ final class MeetingStore {
         if meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            canRunAIFinalization {
             do {
+                let transcriptFingerprint = meeting.transcriptFingerprint
                 enhancingMeetingIDs.insert(meetingID)
                 defer { enhancingMeetingIDs.remove(meetingID) }
                 let response = try await apiClient.enhanceNotes(MeetingPayloadMapper.makeEnhancePayload(from: meeting))
                 let content = normalizeGeneratedNotes(response.content)
                 if !content.isEmpty {
                     meeting.enhancedNotes = content
-                    meeting.hasPendingImageTextRefresh = false
+                    meeting.aiNotesFreshnessState = .fresh
+                    meeting.lastAINotesTranscriptFingerprint = transcriptFingerprint
                     meeting.markPending()
                     try repository.save()
                     settingsStore.markLLMRequestSucceeded(provider: response.provider)
@@ -2421,6 +2442,21 @@ final class MeetingStore {
         if meeting.syncState != .synced || meeting.lastSyncedAt == nil {
             await syncMeetingIfPossible(meetingID: meetingID, userVisibleFailurePrefix: "会议同步失败")
         }
+    }
+
+    private func updateTranscriptNotesFreshnessIfNeeded(for meeting: Meeting) {
+        let notes = meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !notes.isEmpty else {
+            meeting.aiNotesFreshnessState = meeting.aiNotesFreshnessState.settingTranscriptChanges(false)
+            return
+        }
+
+        guard let lastTranscriptFingerprint = meeting.lastAINotesTranscriptFingerprint else {
+            return
+        }
+
+        let hasTranscriptChanged = lastTranscriptFingerprint != meeting.transcriptFingerprint
+        meeting.aiNotesFreshnessState = meeting.aiNotesFreshnessState.settingTranscriptChanges(hasTranscriptChanged)
     }
 
     private func needsFreshHealthCheck(force: Bool) -> Bool {
@@ -2757,7 +2793,7 @@ final class MeetingStore {
             return
         }
 
-        meeting.hasPendingImageTextRefresh = true
+        meeting.aiNotesFreshnessState = meeting.aiNotesFreshnessState.settingAttachmentChanges(true)
         meeting.updatedAt = .now
     }
 

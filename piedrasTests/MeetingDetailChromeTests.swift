@@ -33,7 +33,8 @@ struct MeetingDetailChromeTests {
         let items = MeetingDetailChrome.actionMenuItems(
             isRecording: false,
             hasTranscript: true,
-            canRetryTranscription: false
+            canRetryTranscription: false,
+            showsNotesRefreshHint: false
         )
 
         #expect(items.map(\.accessibilityIdentifier) == [
@@ -51,13 +52,26 @@ struct MeetingDetailChromeTests {
         let items = MeetingDetailChrome.actionMenuItems(
             isRecording: true,
             hasTranscript: true,
-            canRetryTranscription: true
+            canRetryTranscription: true,
+            showsNotesRefreshHint: false
         )
 
         #expect(items.map(\.accessibilityIdentifier) == [
             "MeetingDetailActionCopyNotes",
         ])
         #expect(items.first?.title == AppStrings.current.copyNotes)
+    }
+
+    @Test
+    func actionMenuUsesRefreshTitleWhenNotesAreStale() {
+        let items = MeetingDetailChrome.actionMenuItems(
+            isRecording: false,
+            hasTranscript: true,
+            canRetryTranscription: false,
+            showsNotesRefreshHint: true
+        )
+
+        #expect(items[1].title == AppStrings.current.refreshNotes)
     }
 
     @Test

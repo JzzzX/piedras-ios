@@ -141,7 +141,9 @@ struct SchemaMigrationCompatibilityTests {
 
         #expect(meetings.count == 1)
         #expect(meetings.first?.title == "旧会议")
-        #expect(meetings.first?.hasPendingImageTextRefresh == false)
+        #expect(meetings.first?.transcriptPipelineState == .idle)
+        #expect(meetings.first?.aiNotesFreshnessState == .fresh)
+        #expect(meetings.first?.lastAINotesTranscriptFingerprint == nil)
         #expect(meetings.first?.meetingTypeRaw == "通用")
         #expect(meetings.first?.meetingType == "通用")
         #expect(meetings.first?.noteAttachmentFileNames == [])
