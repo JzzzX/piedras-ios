@@ -237,27 +237,21 @@ struct MeetingListView: View {
     }
 
     private var emptyState: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            RetroIconBadge(systemName: "mic.fill", size: 48, symbolSize: 17)
+        VStack(alignment: .leading, spacing: 10) {
+            Text(AppStrings.current.noNotesYet.uppercased())
+                .font(AppTheme.dataFont(size: 13, weight: .bold))
+                .foregroundStyle(AppTheme.mutedInk)
+                .tracking(0.8)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(AppStrings.current.noNotesYet)
-                    .font(AppTheme.bodyFont(size: 20, weight: .bold))
-                    .foregroundStyle(AppTheme.ink)
-
-                Text(AppStrings.current.tapMicToCapture)
-                    .font(AppTheme.bodyFont(size: 13))
-                    .foregroundStyle(AppTheme.subtleInk)
-            }
+            Text(AppStrings.current.tapMicToCapture)
+                .font(AppTheme.bodyFont(size: 14))
+                .foregroundStyle(AppTheme.subtleInk)
+                .frame(maxWidth: 280, alignment: .leading)
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AppTheme.surface)
-        .overlay(
-            Rectangle()
-                .stroke(style: StrokeStyle(lineWidth: AppTheme.subtleBorderWidth, dash: [8, 4]))
-                .foregroundStyle(AppTheme.subtleBorderColor)
-        )
+        .padding(.top, 60)
+        .padding(.horizontal, 18)
+        .padding(.bottom, 120)
+        .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.48, alignment: .topLeading)
     }
 
     private var bottomDock: some View {
@@ -282,7 +276,7 @@ struct MeetingListView: View {
 
     private var unifiedBottomDock: some View {
         HStack(spacing: 14) {
-            recordingButton(size: 58)
+            recordingButton
 
             Rectangle()
                 .fill(AppTheme.subtleBorderColor)
@@ -324,26 +318,8 @@ struct MeetingListView: View {
         .accessibilityIdentifier("HomeGlobalChatLauncher")
     }
 
-    private func dockIconButton(
-        systemName: String,
-        accessibilityLabel: String,
-        identifier: String,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(AppTheme.ink)
-                .frame(width: 34, height: 34)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(accessibilityLabel)
-        .accessibilityIdentifier(identifier)
-    }
-
-    private func recordingButton(size: CGFloat) -> some View {
-        Button {
+    private var recordingButton: some View {
+        HomeRecordingDockButton(isRecording: recordingSessionStore.phase != .idle) {
             hideKeyboard()
 
             if recordingSessionStore.phase == .idle {
@@ -353,40 +329,7 @@ struct MeetingListView: View {
                     await meetingStore.stopRecording()
                 }
             }
-        } label: {
-            ZStack {
-                Rectangle()
-                    .fill(recordingSessionStore.phase == .idle ? AppTheme.surface : AppTheme.highlight)
-
-                if recordingSessionStore.phase == .idle {
-                    ZStack(alignment: .bottomTrailing) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: size * 0.28, weight: .bold))
-                            .foregroundStyle(AppTheme.ink)
-                            .offset(x: -3, y: -3)
-
-                        Image(systemName: "pencil")
-                            .font(.system(size: size * 0.14, weight: .bold))
-                            .foregroundStyle(AppTheme.ink)
-                            .offset(x: 4, y: 4)
-                    }
-                } else {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: size * 0.30, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-            }
-            .frame(width: size, height: size)
-            .overlay(
-                Rectangle()
-                    .stroke(AppTheme.ink, lineWidth: 2)
-            )
-            .retroHardShadow()
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(recordingSessionStore.phase == .idle ? AppStrings.current.newRecording : AppStrings.current.stop)
-        .accessibilityIdentifier("NewRecordingButton")
     }
 
     private func headerToolButton(

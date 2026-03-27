@@ -19,6 +19,14 @@ private struct MeetingActionItem: Identifiable {
     let action: () -> Void
 }
 
+private struct MeetingTypeSelectorBoundsKey: PreferenceKey {
+    static var defaultValue: Anchor<CGRect>?
+
+    static func reduce(value: inout Anchor<CGRect>?, nextValue: () -> Anchor<CGRect>?) {
+        value = nextValue() ?? value
+    }
+}
+
 private struct InteractivePopGestureEnabler: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> Controller {
         Controller()
@@ -68,6 +76,7 @@ struct MeetingDetailView: View {
     @State private var showsTitleRenameDialog = false
     @State private var activeSheet: MeetingDetailSheet?
     @State private var showsActionMenu = false
+    @State private var showsMeetingTypeOverlay = false
     @State private var titleDraft = ""
     @State private var currentTitleOverride: String?
     @State private var currentNotesOverride: String?
@@ -87,6 +96,7 @@ struct MeetingDetailView: View {
     private let actionMenuHorizontalInset: CGFloat = 24
     private let attachmentMenuTopInset: CGFloat = 70
     private let attachmentMenuHorizontalInset: CGFloat = 76
+    private let meetingTypeOverlaySpacing: CGFloat = 8
 
     var body: some View {
         Group {
@@ -171,6 +181,7 @@ struct MeetingDetailView: View {
             }
         }
         .animation(.easeOut(duration: 0.18), value: showsActionMenu)
+        .animation(.easeOut(duration: 0.18), value: showsMeetingTypeOverlay)
         .animation(.easeOut(duration: 0.4), value: isRecordingThisMeeting)
         .toolbar(.hidden, for: .navigationBar)
         .background(InteractivePopGestureEnabler())
@@ -204,6 +215,13 @@ struct MeetingDetailView: View {
         .overlay {
             if showsTitleRenameDialog {
                 titleRenameOverlay(meeting: meeting)
+            }
+        }
+        .overlayPreferenceValue(MeetingTypeSelectorBoundsKey.self) { anchor in
+            GeometryReader { proxy in
+                if showsMeetingTypeOverlay, let anchor {
+                    meetingTypeOverlay(meeting: meeting, anchor: anchor, in: proxy)
+                }
             }
         }
         .confirmationDialog(AppStrings.current.chooseRecordingMode, isPresented: $showsRecordingModeDialog, titleVisibility: .visible) {
@@ -351,6 +369,7 @@ struct MeetingDetailView: View {
             Button {
                 closeAttachmentMenu()
                 closeActionMenu()
+                closeMeetingTypeOverlay()
                 showsTranscriptSheet = true
             } label: {
                 detailToolLabel(systemName: "doc.text")
@@ -370,6 +389,7 @@ struct MeetingDetailView: View {
         case .attachments:
             Button {
                 closeActionMenu()
+                closeMeetingTypeOverlay()
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
                     showsAttachmentMenu.toggle()
                 }
@@ -385,6 +405,7 @@ struct MeetingDetailView: View {
         case .more:
             Button {
                 closeAttachmentMenu()
+                closeMeetingTypeOverlay()
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
                     showsActionMenu.toggle()
                 }
@@ -492,6 +513,36 @@ struct MeetingDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("MeetingDetailAttachmentMenu")
+    }
+
+    private func meetingTypeOverlay(
+        meeting: Meeting,
+        anchor: Anchor<CGRect>,
+        in proxy: GeometryProxy
+    ) -> some View {
+        let frame = proxy[anchor]
+        let cardWidth: CGFloat = 248
+        let maxX = max(16, proxy.size.width - cardWidth - 16)
+        let originX = min(max(16, frame.maxX - cardWidth), maxX)
+
+        return ZStack(alignment: .topLeading) {
+            Color.black.opacity(0.001)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    closeMeetingTypeOverlay()
+                }
+
+            MeetingTypePickerCard(
+                selectedType: MeetingTypeOption(rawValue: meeting.meetingType) ?? .general
+            ) { type in
+                meetingStore.updateMeetingType(type.rawValue, for: meeting)
+                closeMeetingTypeOverlay()
+            }
+            .offset(x: originX, y: frame.maxY + meetingTypeOverlaySpacing)
+            .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .topTrailing)))
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func documentPage(meeting: Meeting) -> some View {
@@ -958,6 +1009,7 @@ struct MeetingDetailView: View {
         titleDraft = currentRawTitle(for: meeting)
         closeActionMenu()
         closeAttachmentMenu()
+        closeMeetingTypeOverlay()
         showsTitleRenameDialog = true
         Task { @MainActor in
             isTitleRenameFocused = true
@@ -968,6 +1020,7 @@ struct MeetingDetailView: View {
         enhancedNotesDraft = meeting.enhancedNotes
         closeActionMenu()
         closeAttachmentMenu()
+        closeMeetingTypeOverlay()
         activeSheet = .enhancedNotesEditor
     }
 
@@ -997,6 +1050,10 @@ struct MeetingDetailView: View {
 
     private func closeAttachmentMenu() {
         showsAttachmentMenu = false
+    }
+
+    private func closeMeetingTypeOverlay() {
+        showsMeetingTypeOverlay = false
     }
 
     private func showToast(_ message: String) {
@@ -1218,6 +1275,7 @@ struct MeetingDetailView: View {
             glyphIdentifier: "MeetingTranscriptNotesTeaserGlyph"
         ) {
             closeActionMenu()
+            closeMeetingTypeOverlay()
             showsNotesDrawer = true
         }
     }
@@ -1225,17 +1283,11 @@ struct MeetingDetailView: View {
     private func meetingTypeSelector(meeting: Meeting) -> some View {
         let selectedType = MeetingTypeOption(rawValue: meeting.meetingType) ?? .general
 
-        return Menu {
-            ForEach(MeetingTypeOption.allCases) { type in
-                Button {
-                    meetingStore.updateMeetingType(type.rawValue, for: meeting)
-                } label: {
-                    if type == selectedType {
-                        Label(AppStrings.current.meetingTypeName(type), systemImage: "checkmark")
-                    } else {
-                        Text(AppStrings.current.meetingTypeName(type))
-                    }
-                }
+        return Button {
+            closeActionMenu()
+            closeAttachmentMenu()
+            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                showsMeetingTypeOverlay.toggle()
             }
         } label: {
             HStack(spacing: 12) {
@@ -1269,8 +1321,10 @@ struct MeetingDetailView: View {
                 Rectangle()
                     .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
             )
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .anchorPreference(key: MeetingTypeSelectorBoundsKey.self, value: .bounds) { $0 }
         .accessibilityLabel(AppStrings.current.meetingTypeLabel)
         .accessibilityValue(AppStrings.current.meetingTypeName(selectedType))
         .accessibilityIdentifier("MeetingTypeMenu")

@@ -173,6 +173,22 @@ final class RecordingFlowUITests: XCTestCase {
     }
 
     @MainActor
+    func testMeetingTypeSelectorOpensCustomOverlay() throws {
+        let app = launchApp()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        let selector = app.buttons["MeetingTypeMenu"]
+        XCTAssertTrue(selector.waitForExistence(timeout: 3), "会议类型入口未出现。")
+        selector.tap()
+
+        XCTAssertTrue(app.otherElements["MeetingTypeOverlay"].waitForExistence(timeout: 2), "点击会议类型后应出现自定义浮层。")
+        XCTAssertTrue(app.buttons["MeetingTypeOption_访谈"].exists, "浮层中应展示可选会议类型。")
+    }
+
+    @MainActor
     func testMeetingDetailMenuDismissesWithoutTriggeringUnderlyingAction() throws {
         let app = launchApp()
 
