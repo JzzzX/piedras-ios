@@ -1,11 +1,8 @@
-import { getAsrRuntimeStatus } from "@/lib/asr";
-import { readAdminSessionState } from "@/lib/admin-auth";
-import { loadAdminDashboardData } from "@/lib/admin-management";
-import { prisma } from "@/lib/db";
-import { getConfiguredProviders } from "@/lib/llm-provider";
-import { AdminConsole } from "./admin/AdminConsole";
+import { getAsrRuntimeStatus } from '@/lib/asr';
+import { prisma } from '@/lib/db';
+import { getConfiguredProviders } from '@/lib/llm-provider';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 async function getDatabaseReachable() {
   try {
@@ -16,93 +13,106 @@ async function getDatabaseReachable() {
   }
 }
 
-function firstSearchParam(value: string | string[] | undefined) {
-  if (Array.isArray(value)) {
-    return value[0] ?? "";
+function llmSummary(llmProviders: string[]) {
+  if (llmProviders.length === 0) {
+    return {
+      title: 'Unconfigured',
+      description: '当前没有可用的云端大模型 provider。',
+    };
   }
 
-  return value ?? "";
+  return {
+    title: llmProviders.join(', '),
+    description: '当前云端优先 provider 列表。',
+  };
 }
 
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
-  const message = firstSearchParam(params.message);
-  const error = firstSearchParam(params.error);
-  const [asr, dbReachable, session] = await Promise.all([
+function asrSummary(asr: Awaited<ReturnType<typeof getAsrRuntimeStatus>> | null) {
+  if (!asr) {
+    return {
+      title: 'Unknown',
+      description: '暂时无法读取语音识别运行状态。',
+    };
+  }
+
+  if (asr.ready) {
+    return {
+      title: 'Ready',
+      description: asr.message,
+    };
+  }
+
+  if (asr.configured) {
+    return {
+      title: 'Configured',
+      description: asr.message,
+    };
+  }
+
+  return {
+    title: 'Unconfigured',
+    description: asr.message,
+  };
+}
+
+export default async function HomePage() {
+  const [asr, databaseReachable] = await Promise.all([
     getAsrRuntimeStatus().catch(() => null),
     getDatabaseReachable(),
-    readAdminSessionState(),
   ]);
   const llmProviders = getConfiguredProviders();
-  const dashboard = session.authenticated ? await loadAdminDashboardData(prisma) : null;
+  const llm = llmSummary(llmProviders);
+  const asrCard = asrSummary(asr);
 
   return (
-    <main className="page-shell">
-      <div className="admin-shell">
-        <section className="glass-card">
-          <div className="pill">
-            <span className="dot" />
-            Piedras Cloud
-          </div>
-          <h1 style={{ margin: "16px 0 10px", fontSize: 34 }}>piedras-ios 单主仓云端入口</h1>
-          <p className="muted" style={{ margin: 0, lineHeight: 1.7 }}>
-            当前目录只承载 iOS 真实依赖的 API 和状态调试页，不再承载旧 Web 工作台。
+    <main className="home-page-shell">
+      <section className="home-hero">
+        <div className="home-topbar">
+          <div className="home-badge">Piedras Cloud</div>
+          <a className="home-admin-link" href="/admin">
+            进入后台
+          </a>
+        </div>
+
+        <div className="home-copy">
+          <h1 className="home-title">iOS 录音与转写的云端入口</h1>
+          <p className="home-subtitle">
+            这里只保留服务状态和必要的调试入口，不再展示旧版后台管理内容。
           </p>
-        </section>
+        </div>
 
-        <section className="card-grid">
-          <article className="glass-card">
-            <p className="muted" style={{ marginTop: 0 }}>Database</p>
-            <h2 style={{ margin: "0 0 6px", fontSize: 24 }}>{dbReachable ? "Online" : "Offline"}</h2>
-            <p className="muted" style={{ margin: 0 }}>
-              PostgreSQL {dbReachable ? "已连通" : "未连通"}
+        <section className="home-status-grid" aria-label="Cloud runtime status">
+          <article className="home-status-card">
+            <p className="home-status-label">Database</p>
+            <h2 className="home-status-title">{databaseReachable ? 'Online' : 'Offline'}</h2>
+            <p className="home-status-description">
+              PostgreSQL {databaseReachable ? '已连通' : '未连通'}。
             </p>
           </article>
 
-          <article className="glass-card">
-            <p className="muted" style={{ marginTop: 0 }}>LLM</p>
-            <h2 style={{ margin: "0 0 6px", fontSize: 24 }}>
-              {llmProviders.length > 0 ? llmProviders.join(", ") : "Unconfigured"}
-            </h2>
-            <p className="muted" style={{ margin: 0 }}>
-              当前云端优先 provider 列表
-            </p>
+          <article className="home-status-card">
+            <p className="home-status-label">LLM</p>
+            <h2 className="home-status-title">{llm.title}</h2>
+            <p className="home-status-description">{llm.description}</p>
           </article>
 
-          <article className="glass-card">
-            <p className="muted" style={{ marginTop: 0 }}>ASR</p>
-            <h2 style={{ margin: "0 0 6px", fontSize: 24 }}>
-              {asr?.ready ? "Ready" : asr?.configured ? "Configured" : "Unconfigured"}
-            </h2>
-            <p className="muted" style={{ margin: 0 }}>
-              {asr?.message ?? "未完成 ASR 状态检查"}
-            </p>
+          <article className="home-status-card">
+            <p className="home-status-label">ASR</p>
+            <h2 className="home-status-title">{asrCard.title}</h2>
+            <p className="home-status-description">{asrCard.description}</p>
           </article>
         </section>
 
-        <section className="glass-card">
-          <p className="muted" style={{ marginTop: 0 }}>Useful Endpoints</p>
-          <ul className="endpoint-list">
-            <li><a href="/healthz">/healthz</a></li>
-            <li><a href="/api/llm/status">/api/llm/status</a></li>
-            <li><a href="/api/asr/status">/api/asr/status</a></li>
-            <li><a href="/api/workspaces">/api/workspaces</a></li>
-            <li><a href="/admin">/admin</a></li>
-            <li><a href="#account-admin">账号管理区</a></li>
-          </ul>
+        <section className="home-links-panel">
+          <p className="home-links-label">常用入口</p>
+          <div className="home-links">
+            <a href="/healthz">/healthz</a>
+            <a href="/api/asr/status">/api/asr/status</a>
+            <a href="/api/llm/status">/api/llm/status</a>
+            <a href="/admin">/admin</a>
+          </div>
         </section>
-
-        <AdminConsole
-          message={message}
-          error={error}
-          session={session}
-          dashboard={dashboard}
-        />
-      </div>
+      </section>
     </main>
   );
 }

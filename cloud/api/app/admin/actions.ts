@@ -11,11 +11,7 @@ import {
 } from '@/lib/admin-auth';
 import {
   AdminManagementError,
-  assignLegacyWorkspaceToUser,
-  createInviteCodeRecord,
-  createManagedUser,
   resetManagedUserPassword,
-  revokeInviteCodeRecord,
 } from '@/lib/admin-management';
 import { prisma } from '@/lib/db';
 
@@ -27,7 +23,7 @@ function redirectWithStatus(kind: 'error' | 'message', message: string): never {
   const params = new URLSearchParams({
     [kind]: message,
   });
-  redirect(`/?${params.toString()}#account-admin`);
+  redirect(`/admin?${params.toString()}`);
 }
 
 async function requireAdminSession() {
@@ -74,48 +70,6 @@ export async function adminLogoutAction() {
   redirectWithStatus('message', '已退出管理后台');
 }
 
-export async function createManagedUserAction(formData: FormData) {
-  await requireAdminSession();
-
-  let result: Awaited<ReturnType<typeof createManagedUser>>;
-  try {
-    result = await createManagedUser(prisma, {
-      email: firstValue(formData, 'email'),
-      password: firstValue(formData, 'password'),
-      displayName: firstValue(formData, 'displayName') || null,
-      legacyWorkspaceId: firstValue(formData, 'legacyWorkspaceId') || null,
-    });
-  } catch (error) {
-    handleActionError(error);
-  }
-
-  revalidatePath('/');
-  redirectWithStatus(
-    'message',
-    `已创建账号 ${result.user.email}，当前工作区：${result.workspace.name}`
-  );
-}
-
-export async function assignLegacyWorkspaceAction(formData: FormData) {
-  await requireAdminSession();
-
-  let result: Awaited<ReturnType<typeof assignLegacyWorkspaceToUser>>;
-  try {
-    result = await assignLegacyWorkspaceToUser(prisma, {
-      workspaceId: firstValue(formData, 'workspaceId'),
-      userId: firstValue(formData, 'userId'),
-    });
-  } catch (error) {
-    handleActionError(error);
-  }
-
-  revalidatePath('/');
-  redirectWithStatus(
-    'message',
-    `已把 legacy 工作区 ${result.workspace.name} 交给 ${result.user.email}`
-  );
-}
-
 export async function resetManagedUserPasswordAction(formData: FormData) {
   await requireAdminSession();
 
@@ -129,39 +83,6 @@ export async function resetManagedUserPasswordAction(formData: FormData) {
     handleActionError(error);
   }
 
-  revalidatePath('/');
+  revalidatePath('/admin');
   redirectWithStatus('message', `已重置 ${result.email} 的密码`);
-}
-
-export async function createInviteCodeAction(formData: FormData) {
-  await requireAdminSession();
-
-  let inviteCode: Awaited<ReturnType<typeof createInviteCodeRecord>>;
-  try {
-    inviteCode = await createInviteCodeRecord(prisma, {
-      note: firstValue(formData, 'note') || null,
-      code: firstValue(formData, 'code') || null,
-    });
-  } catch (error) {
-    handleActionError(error);
-  }
-
-  revalidatePath('/');
-  redirectWithStatus('message', `已生成邀请码 ${inviteCode.code}`);
-}
-
-export async function revokeInviteCodeAction(formData: FormData) {
-  await requireAdminSession();
-
-  let inviteCode: Awaited<ReturnType<typeof revokeInviteCodeRecord>>;
-  try {
-    inviteCode = await revokeInviteCodeRecord(prisma, {
-      inviteCodeId: firstValue(formData, 'inviteCodeId'),
-    });
-  } catch (error) {
-    handleActionError(error);
-  }
-
-  revalidatePath('/');
-  redirectWithStatus('message', `已停用邀请码 ${inviteCode.code}`);
 }
