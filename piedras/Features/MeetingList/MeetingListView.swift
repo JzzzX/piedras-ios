@@ -1,13 +1,8 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
 private extension View {
     func appHeaderFont() -> some View {
         self.font(.system(size: 28, weight: .bold, design: .monospaced))
-    }
-
-    func ptrDateFont() -> some View {
-        self.font(.custom("STSong", size: 14))
     }
 }
 
@@ -46,7 +41,6 @@ struct MeetingListView: View {
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
     @Environment(SettingsStore.self) private var settingsStore
 
-    @State private var isImportingSourceAudio = false
     @State private var scrollOffset: CGFloat = 0
     @State private var currentSectionTitle: String = ""
 
@@ -77,13 +71,6 @@ struct MeetingListView: View {
                     .padding(.top, 10)
                     .padding(.horizontal, 16)
             }
-        }
-        .fileImporter(
-            isPresented: $isImportingSourceAudio,
-            allowedContentTypes: [.audio],
-            allowsMultipleSelection: false
-        ) { result in
-            handleSourceAudioSelection(result)
         }
         .id(settingsStore.appLanguage)
     }
@@ -157,47 +144,8 @@ struct MeetingListView: View {
         }
     }
 
-    private var pullToRefreshDateHeader: some View {
-        VStack(spacing: 4) {
-            Text(formattedCurrentDate)
-                .ptrDateFont() // 优先使用宋体
-                .foregroundStyle(AppTheme.subtleInk)
-                .frame(maxWidth: .infinity)
-                .opacity(min(1.0, max(0.0, (Double(scrollOffset) + 60.0) / 40.0))) // 随拉动显示
-        }
-        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-        .listRowBackground(Color.clear)
-        .listRowSeparator(.hidden)
-        .frame(height: max(0, scrollOffset > 0 ? 0 : -scrollOffset))
-    }
-
-    private var formattedCurrentDate: String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: settingsStore.appLanguage.rawValue)
-        formatter.dateFormat = "MMMM d, EEEE"
-        if settingsStore.appLanguage == .chinese {
-            // 中文特殊格式
-            let month = Calendar.current.component(.month, from: .now)
-            let day = Calendar.current.component(.day, from: .now)
-            let weekday = formatter.weekdaySymbols[Calendar.current.component(.weekday, from: .now) - 1]
-            return "\(numberToChinese(month))月\(numberToChinese(day))日，\(weekday)"
-        }
-        return formatter.string(from: .now)
-    }
-
-    private func numberToChinese(_ n: Int) -> String {
-        let chineseNumbers = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "二十一", "二十二", "二十三", "二十四", "二十五", "二十六", "二十七", "二十八", "二十九", "三十", "三十一"]
-        if n < chineseNumbers.count {
-            return chineseNumbers[n]
-        }
-        return "\(n)"
-    }
-
     private var feedList: some View {
         List {
-            // 下拉刷新日期指示器 (Granola 风格)
-            pullToRefreshDateHeader
-
             // 大标题头部
             Section {
                 header
@@ -334,17 +282,6 @@ struct MeetingListView: View {
 
     private var unifiedBottomDock: some View {
         HStack(spacing: 14) {
-            dockIconButton(
-                systemName: "waveform.badge.plus",
-                accessibilityLabel: "上传音频",
-                identifier: "HomeUploadAudioButton",
-                action: openUploadAudio
-            )
-
-            Rectangle()
-                .fill(AppTheme.subtleBorderColor)
-                .frame(width: AppTheme.subtleBorderWidth, height: 28)
-
             recordingButton(size: 58)
 
             Rectangle()
@@ -421,9 +358,23 @@ struct MeetingListView: View {
                 Rectangle()
                     .fill(recordingSessionStore.phase == .idle ? AppTheme.surface : AppTheme.highlight)
 
-                Image(systemName: recordingSessionStore.phase == .idle ? "mic.fill" : "stop.fill")
-                    .font(.system(size: size * 0.30, weight: .bold))
-                    .foregroundStyle(recordingSessionStore.phase == .idle ? AppTheme.ink : .white)
+                if recordingSessionStore.phase == .idle {
+                    ZStack(alignment: .bottomTrailing) {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: size * 0.28, weight: .bold))
+                            .foregroundStyle(AppTheme.ink)
+                            .offset(x: -3, y: -3)
+
+                        Image(systemName: "pencil")
+                            .font(.system(size: size * 0.14, weight: .bold))
+                            .foregroundStyle(AppTheme.ink)
+                            .offset(x: 4, y: 4)
+                    }
+                } else {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: size * 0.30, weight: .bold))
+                        .foregroundStyle(.white)
+                }
             }
             .frame(width: size, height: size)
             .overlay(
@@ -571,10 +522,6 @@ struct MeetingListView: View {
         meeting.id == recordingSessionStore.meetingID && recordingSessionStore.phase != .idle
     }
 
-    private func openUploadAudio() {
-        isImportingSourceAudio = true
-    }
-
     private func openGlobalChat() {
         router.showGlobalChat()
     }
@@ -587,24 +534,4 @@ struct MeetingListView: View {
         }
     }
 
-    private func handleSourceAudioSelection(_ result: Result<[URL], Error>) {
-        switch result {
-        case let .success(urls):
-            guard let sourceURL = urls.first else { return }
-            guard let meeting = meetingStore.createMeeting() else { return }
-            router.showMeeting(id: meeting.id)
-            let displayName = sourceURL.deletingPathExtension().lastPathComponent
-            Task {
-                await meetingStore.startFileTranscription(
-                    meetingID: meeting.id,
-                    sourceAudio: SourceAudioAsset(
-                        fileURL: sourceURL,
-                        displayName: displayName
-                    )
-                )
-            }
-        case let .failure(error):
-            meetingStore.lastErrorMessage = error.localizedDescription
-        }
-    }
 }
