@@ -25,6 +25,9 @@ cloud/**/.next/
 cloud/**/.vercel/
 cloud/**/storage/
 
+# Worktrees
+.worktrees/
+
 # Local verification artifacts
 tmp-*/
 tmp-*.png
