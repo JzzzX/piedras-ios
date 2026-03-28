@@ -5,6 +5,7 @@ import {
   AdminManagementError,
   assignLegacyWorkspaceToUser,
   createManagedUser,
+  loadAdminDashboardData,
   resetManagedUserPassword,
 } from './admin-management.ts';
 
@@ -157,4 +158,51 @@ test('resetManagedUserPassword stores a new verifiable hash', async () => {
 
   assert.equal(result.email, 'reset@example.com');
   assert.match(updatedPasswordHash, /^scrypt\$/);
+});
+
+test('loadAdminDashboardData only loads schema and managed users for the minimal admin console', async () => {
+  let inviteQueryCount = 0;
+  let legacyQueryCount = 0;
+  const fakeDb = {
+    $queryRawUnsafe: async (query: string) => {
+      if (query.includes('FROM "Workspace" w')) {
+        legacyQueryCount += 1;
+        throw new Error('legacy workspace query should not run for the minimal admin console');
+      }
+      if (query.includes('information_schema.tables')) {
+        return [
+          { objectName: 'User' },
+          { objectName: 'AuthSession' },
+          { objectName: 'InviteCode' },
+        ];
+      }
+      return [{ objectName: 'ownerUserId' }];
+    },
+    user: {
+      findMany: async () => [
+        {
+          id: 'user-1',
+          email: 'hello@example.com',
+          displayName: 'Hello',
+          createdAt: new Date('2026-03-28T00:00:00Z'),
+          workspaces: [],
+          _count: { authSessions: 2 },
+        },
+      ],
+    },
+    inviteCode: {
+      findMany: async () => {
+        inviteQueryCount += 1;
+        throw new Error('invite code query should not run for the minimal admin console');
+      },
+    },
+  };
+
+  const dashboard = await loadAdminDashboardData(fakeDb as any);
+
+  assert.deepEqual(Object.keys(dashboard).sort(), ['schema', 'users']);
+  assert.equal(legacyQueryCount, 0);
+  assert.equal(inviteQueryCount, 0);
+  assert.equal(dashboard.users.length, 1);
+  assert.equal(dashboard.users[0]?.email, 'hello@example.com');
 });

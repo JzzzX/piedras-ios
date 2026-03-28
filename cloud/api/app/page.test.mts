@@ -32,6 +32,13 @@ test('admin console removes invite-code and legacy-workspace management UI', asy
   assert.match(source, /重置/);
 });
 
+test('admin console can render an inline dashboard load error instead of crashing the whole page', async () => {
+  const source = await read('./admin/AdminConsole.tsx');
+
+  assert.match(source, /dashboardError/);
+  assert.match(source, /后台数据加载失败，请稍后重试/);
+});
+
 test('admin actions redirect back to /admin status messages', async () => {
   const source = await read('./admin/actions.ts');
 

@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db';
 import { getConfiguredProviders } from '@/lib/llm-provider';
 
 import { AdminConsole } from './AdminConsole';
+import { loadAdminDashboardState } from './page-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,11 +40,14 @@ export default async function AdminPage({
     readAdminSessionState(),
   ]);
   const llmProviders = getConfiguredProviders();
-  const dashboard = session.authenticated ? await loadAdminDashboardData(prisma) : null;
+  const { dashboard, dashboardError } = await loadAdminDashboardState(session, () =>
+    loadAdminDashboardData(prisma)
+  );
 
   return (
     <main className="admin-page-shell">
       <AdminConsole
+        dashboardError={dashboardError}
         message={message}
         error={error}
         session={session}

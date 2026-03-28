@@ -473,26 +473,18 @@ export async function revokeInviteCodeRecord(
 
 export async function loadAdminDashboardData(db: DatabaseClient) {
   const schema = await getAdminSchemaStatus(db);
-  const legacyWorkspaces = await listLegacyWorkspaces(db, schema);
 
   if (!schema.ready) {
     return {
       schema,
       users: [] as AdminUserSummary[],
-      inviteCodes: [] as AdminInviteCodeSummary[],
-      legacyWorkspaces,
     };
   }
 
-  const [users, inviteCodes] = await Promise.all([
-    listManagedUsers(db),
-    listInviteCodes(db),
-  ]);
+  const users = await listManagedUsers(db);
 
   return {
     schema,
     users,
-    inviteCodes,
-    legacyWorkspaces,
   };
 }

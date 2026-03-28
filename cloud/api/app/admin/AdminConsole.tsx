@@ -64,12 +64,14 @@ function runtimeCards(runtime: AdminRuntimeSummary) {
 }
 
 export function AdminConsole({
+  dashboardError,
   message,
   error,
   session,
   dashboard,
   runtime,
 }: {
+  dashboardError: string;
   message: string;
   error: string;
   session: AdminSessionState;
@@ -104,6 +106,11 @@ export function AdminConsole({
 
       {message ? <section className="admin-banner admin-banner-success">{message}</section> : null}
       {error ? <section className="admin-banner admin-banner-error">{error}</section> : null}
+      {dashboardError ? (
+        <section className="admin-banner admin-banner-error">
+          {dashboardError || '后台数据加载失败，请稍后重试'}
+        </section>
+      ) : null}
 
       {!session.configured ? (
         <section className="admin-panel">
