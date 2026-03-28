@@ -237,7 +237,11 @@ export async function listManagedUsers(db: DatabaseClient): Promise<AdminUserSum
 
   const users = await db.user.findMany({
     orderBy: { createdAt: 'asc' },
-    include: {
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      createdAt: true,
       workspaces: {
         select: {
           id: true,

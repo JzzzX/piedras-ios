@@ -5,6 +5,7 @@ import {
   AdminManagementError,
   assignLegacyWorkspaceToUser,
   createManagedUser,
+  listManagedUsers,
   loadAdminDashboardData,
   resetManagedUserPassword,
 } from './admin-management.ts';
@@ -205,4 +206,50 @@ test('loadAdminDashboardData only loads schema and managed users for the minimal
   assert.equal(inviteQueryCount, 0);
   assert.equal(dashboard.users.length, 1);
   assert.equal(dashboard.users[0]?.email, 'hello@example.com');
+});
+
+test('listManagedUsers selects only admin-visible fields so legacy null password hashes do not break the console', async () => {
+  let findManyArgs: Record<string, unknown> | null = null;
+  const fakeDb = {
+    $queryRawUnsafe: async (query: string) => {
+      if (query.includes('information_schema.tables')) {
+        return [
+          { objectName: 'User' },
+          { objectName: 'AuthSession' },
+          { objectName: 'InviteCode' },
+        ];
+      }
+      return [{ objectName: 'ownerUserId' }];
+    },
+    user: {
+      findMany: async (args: Record<string, unknown>) => {
+        findManyArgs = args;
+        return [
+          {
+            id: 'user-1',
+            email: 'visible@example.com',
+            displayName: 'Visible User',
+            createdAt: new Date('2026-03-28T00:00:00Z'),
+            workspaces: [],
+            _count: { authSessions: 1 },
+          },
+        ];
+      },
+    },
+  };
+
+  const users = await listManagedUsers(fakeDb as any);
+
+  assert.equal(users.length, 1);
+  assert.ok(findManyArgs);
+  assert.ok('select' in findManyArgs);
+  assert.equal(findManyArgs.include, undefined);
+  assert.deepEqual(Object.keys(findManyArgs.select as Record<string, unknown>).sort(), [
+    '_count',
+    'createdAt',
+    'displayName',
+    'email',
+    'id',
+    'workspaces',
+  ]);
 });
