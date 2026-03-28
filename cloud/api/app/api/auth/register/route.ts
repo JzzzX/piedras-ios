@@ -3,6 +3,11 @@ import { NextRequest } from 'next/server';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { AuthValidationError, registerWithInviteCode } from '@/lib/auth-session';
 import { prisma } from '@/lib/db';
+import {
+  isSupabasePasswordAuthEnabled,
+  registerWithSupabasePassword,
+} from '@/lib/supabase-password-auth';
+import { ensureDefaultWorkspaceForUser } from '@/lib/user-workspace-db';
 
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/auth/register');
@@ -15,12 +20,24 @@ export async function POST(req: NextRequest) {
       displayName?: string;
     };
 
-    const result = await registerWithInviteCode(prisma, {
-      email: body.email ?? '',
-      password: body.password ?? '',
-      inviteCode: body.inviteCode ?? '',
-      displayName: body.displayName,
-    });
+    const result = isSupabasePasswordAuthEnabled()
+      ? await registerWithSupabasePassword(
+          prisma,
+          {
+            email: body.email ?? '',
+            password: body.password ?? '',
+            displayName: body.displayName,
+          },
+          {
+            ensureWorkspace: (input) => ensureDefaultWorkspaceForUser(prisma, input),
+          }
+        )
+      : await registerWithInviteCode(prisma, {
+          email: body.email ?? '',
+          password: body.password ?? '',
+          inviteCode: body.inviteCode ?? '',
+          displayName: body.displayName,
+        });
 
     return jsonResponse(context, result);
   } catch (error) {

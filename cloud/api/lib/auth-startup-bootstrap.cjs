@@ -27,6 +27,9 @@ function summarizeAuthSchemaStatus(input) {
     authSessionTable: tableNames.has('AuthSession'),
     inviteCodeTable: tableNames.has('InviteCode'),
     workspaceOwnerColumnPresent: Boolean(input.workspaceOwnerColumnPresent),
+    userAuthUserIdColumnPresent: Boolean(input.userAuthUserIdColumnPresent),
+    userAuthUserIdUniqueIndexPresent: Boolean(input.userAuthUserIdUniqueIndexPresent),
+    userPasswordHashNullable: Boolean(input.userPasswordHashNullable),
   };
 
   if (!status.userTable) {
@@ -44,6 +47,18 @@ function summarizeAuthSchemaStatus(input) {
   if (!status.workspaceOwnerColumnPresent) {
     status.ready = false;
     status.missingItems.push('Workspace.ownerUserId 字段');
+  }
+  if (!status.userAuthUserIdColumnPresent) {
+    status.ready = false;
+    status.missingItems.push('User.authUserId 字段');
+  }
+  if (!status.userAuthUserIdUniqueIndexPresent) {
+    status.ready = false;
+    status.missingItems.push('User.authUserId 唯一索引');
+  }
+  if (!status.userPasswordHashNullable) {
+    status.ready = false;
+    status.missingItems.push('User.passwordHash 可空约束');
   }
 
   return status;
@@ -86,10 +101,31 @@ async function getAuthSchemaStatus(prisma) {
       AND table_name = 'Workspace'
       AND column_name = 'ownerUserId'
   `);
+  const userAuthColumns = await prisma.$queryRawUnsafe(`
+    SELECT
+      column_name AS "columnName",
+      is_nullable AS "isNullable"
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'User'
+      AND column_name IN ('authUserId', 'passwordHash')
+  `);
+  const userAuthIndexes = await prisma.$queryRawUnsafe(`
+    SELECT indexname AS "indexName"
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'User'
+      AND indexname = 'User_authUserId_key'
+  `);
+  const userAuthUserIdColumn = userAuthColumns.find((item) => item.columnName === 'authUserId');
+  const userPasswordHashColumn = userAuthColumns.find((item) => item.columnName === 'passwordHash');
 
   return summarizeAuthSchemaStatus({
     tableNames: tables.map((item) => item.objectName),
     workspaceOwnerColumnPresent: workspaceOwnerColumn.length > 0,
+    userAuthUserIdColumnPresent: Boolean(userAuthUserIdColumn),
+    userAuthUserIdUniqueIndexPresent: userAuthIndexes.length > 0,
+    userPasswordHashNullable: userPasswordHashColumn?.isNullable === 'YES',
   });
 }
 

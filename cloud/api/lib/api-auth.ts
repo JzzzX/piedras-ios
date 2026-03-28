@@ -1,8 +1,10 @@
 import type { NextRequest } from 'next/server';
 
 import { errorResponse, type ApiRequestContext } from './api-error';
+import { resolveSupabaseUserContext } from './auth-context';
 import { hashSessionToken } from './auth';
 import { prisma } from './db';
+import { verifySupabaseAccessToken } from './supabase-auth';
 import { ensureDefaultWorkspaceForUser } from './user-workspace-db';
 
 const BEARER_PREFIX = 'Bearer ';
@@ -12,10 +14,12 @@ export interface AuthenticatedRequestContext {
   user: {
     id: string;
     email: string;
+    authUserId?: string | null;
   };
   session: {
     id: string;
     expiresAt: Date;
+    provider: 'legacy' | 'supabase';
   };
   workspace: {
     id: string;
@@ -61,6 +65,36 @@ export async function requireAuthenticatedRequest(
     return errorResponse(context, 401, '请先登录');
   }
 
+  if (looksLikeJWT(token)) {
+    const supabaseIdentity = await verifySupabaseAccessToken(token);
+    if (supabaseIdentity) {
+      const supabaseContext = await resolveSupabaseUserContext(
+        prisma,
+        supabaseIdentity,
+        (input) => ensureDefaultWorkspaceForUser(prisma, input)
+      );
+
+      return {
+        user: {
+          ...supabaseContext.user,
+          authUserId: supabaseIdentity.authUserId,
+        },
+        session: {
+          ...supabaseContext.session,
+          provider: 'supabase',
+        },
+        workspace: supabaseContext.workspace,
+      };
+    }
+  }
+
+  return requireLegacyAuthenticatedRequest(token, context);
+}
+
+async function requireLegacyAuthenticatedRequest(
+  token: string,
+  context: ApiRequestContext
+): Promise<AuthenticatedRequestContext | Response> {
   const tokenHash = hashSessionToken(token);
   const authSession = await prisma.authSession.findUnique({
     where: { tokenHash },
@@ -99,6 +133,7 @@ export async function requireAuthenticatedRequest(
     session: {
       id: authSession.id,
       expiresAt: authSession.expiresAt,
+      provider: 'legacy',
     },
     workspace: {
       id: workspace.id,
@@ -113,7 +148,15 @@ export async function revokeAuthenticatedSession(req: NextRequest) {
     return;
   }
 
+  if (looksLikeJWT(token)) {
+    return;
+  }
+
   await prisma.authSession.deleteMany({
     where: { tokenHash: hashSessionToken(token) },
   });
+}
+
+function looksLikeJWT(token: string) {
+  return token.split('.').length === 3;
 }

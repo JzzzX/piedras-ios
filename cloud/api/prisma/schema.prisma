@@ -30,7 +30,8 @@ model Workspace {
 model User {
   id                 String        @id @default(uuid())
   email              String        @unique
-  passwordHash       String
+  authUserId         String?       @unique
+  passwordHash       String?
   displayName        String        @default("")
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt

@@ -8,10 +8,12 @@
     "start": "node server.cjs",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:migrate:deploy": "prisma migrate deploy"
+    "db:migrate:deploy": "prisma migrate deploy",
+    "auth:migrate-legacy-users": "node scripts/migrate-legacy-users.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
+    "@supabase/supabase-js": "^2.100.1",
     "next": "16.1.6",
     "prisma": "^6.19.2",
     "react": "19.2.3",

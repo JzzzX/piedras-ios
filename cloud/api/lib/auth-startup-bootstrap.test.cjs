@@ -10,6 +10,9 @@ test('summarizeAuthSchemaStatus reports missing auth tables and workspace owner 
   const status = summarizeAuthSchemaStatus({
     tableNames: ['InviteCode'],
     workspaceOwnerColumnPresent: false,
+    userAuthUserIdColumnPresent: false,
+    userAuthUserIdUniqueIndexPresent: false,
+    userPasswordHashNullable: false,
   });
 
   assert.equal(status.ready, false);
@@ -17,6 +20,26 @@ test('summarizeAuthSchemaStatus reports missing auth tables and workspace owner 
     'User 表',
     'AuthSession 表',
     'Workspace.ownerUserId 字段',
+    'User.authUserId 字段',
+    'User.authUserId 唯一索引',
+    'User.passwordHash 可空约束',
+  ]);
+});
+
+test('summarizeAuthSchemaStatus reports missing user auth schema even when core tables exist', () => {
+  const status = summarizeAuthSchemaStatus({
+    tableNames: ['User', 'AuthSession', 'InviteCode'],
+    workspaceOwnerColumnPresent: true,
+    userAuthUserIdColumnPresent: false,
+    userAuthUserIdUniqueIndexPresent: false,
+    userPasswordHashNullable: false,
+  });
+
+  assert.equal(status.ready, false);
+  assert.deepEqual(status.missingItems, [
+    'User.authUserId 字段',
+    'User.authUserId 唯一索引',
+    'User.passwordHash 可空约束',
   ]);
 });
 

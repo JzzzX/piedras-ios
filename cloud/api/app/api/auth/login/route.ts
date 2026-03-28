@@ -1,8 +1,14 @@
 import { NextRequest } from 'next/server';
 
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
+import { normalizeEmail } from '@/lib/auth';
 import { AuthValidationError, loginWithPassword } from '@/lib/auth-session';
 import { prisma } from '@/lib/db';
+import {
+  isSupabasePasswordAuthEnabled,
+  loginWithSupabasePassword,
+} from '@/lib/supabase-password-auth';
+import { ensureDefaultWorkspaceForUser } from '@/lib/user-workspace-db';
 
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/auth/login');
@@ -13,10 +19,41 @@ export async function POST(req: NextRequest) {
       password?: string;
     };
 
-    const result = await loginWithPassword(prisma, {
-      email: body.email ?? '',
-      password: body.password ?? '',
-    });
+    let result;
+
+    if (isSupabasePasswordAuthEnabled()) {
+      try {
+        result = await loginWithSupabasePassword(
+          prisma,
+          {
+            email: body.email ?? '',
+            password: body.password ?? '',
+          },
+          {
+            ensureWorkspace: (input) => ensureDefaultWorkspaceForUser(prisma, input),
+          }
+        );
+      } catch (error) {
+        const shouldFallback =
+          error instanceof AuthValidationError &&
+          error.status === 401 &&
+          (await shouldFallbackToLegacyPasswordLogin(body.email ?? ''));
+
+        if (!shouldFallback) {
+          throw error;
+        }
+
+        result = await loginWithPassword(prisma, {
+          email: body.email ?? '',
+          password: body.password ?? '',
+        });
+      }
+    } else {
+      result = await loginWithPassword(prisma, {
+        email: body.email ?? '',
+        password: body.password ?? '',
+      });
+    }
 
     return jsonResponse(context, result);
   } catch (error) {
@@ -31,4 +68,21 @@ export async function POST(req: NextRequest) {
       error
     );
   }
+}
+
+async function shouldFallbackToLegacyPasswordLogin(email: string) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) {
+    return false;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: {
+      authUserId: true,
+      passwordHash: true,
+    },
+  });
+
+  return Boolean(user?.passwordHash && !user.authUserId);
 }

@@ -8,8 +8,8 @@ import {
   normalizeEmail,
   normalizeInviteCode,
   verifyPassword,
-} from './auth';
-import { ensureDefaultWorkspaceForUser } from './user-workspace-db';
+} from './auth.ts';
+import { ensureDefaultWorkspaceForUser } from './user-workspace-db.ts';
 
 const SESSION_TTL_DAYS = 30;
 
@@ -35,6 +35,7 @@ export interface AuthResult {
   };
   session: {
     token: string;
+    refreshToken?: string | null;
     expiresAt: Date;
   };
 }
@@ -51,6 +52,7 @@ function toAuthResult(input: {
   user: { id: string; email: string };
   workspace: { id: string; name: string };
   sessionToken: string;
+  refreshToken?: string | null;
   expiresAt: Date;
 }): AuthResult {
   return {
@@ -58,6 +60,7 @@ function toAuthResult(input: {
     workspace: input.workspace,
     session: {
       token: input.sessionToken,
+      refreshToken: input.refreshToken ?? null,
       expiresAt: input.expiresAt,
     },
   };
@@ -202,7 +205,7 @@ export async function loginWithPassword(
     },
   });
 
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+  if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
     throw new AuthValidationError(401, '邮箱或密码错误');
   }
 
