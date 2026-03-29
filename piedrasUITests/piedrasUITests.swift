@@ -38,4 +38,19 @@ final class piedrasUITests: XCTestCase {
             XCUIApplication().launch()
         }
     }
+
+    @MainActor
+    func testAuthScreenUsesSingleStepEmailPasswordEntry() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["UITEST_ISOLATED_DEFAULTS"]
+        app.launch()
+
+        XCTAssertTrue(app.secureTextFields["至少 8 位"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["进入"].exists)
+        XCTAssertTrue(app.staticTexts["未注册账号会自动创建并登录"].exists)
+        XCTAssertFalse(app.buttons["登录"].exists)
+        XCTAssertFalse(app.buttons["注册"].exists)
+        XCTAssertFalse(app.buttons["验证码登录"].exists)
+        XCTAssertFalse(app.buttons["发送验证码"].exists)
+    }
 }

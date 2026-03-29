@@ -12,24 +12,14 @@ struct EnhancedNotesView: View {
             if meetingStore.isEnhancing(meetingID: meetingID) {
                 processingState
             } else {
-                VStack(alignment: .leading, spacing: 12) {
-                    if meetingStore.meeting(withID: meetingID)?.hasTranscriptNotesRefreshHint == true {
-                        Text(AppStrings.current.transcriptRefreshHint)
-                            .font(AppTheme.bodyFont(size: 13))
-                            .foregroundStyle(AppTheme.highlight)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .accessibilityIdentifier("EnhancedNotesTranscriptRefreshHint")
-                    }
-
-                    MarkdownDocumentView(
-                        markdown: text,
-                        placeholder: AppStrings.current.noAINotesYet,
-                        minHeight: 420,
-                        bodyLineSpacing: 8,
-                        accessibilityIdentifier: "EnhancedNotesRenderedView"
-                    )
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                MarkdownDocumentView(
+                    markdown: text,
+                    placeholder: AppStrings.current.noAINotesYet,
+                    minHeight: 420,
+                    bodyLineSpacing: 8,
+                    accessibilityIdentifier: "EnhancedNotesRenderedView"
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .id(settingsStore.appLanguage)

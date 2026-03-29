@@ -1,21 +1,10 @@
 import SwiftUI
 
-private enum AuthScreenMode: String, CaseIterable, Identifiable {
-    case login
-    case register
-
-    var id: String { rawValue }
-}
-
 struct AuthView: View {
     @Environment(AuthStore.self) private var authStore
-    @Environment(SettingsStore.self) private var settingsStore
 
-    @State private var mode: AuthScreenMode = .login
     @State private var email = ""
     @State private var password = ""
-    @State private var inviteCode = ""
-    @State private var displayName = ""
 
     var body: some View {
         ZStack {
@@ -24,9 +13,7 @@ struct AuthView: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 18) {
                     header
-                    modePicker
                     formCard
-                    footerCard
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 24)
@@ -36,83 +23,49 @@ struct AuthView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(AppStrings.current.appTitle)
-                .font(AppTheme.bodyFont(size: 30, weight: .bold))
-                .foregroundStyle(AppTheme.ink)
-
-            Text(AppStrings.current.authSubtitle)
-                .font(AppTheme.bodyFont(size: 14))
-                .foregroundStyle(AppTheme.subtleInk)
-
-            Text(settingsStore.backendDisplayURLString)
-                .font(AppTheme.dataFont(size: 12))
-                .foregroundStyle(AppTheme.subtleInk)
-                .textSelection(.enabled)
-        }
-        .padding(20)
-        .softCard()
-    }
-
-    private var modePicker: some View {
-        HStack(spacing: 0) {
-            authModeButton(.login)
-            authModeButton(.register)
-        }
-        .overlay(
-            Rectangle()
-                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
-        )
+        Text(AppStrings.current.appTitle)
+            .font(AppTheme.bodyFont(size: 30, weight: .bold))
+            .foregroundStyle(AppTheme.ink)
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .softCard()
     }
 
     private var formCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            SectionLabel(title: AppStrings.current.accountSectionTitle)
+            formField(
+                title: AppStrings.current.authEmailLabel,
+                placeholder: "you@example.com",
+                text: $email,
+                textContentType: .username,
+                keyboardType: .emailAddress
+            )
 
-            VStack(alignment: .leading, spacing: 10) {
-                formField(
-                    title: AppStrings.current.authEmailLabel,
-                    placeholder: "you@example.com",
-                    text: $email,
-                    textContentType: .username,
-                    keyboardType: .emailAddress
-                )
+            secureFormField(
+                title: AppStrings.current.authPasswordLabel,
+                placeholder: AppStrings.current.authPasswordPlaceholder,
+                text: $password
+            )
 
-                secureFormField(
-                    title: AppStrings.current.authPasswordLabel,
-                    placeholder: AppStrings.current.authPasswordPlaceholder,
-                    text: $password
-                )
+            Text(AppStrings.current.authSingleStepHint)
+                .font(AppTheme.bodyFont(size: 12))
+                .foregroundStyle(AppTheme.subtleInk)
 
-                if mode == .register {
-                    formField(
-                        title: AppStrings.current.authInviteCodeLabel,
-                        placeholder: AppStrings.current.authInviteCodePlaceholder,
-                        text: $inviteCode,
-                        textContentType: nil,
-                        keyboardType: .asciiCapable
-                    )
-
-                    formField(
-                        title: AppStrings.current.authDisplayNameLabel,
-                        placeholder: AppStrings.current.authDisplayNamePlaceholder,
-                        text: $displayName,
-                        textContentType: .name,
-                        keyboardType: .default
-                    )
-                }
+            if let infoMessage = currentInfoMessage {
+                infoBanner(infoMessage)
             }
 
-            if let errorMessage = authStore.lastErrorMessage?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !errorMessage.isEmpty {
+            if authStore.phase == .awaitingEmailVerification {
+                verificationBanner
+            }
+
+            if let errorMessage = currentErrorMessage {
                 Text(errorMessage)
                     .font(AppTheme.bodyFont(size: 12, weight: .semibold))
                     .foregroundStyle(Color(red: 0.68, green: 0.16, blue: 0.14))
             }
 
-            Button {
-                submit()
-            } label: {
+            Button(action: submit) {
                 Text(primaryActionTitle)
                     .font(AppTheme.bodyFont(size: 15, weight: .semibold))
                     .foregroundStyle(AppTheme.surface)
@@ -133,63 +86,36 @@ struct AuthView: View {
         .softCard()
     }
 
-    private var footerCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(AppStrings.current.authResetHint)
-                .font(AppTheme.bodyFont(size: 12))
-                .foregroundStyle(AppTheme.subtleInk)
-
-            Text(AppStrings.current.authSwitchHint)
-                .font(AppTheme.bodyFont(size: 12))
-                .foregroundStyle(AppTheme.subtleInk)
-        }
-        .padding(16)
-        .softCard()
+    private var normalizedEmail: String? {
+        email.nilIfBlank
     }
 
-    private var primaryActionTitle: String {
-        if isSubmitting {
-            return AppStrings.current.processing
-        }
-
-        switch mode {
-        case .login:
-            return AppStrings.current.authLoginAction
-        case .register:
-            return AppStrings.current.authRegisterAction
-        }
+    private var normalizedPassword: String? {
+        password.nilIfBlank
     }
 
     private var isSubmitting: Bool {
-        authStore.phase == .submitting
+        authStore.phase == .submitting || authStore.phase == .restoring
     }
 
     private var isFormReady: Bool {
-        let hasEmail = !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let hasPassword = !password.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let hasInviteCode = !inviteCode.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-
-        switch mode {
-        case .login:
-            return hasEmail && hasPassword
-        case .register:
-            return hasEmail && hasPassword && hasInviteCode
-        }
+        normalizedEmail != nil && normalizedPassword != nil
     }
 
-    private func authModeButton(_ candidate: AuthScreenMode) -> some View {
-        Button {
-            mode = candidate
-            authStore.lastErrorMessage = nil
-        } label: {
-            Text(candidate == .login ? AppStrings.current.authLoginTab : AppStrings.current.authRegisterTab)
-                .font(AppTheme.bodyFont(size: 15, weight: .semibold))
-                .foregroundStyle(mode == candidate ? AppTheme.surface : AppTheme.ink)
-                .frame(maxWidth: .infinity)
-                .frame(height: 42)
-                .background(mode == candidate ? AppTheme.ink : AppTheme.surface)
-        }
-        .buttonStyle(.plain)
+    private var primaryActionTitle: String {
+        isSubmitting ? AppStrings.current.processing : AppStrings.current.authSingleStepAction
+    }
+
+    private var currentInfoMessage: String? {
+        authStore.lastInfoMessage?.nilIfBlank
+    }
+
+    private var currentErrorMessage: String? {
+        authStore.lastErrorMessage?.nilIfBlank
+    }
+
+    private var verificationEmail: String? {
+        authStore.pendingVerificationEmail?.nilIfBlank ?? normalizedEmail
     }
 
     private func formField(
@@ -245,21 +171,44 @@ struct AuthView: View {
         }
     }
 
+    private var verificationBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(AppStrings.current.authVerificationPendingTitle)
+                .font(AppTheme.bodyFont(size: 12, weight: .semibold))
+                .foregroundStyle(AppTheme.ink)
+
+            Text(AppStrings.current.authVerificationPendingMessage(email: verificationEmail))
+                .font(AppTheme.bodyFont(size: 12))
+                .foregroundStyle(AppTheme.subtleInk)
+        }
+        .padding(12)
+        .background(AppTheme.surface)
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+        )
+    }
+
+    private func infoBanner(_ message: String) -> some View {
+        Text(message)
+            .font(AppTheme.bodyFont(size: 12, weight: .semibold))
+            .foregroundStyle(AppTheme.ink)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(AppTheme.surface)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+            )
+    }
+
     private func submit() {
-        guard !isSubmitting else { return }
+        guard !isSubmitting,
+              let email = normalizedEmail,
+              let password = normalizedPassword else { return }
 
         Task {
-            switch mode {
-            case .login:
-                _ = await authStore.login(email: email, password: password)
-            case .register:
-                _ = await authStore.register(
-                    email: email,
-                    password: password,
-                    inviteCode: inviteCode,
-                    displayName: displayName.nilIfBlank
-                )
-            }
+            _ = await authStore.authenticate(email: email, password: password)
         }
     }
 }
