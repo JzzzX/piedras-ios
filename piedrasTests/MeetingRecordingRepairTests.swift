@@ -612,6 +612,56 @@ struct MeetingRecordingRepairTests {
 
     @MainActor
     @Test
+    func recoveredForegroundAsrGapDoesNotTriggerStopTimeRepair() async throws {
+        let fixture = try makeFixture(
+            transcriptionBehavior: .succeed([
+                ASRFinalResult(text: "不该再次补转写", startTime: 0, endTime: 1_000)
+            ])
+        )
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "已有标题"
+        meeting.enhancedNotes = "已有 AI 笔记"
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.asrState = .connected
+        fixture.recordingSessionStore.durationSeconds = 6
+        fixture.recorder.currentDurationSecondsValue = 6
+
+        fixture.asrService.onError?("front fail")
+        #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop)
+        fixture.asrService.onFinalResult?(
+            ASRFinalResult(text: "恢复后的最终转写", startTime: 2_000, endTime: 6_000)
+        )
+        #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop == false)
+
+        let audioURL = try makeTemporaryAudioFile(named: "recovered-foreground-gap.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        await fixture.meetingStore.finishStoppedRecording(
+            meetingID: meeting.id,
+            artifact: LocalAudioArtifact(
+                fileURL: audioURL,
+                durationSeconds: 6,
+                mimeType: "audio/m4a"
+            )
+        )
+
+        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.status == .ended)
+        #expect(refreshedMeeting.transcriptPipelineState == .ready)
+        #expect(refreshedMeeting.orderedSegments.map(\.text) == ["恢复后的最终转写"])
+        #expect(fixture.transcriber.transcribeCalls == 0)
+        #expect(fixture.meetingStore.fileTranscriptionStatus(meetingID: meeting.id) == nil)
+        #expect(fixture.meetingStore.fileTranscriptionPartial(meetingID: meeting.id).isEmpty)
+    }
+
+    @MainActor
+    @Test
     func stopRecordingWithCoverageGapFailureDoesNotSyncOrGenerateAi() async throws {
         let fixture = try makeFixture(transcriptionBehavior: .fail("repair failed"))
         let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")

@@ -205,7 +205,9 @@ final class MeetingStore {
                         self.enterBackgroundChunkTranscriptionIfNeeded(for: recordingMeetingID)
                     }
                 } else {
-                    self.recordingSessionStore.markTranscriptCoverageGap()
+                    self.recordingSessionStore.markTranscriptCoverageGap(
+                        at: self.currentRecordingDurationMilliseconds()
+                    )
                     if let recordingMeetingID {
                         self.scheduleASRReconnect(for: recordingMeetingID, delay: .seconds(2))
                     }
@@ -1514,15 +1516,15 @@ final class MeetingStore {
         case .interruptionBegan, .mediaServicesWereLost:
             recordingSessionStore.currentPartial = ""
             if !recordingSessionStore.isAppInBackground {
-                recordingSessionStore.markTranscriptCoverageGap()
+                recordingSessionStore.markTranscriptCoverageGap(at: currentRecordingDurationMilliseconds())
             }
         case let .interruptionEnded(shouldResume, _):
             if !shouldResume, !recordingSessionStore.isAppInBackground {
-                recordingSessionStore.markTranscriptCoverageGap()
+                recordingSessionStore.markTranscriptCoverageGap(at: currentRecordingDurationMilliseconds())
             }
         case .routeChanged, .mediaServicesWereReset:
             if !recordingSessionStore.isAppInBackground {
-                recordingSessionStore.markTranscriptCoverageGap()
+                recordingSessionStore.markTranscriptCoverageGap(at: currentRecordingDurationMilliseconds())
             }
         }
     }
@@ -1584,6 +1586,10 @@ final class MeetingStore {
 
         let overflowDurationMS = backgroundChunkDurationMS(forPCMByteCount: overflowByteCount)
         if let startTimeMS = backgroundShadowBufferStartTimeMS {
+            if recordingSessionStore.isBackgroundChunkingActive {
+                recordingSessionStore.beginBackgroundTranscriptGap(at: startTimeMS)
+                recordingSessionStore.endBackgroundTranscriptGap(at: startTimeMS + overflowDurationMS)
+            }
             backgroundShadowBufferStartTimeMS = startTimeMS + overflowDurationMS
         }
 
@@ -1592,7 +1598,6 @@ final class MeetingStore {
             recordingSessionStore.markBackgroundChunkBufferDuration(
                 backgroundChunkDurationMS(forPCMByteCount: backgroundTranscriptPCMBuffer.count)
             )
-            recordingSessionStore.markTranscriptCoverageGap()
         }
     }
 
@@ -1986,6 +1991,7 @@ final class MeetingStore {
         let speaker = meeting.recordingMode == .fileMix ? "混合音频" : "麦克风"
         appendTranscriptSegment(result, to: meeting, speaker: speaker)
         recordingSessionStore.currentPartial = ""
+        recordingSessionStore.resolveTranscriptCoverageGap(through: result.endTime)
         trimBackgroundShadowBuffer(through: result.endTime)
     }
 
@@ -2518,7 +2524,7 @@ final class MeetingStore {
             asrReconnectAttempt = 0
         } catch {
             guard recordingSessionStore.meetingID == meetingID else { return }
-            recordingSessionStore.markTranscriptCoverageGap()
+            recordingSessionStore.markTranscriptCoverageGap(at: currentRecordingDurationMilliseconds())
             recordingSessionStore.asrState = .degraded
             recordingSessionStore.infoBanner = nil
             recordingSessionStore.errorBanner = nil

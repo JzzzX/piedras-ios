@@ -72,10 +72,13 @@ final class RecordingSessionStore {
     var backgroundChunkStartTimeMS: Double?
     var backgroundChunkBufferedDurationMS: Double = 0
     var backgroundChunkFailureNeedsRepair = false
+    var foregroundTranscriptGapStartTimeMS: Double?
     var backgroundTranscriptGapStartTimeMS: Double?
     var backgroundTranscriptGapEndTimeMS: Double?
     var isBackfillingBackgroundTranscript = false
-    var needsTranscriptRepairAfterStop = false
+    var needsTranscriptRepairAfterStop: Bool {
+        hasForegroundTranscriptGap || backgroundChunkFailureNeedsRepair
+    }
 
     func reset() {
         meetingID = nil
@@ -104,10 +107,10 @@ final class RecordingSessionStore {
         backgroundChunkStartTimeMS = nil
         backgroundChunkBufferedDurationMS = 0
         backgroundChunkFailureNeedsRepair = false
+        foregroundTranscriptGapStartTimeMS = nil
         backgroundTranscriptGapStartTimeMS = nil
         backgroundTranscriptGapEndTimeMS = nil
         isBackfillingBackgroundTranscript = false
-        needsTranscriptRepairAfterStop = false
     }
 
     func pushAudioLevelSample(_ sample: Double) {
@@ -142,10 +145,10 @@ final class RecordingSessionStore {
         backgroundChunkStartTimeMS = nil
         backgroundChunkBufferedDurationMS = 0
         backgroundChunkFailureNeedsRepair = false
+        foregroundTranscriptGapStartTimeMS = nil
         backgroundTranscriptGapStartTimeMS = nil
         backgroundTranscriptGapEndTimeMS = nil
         isBackfillingBackgroundTranscript = false
-        needsTranscriptRepairAfterStop = false
     }
 
     func registerCapturedPCM(bytes: Int) {
@@ -166,8 +169,27 @@ final class RecordingSessionStore {
         isSourceAudioPlaying = isPlaying
     }
 
-    func markTranscriptCoverageGap() {
-        needsTranscriptRepairAfterStop = true
+    var hasForegroundTranscriptGap: Bool {
+        foregroundTranscriptGapStartTimeMS != nil
+    }
+
+    func markTranscriptCoverageGap(at startTimeMS: Double? = nil) {
+        let normalizedStartTimeMS = max(0, startTimeMS ?? 0)
+        if let existingStartTimeMS = foregroundTranscriptGapStartTimeMS {
+            foregroundTranscriptGapStartTimeMS = min(existingStartTimeMS, normalizedStartTimeMS)
+        } else {
+            foregroundTranscriptGapStartTimeMS = normalizedStartTimeMS
+        }
+    }
+
+    func resolveTranscriptCoverageGap(through coveredEndTimeMS: Double) {
+        guard let gapStartTimeMS = foregroundTranscriptGapStartTimeMS else { return }
+        guard coveredEndTimeMS >= gapStartTimeMS else { return }
+        foregroundTranscriptGapStartTimeMS = nil
+    }
+
+    func clearTranscriptCoverageGap() {
+        foregroundTranscriptGapStartTimeMS = nil
     }
 
     var isBackgroundChunkingActive: Bool {
@@ -206,7 +228,6 @@ final class RecordingSessionStore {
         backgroundChunkFailureNeedsRepair = true
         backgroundChunkStartTimeMS = nil
         backgroundChunkBufferedDurationMS = 0
-        needsTranscriptRepairAfterStop = true
     }
 
     func deactivateBackgroundChunking() {
