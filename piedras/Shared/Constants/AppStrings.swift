@@ -81,7 +81,6 @@ struct AppStringTable {
     var refreshNotes: String { isChinese ? "刷新笔记" : "Refresh notes" }
     var regenerateNotes: String { isChinese ? "重新生成笔记" : "Regenerate notes" }
     var imageTextRefreshHint: String { isChinese ? "图片文字已更新，刷新 AI 笔记后会纳入这些新增上下文。" : "Image text was updated. Refresh AI Notes to include the new context." }
-    var transcriptRefreshHint: String { isChinese ? "转写已更新，刷新 AI 笔记后会纳入更精准的转写内容。" : "The transcript was refined. Refresh AI Notes to include the more accurate transcript." }
     var cancel: String { isChinese ? "取消" : "Cancel" }
     var save: String { isChinese ? "保存" : "Save" }
     var notes: String { isChinese ? "笔记" : "Notes" }
@@ -270,25 +269,68 @@ struct AppStringTable {
 
     // ── AuthView ────────────────────────────────────────────────
 
-    var authSubtitle: String { isChinese ? "使用邮箱账号隔离你的录音与笔记数据。" : "Use your email account to isolate recordings and notes." }
+    var authSubtitle: String { isChinese ? "用邮箱账号安全保存你的录音、转写和笔记。" : "Use your email account to securely keep recordings, transcripts, and notes." }
     var authLoginTab: String { isChinese ? "登录" : "Sign In" }
     var authRegisterTab: String { isChinese ? "注册" : "Register" }
-    var authLoginAction: String { isChinese ? "登录账号" : "Sign In" }
-    var authRegisterAction: String { isChinese ? "注册并进入" : "Register" }
+    var authSingleStepAction: String { isChinese ? "进入" : "Continue" }
+    var authSingleStepHint: String { isChinese ? "未注册账号会自动创建并登录" : "If this email is new, we'll create the account and sign you in." }
+    var authPasswordLoginTab: String { isChinese ? "密码登录" : "Password" }
+    var authCodeLoginTab: String { isChinese ? "验证码登录" : "One-time code" }
+    var authLoginAction: String { isChinese ? "登录并进入" : "Sign In" }
+    var authOTPLoginAction: String { isChinese ? "验证码登录" : "Sign in with code" }
+    var authRegisterAction: String { isChinese ? "注册并进入" : "Register and continue" }
+    var authSendCodeAction: String { isChinese ? "发送验证码" : "Send code" }
+    var authResendCodeAction: String { isChinese ? "重新发送验证码" : "Resend code" }
     var authEmailLabel: String { isChinese ? "邮箱" : "Email" }
     var authPasswordLabel: String { isChinese ? "密码" : "Password" }
-    var authInviteCodeLabel: String { isChinese ? "邀请码" : "Invite code" }
+    var authSetPasswordLabel: String { isChinese ? "设置密码（可选）" : "Set password (optional)" }
+    var authOneTimeCodeLabel: String { isChinese ? "邮箱验证码" : "Email code" }
     var authDisplayNameLabel: String { isChinese ? "昵称（可选）" : "Display name (optional)" }
     var authWorkspaceLabel: String { isChinese ? "工作区" : "Workspace" }
     var authPasswordPlaceholder: String { isChinese ? "至少 8 位" : "At least 8 characters" }
-    var authInviteCodePlaceholder: String { isChinese ? "输入内部邀请码" : "Enter your invite code" }
+    var authOneTimeCodePlaceholder: String { isChinese ? "输入 6 位验证码" : "Enter the 6-digit code" }
     var authDisplayNamePlaceholder: String { isChinese ? "用于内部识别" : "Shown internally" }
     var authRestoringSession: String { isChinese ? "正在恢复登录状态..." : "Restoring session..." }
-    var authResetHint: String { isChinese ? "V1 暂不支持自助找回密码，如需重置请联系内部同学。" : "Password reset is not self-service in V1. Please contact the team for help." }
-    var authSwitchHint: String { isChinese ? "切换账号请先退出当前账号，再重新登录。" : "To switch accounts, log out first and then sign in again." }
+    var authForgotPasswordAction: String { isChinese ? "忘记密码" : "Forgot password" }
+    var authResendVerificationAction: String { isChinese ? "重新发送验证邮件" : "Resend verification email" }
+    var authContinueAction: String { isChinese ? "继续" : "Continue" }
+    var authSkipPasswordSetupAction: String { isChinese ? "先跳过" : "Skip for now" }
+    var authPasswordSetupTitle: String { isChinese ? "账号已创建" : "Account created" }
+    var authPasswordSetupMessage: String { isChinese ? "现在可以补一个密码，之后登录更方便；也可以先跳过，继续使用邮箱验证码登录。" : "You can add a password now for easier sign-in later, or skip and keep using one-time codes." }
+    var authVerificationPendingTitle: String { isChinese ? "等待邮箱验证" : "Email verification pending" }
+    var authResetHint: String { isChinese ? "支持邮箱验证码登录，也支持密码登录和自助重置密码。" : "Use either one-time codes or passwords. Self-service password reset is also available." }
+    var authSwitchHint: String { isChinese ? "切换账号前请先退出当前账号。" : "Log out first before switching accounts." }
     var authForceLogoutTitle: String { isChinese ? "放弃未同步数据并退出？" : "Discard unsynced data and log out?" }
     var authForceLogoutAction: String { isChinese ? "强制退出" : "Force logout" }
     var authForceLogoutMessage: String { isChinese ? "本地还有未同步数据，强制退出会直接清空这些本地内容。" : "There is unsynced local data. Force logout will remove it from this device." }
+    var authOTPRegisterMessage: String { isChinese ? "输入邮箱后发送验证码，验证成功后会直接注册并进入。" : "Enter your email, get a code, and you will register and continue right after verification." }
+    var authOTPLoginMessage: String { isChinese ? "输入邮箱后发送验证码，无需密码也能登录。" : "Send a one-time code to your email and sign in without a password." }
+    var authPasswordLoginMessage: String { isChinese ? "使用邮箱和密码登录你的账号。" : "Use your email and password to sign in." }
+
+    func authVerificationPendingMessage(email: String?) -> String {
+        let fallback = isChinese ? "你的邮箱" : "your email"
+        let normalizedEmail = email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let target = normalizedEmail.isEmpty ? fallback : normalizedEmail
+        return isChinese
+            ? "验证邮件已发送到 \(target)。完成验证后再回来登录。"
+            : "We sent a verification email to \(target). Finish verification and then sign in."
+    }
+
+    func authOTPSentMessage(email: String?, intent: EmailOTPIntent) -> String {
+        let fallback = isChinese ? "你的邮箱" : "your email"
+        let normalizedEmail = email?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let target = normalizedEmail.isEmpty ? fallback : normalizedEmail
+
+        if isChinese {
+            return intent == .login
+                ? "验证码已发送到 \(target)，输入后即可登录。"
+                : "验证码已发送到 \(target)，输入后即可完成注册。"
+        }
+
+        return intent == .login
+            ? "We sent a sign-in code to \(target). Enter it to continue."
+            : "We sent a sign-up code to \(target). Enter it to finish registration."
+    }
 
     // ── DeveloperSettingsView ────────────────────────────────────
 

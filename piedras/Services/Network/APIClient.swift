@@ -20,8 +20,33 @@ private struct AuthLoginRequestPayload: Encodable {
 private struct AuthRegisterRequestPayload: Encodable {
     let email: String
     let password: String
-    let inviteCode: String
     let displayName: String?
+}
+
+private struct AuthPasswordResetRequestPayload: Encodable {
+    let email: String
+}
+
+private struct AuthEmailOTPRequestPayload: Encodable {
+    let email: String
+    let intent: String
+}
+
+private struct AuthEmailOTPVerifyRequestPayload: Encodable {
+    let email: String
+    let token: String
+}
+
+private struct AuthSetPasswordRequestPayload: Encodable {
+    let password: String
+}
+
+private struct AuthResendVerificationRequestPayload: Encodable {
+    let email: String
+}
+
+private struct AuthRefreshRequestPayload: Encodable {
+    let refreshToken: String
 }
 
 enum APIClientError: LocalizedError {
@@ -59,7 +84,7 @@ final class APIClient: AuthNetworking {
         session: URLSession = .shared
     ) {
         self.settingsStore = settingsStore
-        self.authTokenStore = authTokenStore ?? UserDefaultsAuthTokenStore()
+        self.authTokenStore = authTokenStore ?? KeychainAuthTokenStore()
         self.session = session
         self.decoder = Self.makeJSONDecoder()
     }
@@ -100,18 +125,64 @@ final class APIClient: AuthNetworking {
     func register(
         email: String,
         password: String,
-        inviteCode: String,
         displayName: String?
     ) async throws -> RemoteAuthResponse {
         try await sendJSONRequest(
             path: "/api/auth/register",
             method: "POST",
+            includeAuthorization: false,
             body: AuthRegisterRequestPayload(
                 email: email,
                 password: password,
-                inviteCode: inviteCode,
                 displayName: displayName
             )
+        )
+    }
+
+    func sendEmailOTP(email: String, intent: EmailOTPIntent) async throws {
+        let _: EmptyAPIResponse = try await sendJSONRequest(
+            path: "/api/auth/email-otp/send",
+            method: "POST",
+            includeAuthorization: false,
+            body: AuthEmailOTPRequestPayload(
+                email: email,
+                intent: intent.rawValue
+            )
+        )
+    }
+
+    func loginWithEmailOTP(email: String, token: String) async throws -> RemoteAuthResponse {
+        try await sendJSONRequest(
+            path: "/api/auth/email-otp/login",
+            method: "POST",
+            includeAuthorization: false,
+            body: AuthEmailOTPVerifyRequestPayload(email: email, token: token)
+        )
+    }
+
+    func registerWithEmailOTP(email: String, token: String) async throws -> RemoteAuthResponse {
+        try await sendJSONRequest(
+            path: "/api/auth/email-otp/register",
+            method: "POST",
+            includeAuthorization: false,
+            body: AuthEmailOTPVerifyRequestPayload(email: email, token: token)
+        )
+    }
+
+    func setPassword(password: String) async throws {
+        let _: EmptyAPIResponse = try await sendJSONRequest(
+            path: "/api/auth/password/set",
+            method: "POST",
+            body: AuthSetPasswordRequestPayload(password: password)
+        )
+    }
+
+    func refreshAuthSession(refreshToken: String) async throws -> RemoteAuthResponse {
+        try await sendJSONRequest(
+            path: "/api/auth/refresh",
+            method: "POST",
+            includeAuthorization: false,
+            body: AuthRefreshRequestPayload(refreshToken: refreshToken)
         )
     }
 
@@ -127,6 +198,24 @@ final class APIClient: AuthNetworking {
         let request = try makeRequest(path: "/api/auth/logout", method: "POST")
         let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data, fallback: "退出登录失败。")
+    }
+
+    func requestPasswordReset(email: String) async throws {
+        let _: EmptyAPIResponse = try await sendJSONRequest(
+            path: "/api/auth/password-reset",
+            method: "POST",
+            includeAuthorization: false,
+            body: AuthPasswordResetRequestPayload(email: email)
+        )
+    }
+
+    func resendVerificationEmail(email: String) async throws {
+        let _: EmptyAPIResponse = try await sendJSONRequest(
+            path: "/api/auth/resend-verification",
+            method: "POST",
+            includeAuthorization: false,
+            body: AuthResendVerificationRequestPayload(email: email)
+        )
     }
 
     func createASRSession(
@@ -318,9 +407,15 @@ final class APIClient: AuthNetworking {
         path: String,
         method: String,
         queryItems: [URLQueryItem] = [],
+        includeAuthorization: Bool = true,
         responseType: Response.Type
     ) async throws -> Response {
-        let request = try makeRequest(path: path, method: method, queryItems: queryItems)
+        let request = try makeRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            includeAuthorization: includeAuthorization
+        )
         let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data)
         return try decoder.decode(responseType, from: data)
@@ -330,9 +425,15 @@ final class APIClient: AuthNetworking {
         path: String,
         method: String,
         queryItems: [URLQueryItem] = [],
+        includeAuthorization: Bool = true,
         body: Body
     ) async throws -> Response {
-        var request = try makeRequest(path: path, method: method, queryItems: queryItems)
+        var request = try makeRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            includeAuthorization: includeAuthorization
+        )
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
 
@@ -344,7 +445,8 @@ final class APIClient: AuthNetworking {
     private func makeRequest(
         path: String,
         method: String,
-        queryItems: [URLQueryItem] = []
+        queryItems: [URLQueryItem] = [],
+        includeAuthorization: Bool = true
     ) throws -> URLRequest {
         guard let baseURL else {
             throw APIClientError.missingBaseURL
@@ -369,7 +471,8 @@ final class APIClient: AuthNetworking {
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.timeoutInterval = 30
-        if let sessionToken = authTokenStore.sessionToken?.nilIfBlank {
+        if includeAuthorization,
+           let sessionToken = authTokenStore.sessionToken?.nilIfBlank {
             request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
         }
         return request
@@ -513,6 +616,8 @@ final class APIClient: AuthNetworking {
         return decoder
     }
 }
+
+private struct EmptyAPIResponse: Decodable {}
 
 private extension String {
     var nilIfBlank: String? {

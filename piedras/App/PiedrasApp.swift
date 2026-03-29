@@ -20,6 +20,11 @@ struct PiedrasApp: App {
                 .environment(appContainer.meetingStore)
                 .environment(appContainer.globalChatStore)
                 .environment(appContainer.annotationStore)
+                .onOpenURL { url in
+                    Task {
+                        _ = await appContainer.authStore.handleAuthCallback(url: url)
+                    }
+                }
         }
     }
 }

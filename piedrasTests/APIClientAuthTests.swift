@@ -39,6 +39,7 @@ private final class APIClientAuthMockURLProtocol: URLProtocol {
     }
 }
 
+@Suite(.serialized)
 struct APIClientAuthTests {
     @MainActor
     @Test
@@ -87,6 +88,153 @@ struct APIClientAuthTests {
 
         #expect(sessionState.user.email == "test@example.com")
         #expect(APIClientAuthMockURLProtocol.requests.count == 1)
+        #expect(
+            APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
+                == "Bearer session-token"
+        )
+    }
+
+    @MainActor
+    @Test
+    func refreshAuthSessionDoesNotReuseBearerTokenHeader() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let suiteName = "piedras.tests.auth.refresh.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: defaults,
+            debugDefaultBackendBaseURLString: "https://example.com"
+        )
+        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        tokenStore.sessionToken = "expired-session-token"
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
+        let client = APIClient(
+            settingsStore: settingsStore,
+            authTokenStore: tokenStore,
+            session: URLSession(configuration: configuration)
+        )
+
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            let response = try #require(
+                HTTPURLResponse(
+                    url: request.url ?? URL(string: "https://example.com")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+            let payload = """
+            {
+              "user": { "id": "user-1", "email": "test@example.com" },
+              "workspace": { "id": "workspace-1", "name": "Piedras" },
+              "session": {
+                "token": "new-session-token",
+                "refreshToken": "new-refresh-token",
+                "expiresAt": "2026-03-27T10:00:00.000Z"
+              },
+              "requiresEmailVerification": false,
+              "verificationEmail": null
+            }
+            """
+            return (response, Data(payload.utf8))
+        }
+
+        _ = try await client.refreshAuthSession(refreshToken: "refresh-token")
+
+        #expect(APIClientAuthMockURLProtocol.requests.count == 1)
+        #expect(
+            APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
+                == nil
+        )
+    }
+
+    @MainActor
+    @Test
+    func sendEmailOTPUsesDedicatedEndpointWithoutBearerToken() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let suiteName = "piedras.tests.auth.otp.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: defaults,
+            debugDefaultBackendBaseURLString: "https://example.com"
+        )
+        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        tokenStore.sessionToken = "session-token"
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
+        let client = APIClient(
+            settingsStore: settingsStore,
+            authTokenStore: tokenStore,
+            session: URLSession(configuration: configuration)
+        )
+
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            let response = try #require(
+                HTTPURLResponse(
+                    url: request.url ?? URL(string: "https://example.com")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+            return (response, Data("{}".utf8))
+        }
+
+        try await client.sendEmailOTP(email: "otp@example.com", intent: .register)
+
+        #expect(APIClientAuthMockURLProtocol.requests.count == 1)
+        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/auth/email-otp/send")
+        #expect(APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @MainActor
+    @Test
+    func setPasswordUsesAuthenticatedEndpoint() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let suiteName = "piedras.tests.auth.password-set.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: defaults,
+            debugDefaultBackendBaseURLString: "https://example.com"
+        )
+        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        tokenStore.sessionToken = "session-token"
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
+        let client = APIClient(
+            settingsStore: settingsStore,
+            authTokenStore: tokenStore,
+            session: URLSession(configuration: configuration)
+        )
+
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            let response = try #require(
+                HTTPURLResponse(
+                    url: request.url ?? URL(string: "https://example.com")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+            return (response, Data("{}".utf8))
+        }
+
+        try await client.setPassword(password: "password-123")
+
+        #expect(APIClientAuthMockURLProtocol.requests.count == 1)
+        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/auth/password/set")
         #expect(
             APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
                 == "Bearer session-token"
