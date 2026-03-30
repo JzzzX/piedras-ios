@@ -80,12 +80,13 @@ private final class NoopMeetingTypeAudioRecorderService: AudioRecorderServicing 
 private final class NoopMeetingTypeASRService: ASRServicing {
     var onPartialText: ((String) -> Void)?
     var onFinalResult: ((ASRFinalResult) -> Void)?
+    var onRecognitionSnapshot: ((ASRRecognitionSnapshot) -> Void)?
     var onStateChange: ((ASRConnectionState) -> Void)?
     var onError: ((String) -> Void)?
     var onTransportEvent: ((String) -> Void)?
     var onPCMChunkSent: ((Int) -> Void)?
 
-    func startStreaming(workspaceID: String?) async throws {}
+    func startStreaming(workspaceID: String?, meetingID: String?) async throws {}
     func enqueuePCM(_ data: Data) {}
     func stopStreaming() async {}
 }

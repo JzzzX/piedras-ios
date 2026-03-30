@@ -46,6 +46,7 @@ private final class StubAudioFileTranscriptionService: AudioFileTranscriptionSer
 private final class StubASRService: ASRServicing {
     var onPartialText: ((String) -> Void)?
     var onFinalResult: ((ASRFinalResult) -> Void)?
+    var onRecognitionSnapshot: ((ASRRecognitionSnapshot) -> Void)?
     var onStateChange: ((ASRConnectionState) -> Void)?
     var onError: ((String) -> Void)?
     var onTransportEvent: ((String) -> Void)?
@@ -54,7 +55,7 @@ private final class StubASRService: ASRServicing {
     private(set) var startCalls = 0
     private(set) var stopCalls = 0
 
-    func startStreaming(workspaceID: String?) async throws {
+    func startStreaming(workspaceID: String?, meetingID: String?) async throws {
         startCalls += 1
     }
 
