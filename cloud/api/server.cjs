@@ -8,7 +8,7 @@ const next = require('next');
 const { WebSocketServer, WebSocket } = require('ws');
 const { bootstrapAuthRuntime } = require('./lib/auth-startup-bootstrap.cjs');
 const { createStartupBootstrapController } = require('./lib/startup-bootstrap-controller.cjs');
-const { buildRecognitionSnapshot } = require('./lib/asr-live-session.ts');
+const { buildRecognitionSnapshot } = require('./lib/asr-live-session.cjs');
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOSTNAME || '0.0.0.0';
