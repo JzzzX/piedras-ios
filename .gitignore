@@ -24,6 +24,8 @@ cloud/**/node_modules/
 cloud/**/.next/
 cloud/**/.vercel/
 cloud/**/storage/
+cloud/**/.env*
+!cloud/**/.env.example
 
 # Worktrees
 .worktrees/

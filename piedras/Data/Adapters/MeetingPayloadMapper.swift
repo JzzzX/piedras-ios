@@ -223,6 +223,7 @@ struct ChatRequestPayload: Encodable {
     let transcript: String
     let userNotes: String
     let enhancedNotes: String
+    let noteAttachmentsContext: String
     let segmentCommentsContext: String
     let chatHistory: [ChatHistoryPayload]
     let question: String
@@ -300,6 +301,7 @@ enum MeetingPayloadMapper {
             transcript: transcriptText(from: meeting),
             userNotes: meeting.userNotesPlainText,
             enhancedNotes: meeting.enhancedNotes,
+            noteAttachmentsContext: MeetingCommentContextBuilder.noteAttachmentsContext(for: meeting),
             segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting),
             chatHistory: history.suffix(10).map {
                 ChatHistoryPayload(role: $0.role, content: $0.content)
