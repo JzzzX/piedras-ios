@@ -118,13 +118,15 @@ struct MeetingDetailView: View {
     }
 
     private func detailScene(meeting: Meeting) -> some View {
-        ZStack(alignment: .top) {
+        let presentation = presentationState(for: meeting)
+
+        return ZStack(alignment: .top) {
             AppGlassBackdrop()
 
-            if isRecordingThisMeeting {
+            if presentation.usesRecordingWorkspace {
                 recordingWorkspace(meeting: meeting)
             } else {
-                standardDetailContent(meeting: meeting)
+                standardDetailContent(meeting: meeting, presentation: presentation)
             }
 
             if let toastMessage {
@@ -144,14 +146,14 @@ struct MeetingDetailView: View {
         }
         .animation(.easeOut(duration: 0.18), value: showsActionMenu)
         .animation(.easeOut(duration: 0.18), value: showsMeetingTypeOverlay)
-        .animation(.easeOut(duration: 0.4), value: isRecordingThisMeeting)
+        .animation(.easeOut(duration: 0.4), value: presentation.usesRecordingWorkspace)
         .toolbar(.hidden, for: .navigationBar)
         .background(InteractivePopGestureEnabler())
         .safeAreaInset(edge: .top, spacing: 0) {
             detailTopChrome(meeting: meeting)
         }
         .safeAreaInset(edge: .bottom) {
-            if isRecordingThisMeeting {
+            if presentation.usesRecordingWorkspace {
                 recordingBottomDock(meeting: meeting)
             } else {
                 bottomStack(for: meeting)
@@ -253,7 +255,10 @@ struct MeetingDetailView: View {
         }
     }
 
-    private func standardDetailContent(meeting: Meeting) -> some View {
+    private func standardDetailContent(
+        meeting: Meeting,
+        presentation: MeetingDetailPresentationState
+    ) -> some View {
         ScrollViewReader { proxy in
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 20) {
@@ -261,12 +266,12 @@ struct MeetingDetailView: View {
                         .frame(height: 0)
                         .id(topAnchorID)
 
-                    if let transcriptionStatus = meetingStore.fileTranscriptionStatus(meetingID: meeting.id) {
+                    if let transcriptionStatus = presentation.transcriptionStatus {
                         fileTranscriptionStatusView(transcriptionStatus, meetingID: meeting.id)
                     }
 
                     titleBlock(meeting: meeting)
-                    documentPage(meeting: meeting)
+                    documentPage(meeting: meeting, presentation: presentation)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
@@ -589,16 +594,20 @@ struct MeetingDetailView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func documentPage(meeting: Meeting) -> some View {
+    private func documentPage(
+        meeting: Meeting,
+        presentation: MeetingDetailPresentationState
+    ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            if isRecordingThisMeeting {
+            if presentation.usesRecordingWorkspace {
                 recordingDocumentPage(meeting: meeting)
             } else {
                 ThinDivider()
 
                 EnhancedNotesView(
                     text: meeting.enhancedNotes,
-                    meetingID: meeting.id
+                    meetingID: meeting.id,
+                    forceProcessingState: presentation.showsEnhancedNotesProcessing
                 )
                 .padding(.top, 20)
             }
@@ -1050,7 +1059,25 @@ struct MeetingDetailView: View {
     }
 
     private var isRecordingThisMeeting: Bool {
-        recordingSessionStore.meetingID == meetingID && recordingSessionStore.phase != .idle
+        guard recordingSessionStore.meetingID == meetingID else { return false }
+
+        switch recordingSessionStore.phase {
+        case .starting, .recording, .paused:
+            return true
+        case .idle, .stopping:
+            return false
+        }
+    }
+
+    private func presentationState(for meeting: Meeting) -> MeetingDetailPresentationState {
+        MeetingDetailPresentationState(
+            meetingID: meeting.id,
+            recordingSessionMeetingID: recordingSessionStore.meetingID,
+            recordingPhase: recordingSessionStore.phase,
+            transcriptionStatus: meetingStore.fileTranscriptionStatus(meetingID: meeting.id),
+            isEnhancing: meetingStore.isEnhancing(meetingID: meeting.id),
+            hasEnhancedNotes: !meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        )
     }
 
     private func recordingBottomDock(meeting: Meeting) -> some View {

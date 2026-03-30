@@ -6,10 +6,11 @@ struct EnhancedNotesView: View {
 
     let text: String
     let meetingID: String
+    let forceProcessingState: Bool
 
     var body: some View {
         Group {
-            if meetingStore.isEnhancing(meetingID: meetingID) {
+            if forceProcessingState || meetingStore.isEnhancing(meetingID: meetingID) {
                 processingState
             } else {
                 MarkdownDocumentView(

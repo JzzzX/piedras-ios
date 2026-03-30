@@ -1,5 +1,40 @@
 import Foundation
 
+struct MeetingDetailPresentationState: Equatable {
+    let usesRecordingWorkspace: Bool
+    let transcriptionStatus: FileTranscriptionStatusSnapshot?
+    let showsEnhancedNotesProcessing: Bool
+
+    init(
+        meetingID: String,
+        recordingSessionMeetingID: String?,
+        recordingPhase: RecordingPhase,
+        transcriptionStatus: FileTranscriptionStatusSnapshot?,
+        isEnhancing: Bool,
+        hasEnhancedNotes: Bool
+    ) {
+        let isCurrentRecordingMeeting = recordingSessionMeetingID == meetingID
+        let isStoppingCurrentMeeting = isCurrentRecordingMeeting && recordingPhase == .stopping
+
+        usesRecordingWorkspace = isCurrentRecordingMeeting
+            && recordingPhase != .idle
+            && recordingPhase != .stopping
+
+        if let transcriptionStatus {
+            self.transcriptionStatus = transcriptionStatus
+        } else if isStoppingCurrentMeeting {
+            self.transcriptionStatus = FileTranscriptionStatusSnapshot(
+                phase: .finalizing,
+                errorMessage: nil
+            )
+        } else {
+            self.transcriptionStatus = nil
+        }
+
+        showsEnhancedNotesProcessing = isEnhancing || (isStoppingCurrentMeeting && !hasEnhancedNotes)
+    }
+}
+
 enum MeetingDetailChromeKind {
     case notes
     case chat
