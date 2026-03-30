@@ -1,4 +1,4 @@
-import { inferOpenAIPreset } from './llm-config';
+import { DEFAULT_LLM_SETTINGS, inferOpenAIPreset } from './llm-config';
 import {
   getConfiguredProviders,
   hasAvailableLlm,
@@ -22,7 +22,7 @@ export interface LlmRuntimeStatus {
 function resolveModel(provider: LlmProvider): string | null {
   switch (provider) {
     case 'openai':
-      return process.env.OPENAI_MODEL || 'gpt-4o-mini';
+      return process.env.OPENAI_MODEL || DEFAULT_LLM_SETTINGS.openaiModel;
     case 'gemini':
       return process.env.GEMINI_MODEL || 'gemini-flash-latest';
     case 'minimax':

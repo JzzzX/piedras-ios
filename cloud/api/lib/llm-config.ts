@@ -18,8 +18,8 @@ export const OPENAI_COMPATIBLE_PRESETS: Record<
     description: 'LLM 聚合网关，使用 OpenAI 兼容 Chat Completions 接口。',
     baseUrl: 'https://aihubmix.com/v1',
     path: '/chat/completions',
-    defaultModel: 'gpt-4o-mini',
-    modelHint: '填模型市场里的 model id，例如 gpt-4o-mini',
+    defaultModel: 'gemini-3-flash-preview',
+    modelHint: '填模型市场里的 model id，例如 gemini-3-flash-preview',
   },
   openai: {
     label: 'OpenAI 官方',
