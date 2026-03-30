@@ -8,6 +8,7 @@ const next = require('next');
 const { WebSocketServer, WebSocket } = require('ws');
 const { bootstrapAuthRuntime } = require('./lib/auth-startup-bootstrap.cjs');
 const { createStartupBootstrapController } = require('./lib/startup-bootstrap-controller.cjs');
+const { buildRecognitionSnapshot } = require('./lib/asr-live-session.ts');
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOSTNAME || '0.0.0.0';
@@ -377,7 +378,7 @@ function makeConnectHeaders() {
 }
 
 function makeStartPayload(sessionPayload) {
-  return {
+  const payload = {
     user: {
       uid: `piedras-${crypto.randomUUID()}`,
       did: 'piedras-ios',
@@ -396,11 +397,20 @@ function makeStartPayload(sessionPayload) {
       model_name: 'bigmodel',
       enable_itn: true,
       enable_punc: true,
-      result_type: 'single',
-      end_window_size: 800,
+      enable_ddc: true,
+      result_type: 'full',
+      end_window_size: 1000,
       show_utterances: true,
     },
   };
+
+  if (sessionPayload.contextJson) {
+    payload.corpus = {
+      context: sessionPayload.contextJson,
+    };
+  }
+
+  return payload;
 }
 
 function sendJSON(ws, payload, callback) {
@@ -479,6 +489,9 @@ function attachAsrProxy(server) {
     let hasSentLastFrame = false;
     let lastAudioEndTimeMs = 0;
     let lastPartialText = '';
+    let lastSnapshot = null;
+    let lastEmittedFinalEndTimeMs = -1;
+    let snapshotRevision = 0;
     let shouldSendLastFrameWhenUpstreamReady = false;
     let connectionClosed = false;
     let upstreamStartSent = false;
@@ -522,7 +535,28 @@ function attachAsrProxy(server) {
         closePair(client, upstream, closeCode, message.slice(0, 120));
       };
 
+      const flushRemainingLegacyTail = () => {
+        if (severity === 'error' || !lastSnapshot) {
+          return;
+        }
+
+        const tail = lastSnapshot.utterances[lastSnapshot.utterances.length - 1];
+        if (!tail || tail.endTimeMs <= lastEmittedFinalEndTimeMs) {
+          return;
+        }
+
+        lastEmittedFinalEndTimeMs = tail.endTimeMs;
+        lastPartialText = '';
+        sendJSON(client, {
+          type: 'final',
+          text: tail.text,
+          startTimeMs: tail.startTimeMs,
+          endTimeMs: tail.endTimeMs,
+        });
+      };
+
       const sendClosedFrame = () => {
+        flushRemainingLegacyTail();
         if (!sendJSON(client, { type: 'closed' }, () => finalizeClose())) {
           finalizeClose();
         }
@@ -624,36 +658,57 @@ function attachAsrProxy(server) {
             return;
           }
 
-          const update = extractRecognitionUpdate(decoded.json, lastAudioEndTimeMs || Date.now());
-          if (!update) {
+          const snapshot = buildRecognitionSnapshot(decoded.json, {
+            revision: snapshotRevision + 1,
+            fallbackEndTimeMs: lastAudioEndTimeMs || Date.now(),
+          });
+          if (!snapshot.fullText && snapshot.utterances.length === 0) {
             return;
           }
+          snapshotRevision = snapshot.revision;
+          lastSnapshot = snapshot;
+          sendJSON(client, {
+            type: 'snapshot',
+            revision: snapshot.revision,
+            fullText: snapshot.fullText,
+            audioEndTimeMs: snapshot.audioEndTimeMs,
+            utterances: snapshot.utterances,
+          });
 
-          if (update.isFinal) {
+          const stablePrefix = snapshot.utterances.slice(0, -1);
+          for (const utterance of stablePrefix) {
+            if (!utterance.definite || utterance.endTimeMs <= lastEmittedFinalEndTimeMs) {
+              continue;
+            }
+
+            lastEmittedFinalEndTimeMs = utterance.endTimeMs;
             lastPartialText = '';
             proxyStats.lastFinalAt = new Date().toISOString();
             log('final', {
               connectionId,
-              text: update.text.slice(0, 120),
-              startTimeMs: update.startTimeMs,
-              endTimeMs: update.endTimeMs,
+              text: utterance.text.slice(0, 120),
+              startTimeMs: utterance.startTimeMs,
+              endTimeMs: utterance.endTimeMs,
             });
             sendJSON(client, {
               type: 'final',
-              text: update.text,
-              startTimeMs: update.startTimeMs,
-              endTimeMs: update.endTimeMs,
+              text: utterance.text,
+              startTimeMs: utterance.startTimeMs,
+              endTimeMs: utterance.endTimeMs,
             });
-          } else if (update.text !== lastPartialText) {
-            lastPartialText = update.text;
+          }
+
+          const tail = snapshot.utterances[snapshot.utterances.length - 1];
+          if (tail && tail.text !== lastPartialText) {
+            lastPartialText = tail.text;
             proxyStats.lastPartialAt = new Date().toISOString();
             log('partial', {
               connectionId,
-              text: update.text.slice(0, 120),
+              text: tail.text.slice(0, 120),
             });
             sendJSON(client, {
               type: 'partial',
-              text: update.text,
+              text: tail.text,
             });
           }
         } catch (error) {

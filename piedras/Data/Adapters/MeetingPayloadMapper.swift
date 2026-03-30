@@ -73,6 +73,7 @@ struct ASRSessionRequestPayload: Encodable {
     let sampleRate: Int
     let channels: Int
     let workspaceId: String?
+    let meetingId: String?
 }
 
 struct RemoteMeetingListItem: Decodable {

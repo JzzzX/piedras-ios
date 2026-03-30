@@ -2,17 +2,20 @@ import crypto from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext } from '@/lib/api-error';
+import { prisma } from '@/lib/db';
 import {
   getAsrRuntimeStatus,
   getAsrStatus,
   resolveAsrProxyPublicBaseURL,
   resolveAsrProxyWSPath,
 } from '@/lib/asr';
+import { buildAsrSessionContext } from '@/lib/asr-live-session';
 
 interface AsrSessionRequest {
   sampleRate?: number;
   channels?: number;
   workspaceId?: string;
+  meetingId?: string;
 }
 
 const DOUBAO_PACKET_DURATION_MS = 200;
@@ -53,10 +56,60 @@ function resolveProxyWSURL(req: NextRequest, sessionToken: string) {
   return wsURL.toString();
 }
 
+function stripMarkup(value: string | null | undefined) {
+  return String(value || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+async function resolveSessionContext(
+  auth: { workspace: { id: string; name: string } },
+  payload: AsrSessionRequest
+) {
+  const meetingId = payload.meetingId?.trim() || null;
+  if (!meetingId) {
+    return buildAsrSessionContext({
+      workspaceName: auth.workspace.name,
+      meetingTitle: '',
+      recentTranscriptTexts: [],
+      noteSummary: '',
+      maxTranscriptEntries: 3,
+    });
+  }
+
+  const meeting = await prisma.meeting.findFirst({
+    where: {
+      id: meetingId,
+      workspaceId: auth.workspace.id,
+    },
+    select: {
+      title: true,
+      userNotes: true,
+      enhancedNotes: true,
+      segments: {
+        where: { isFinal: true },
+        orderBy: { endTime: 'desc' },
+        take: 3,
+        select: { text: true },
+      },
+    },
+  });
+
+  return buildAsrSessionContext({
+    workspaceName: auth.workspace.name,
+    meetingTitle: meeting?.title ?? '',
+    recentTranscriptTexts: meeting?.segments.map((segment) => segment.text) ?? [],
+    noteSummary: stripMarkup(meeting?.enhancedNotes || meeting?.userNotes),
+    maxTranscriptEntries: 3,
+  });
+}
+
 function buildDoubaoSession(
   req: NextRequest,
   payload: AsrSessionRequest,
-  status: Awaited<ReturnType<typeof getAsrRuntimeStatus>>
+  status: Awaited<ReturnType<typeof getAsrRuntimeStatus>>,
+  contextJson: string
 ) {
   const now = Date.now();
   const sessionToken = createProxySessionToken({
@@ -64,6 +117,8 @@ function buildDoubaoSession(
     sampleRate: payload.sampleRate ?? 16_000,
     channels: payload.channels ?? 1,
     workspaceId: payload.workspaceId ?? null,
+    meetingId: payload.meetingId ?? null,
+    contextJson,
     issuedAt: now,
     expiresAt: now + DOUBAO_SESSION_LIFETIME_MS,
   });
@@ -129,6 +184,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const contextJson = await resolveSessionContext(auth, payload);
     return NextResponse.json(
       buildDoubaoSession(
         req,
@@ -136,7 +192,8 @@ export async function POST(req: NextRequest) {
           ...payload,
           workspaceId: auth.workspace.id,
         },
-        runtimeStatus
+        runtimeStatus,
+        contextJson
       )
     );
   } catch (error) {

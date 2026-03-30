@@ -221,7 +221,8 @@ final class APIClient: AuthNetworking {
     func createASRSession(
         sampleRate: Int,
         channels: Int,
-        workspaceID: String?
+        workspaceID: String?,
+        meetingID: String? = nil
     ) async throws -> RemoteASRSessionResponse {
         try await sendJSONRequest(
             path: "/api/asr/session",
@@ -229,7 +230,8 @@ final class APIClient: AuthNetworking {
             body: ASRSessionRequestPayload(
                 sampleRate: sampleRate,
                 channels: channels,
-                workspaceId: workspaceID
+                workspaceId: workspaceID,
+                meetingId: meetingID
             )
         )
     }

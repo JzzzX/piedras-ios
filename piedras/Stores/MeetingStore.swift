@@ -122,6 +122,7 @@ final class MeetingStore {
     private var lastPublishedLiveActivityDurationSeconds: Int?
     private var fileTranscriptionStatuses: [String: FileTranscriptionStatusSnapshot] = [:]
     private var fileTranscriptionPartials: [String: String] = [:]
+    private var liveTranscriptReducer = ASRLiveTranscriptReducer()
     private let isUITestRuntime = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         || ProcessInfo.processInfo.arguments.contains { $0.hasPrefix("UITEST_") }
 
@@ -199,8 +200,12 @@ final class MeetingStore {
         self.asrService.onFinalResult = { [weak self] result in
             self?.handleFinalTranscript(result)
         }
+        self.asrService.onRecognitionSnapshot = { [weak self] snapshot in
+            self?.applyRecognitionSnapshot(snapshot)
+        }
         self.asrService.onError = { [weak self] message in
             guard let self else { return }
+            self.resetLiveTranscriptState()
             let recordingMeetingID = self.recordingSessionStore.meetingID
             if self.recordingSessionStore.phase == .recording {
                 if self.recordingSessionStore.isAppInBackground {
@@ -689,6 +694,7 @@ final class MeetingStore {
         backgroundTranscriptBackfillTask = nil
         clearBackgroundShadowBuffer(keepingCapacity: false)
         shouldFlushBackgroundTranscriptTail = false
+        resetLiveTranscriptState()
         recordingSessionStore.errorBanner = nil
         recordingSessionStore.infoBanner = nil
         recordingSessionStore.beginSession(
@@ -713,6 +719,7 @@ final class MeetingStore {
             shouldFlushBackgroundTranscriptTail = false
             try audioRecorderService.pauseRecording()
             await asrService.stopStreaming()
+            flushLiveTranscriptTailIfNeeded()
             recordingSessionStore.phase = .paused
             recordingSessionStore.pauseReason = .user
             recordingSessionStore.currentPartial = ""
@@ -772,6 +779,7 @@ final class MeetingStore {
             recordingLiveActivityCoordinator.end()
             updateKeepScreenAwake()
             await asrService.stopStreaming()
+            flushLiveTranscriptTailIfNeeded()
             let artifact = try audioRecorderService.stopRecording()
             await finishStoppedRecording(meetingID: meeting.id, artifact: artifact)
         } catch {
@@ -1562,6 +1570,7 @@ final class MeetingStore {
         backgroundTranscriptBackfillTask = nil
         shouldFlushBackgroundTranscriptTail = false
         await asrService.stopStreaming()
+        flushLiveTranscriptTailIfNeeded()
         recordingSessionStore.currentPartial = ""
         recordingSessionStore.asrState = .idle
         recordingSessionStore.errorBanner = nil
@@ -2020,6 +2029,24 @@ final class MeetingStore {
         recordingSessionStore.currentPartial = ""
         recordingSessionStore.resolveTranscriptCoverageGap(through: result.endTime)
         trimBackgroundShadowBuffer(through: result.endTime)
+    }
+
+    private func applyRecognitionSnapshot(_ snapshot: ASRRecognitionSnapshot) {
+        let commits = liveTranscriptReducer.apply(snapshot)
+        commits.forEach(handleFinalTranscript)
+        recordingSessionStore.currentPartial = liveTranscriptReducer.provisionalTail?.text ?? ""
+    }
+
+    private func flushLiveTranscriptTailIfNeeded() {
+        if let result = liveTranscriptReducer.flushRemainingTail() {
+            handleFinalTranscript(result)
+        }
+        recordingSessionStore.currentPartial = ""
+    }
+
+    private func resetLiveTranscriptState() {
+        liveTranscriptReducer = ASRLiveTranscriptReducer()
+        recordingSessionStore.currentPartial = ""
     }
 
     private func appendTranscriptSegment(_ result: ASRFinalResult, to meeting: Meeting, speaker: String) {
@@ -2545,6 +2572,7 @@ final class MeetingStore {
         guard recordingSessionStore.meetingID == meetingID,
               recordingSessionStore.phase == .recording else { return }
         cancelASRReconnect()
+        resetLiveTranscriptState()
 
         let existingWorkspaceID = meeting(withID: meetingID)?.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
         let workspaceID: String?
@@ -2558,7 +2586,7 @@ final class MeetingStore {
               recordingSessionStore.phase == .recording else { return }
 
         do {
-            try await asrService.startStreaming(workspaceID: workspaceID)
+            try await asrService.startStreaming(workspaceID: workspaceID, meetingID: meetingID)
             asrReconnectAttempt = 0
         } catch {
             guard recordingSessionStore.meetingID == meetingID else { return }
@@ -2657,6 +2685,7 @@ final class MeetingStore {
         noteAttachmentTaskTokens.removeAll()
         clearBackgroundShadowBuffer(keepingCapacity: false)
         shouldFlushBackgroundTranscriptTail = false
+        resetLiveTranscriptState()
 
         Task { [weak asrService] in
             await asrService?.stopStreaming()
@@ -2672,6 +2701,7 @@ final class MeetingStore {
         }
 
         clearBackgroundShadowBuffer(keepingCapacity: false)
+        resetLiveTranscriptState()
         recordingSessionStore.reset()
         updateKeepScreenAwake()
     }

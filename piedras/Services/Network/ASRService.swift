@@ -6,6 +6,17 @@ private struct ProxyASRMessage: Decodable {
     let startTimeMs: Double?
     let endTimeMs: Double?
     let message: String?
+    let revision: Int?
+    let fullText: String?
+    let audioEndTimeMs: Double?
+    let utterances: [ProxyASRUtterance]?
+}
+
+private struct ProxyASRUtterance: Decodable {
+    let text: String
+    let startTimeMs: Double
+    let endTimeMs: Double
+    let definite: Bool
 }
 
 struct ASRFinalResult {
@@ -94,12 +105,13 @@ enum ASRBufferPolicy {
 protocol ASRServicing: AnyObject {
     var onPartialText: ((String) -> Void)? { get set }
     var onFinalResult: ((ASRFinalResult) -> Void)? { get set }
+    var onRecognitionSnapshot: ((ASRRecognitionSnapshot) -> Void)? { get set }
     var onStateChange: ((ASRConnectionState) -> Void)? { get set }
     var onError: ((String) -> Void)? { get set }
     var onTransportEvent: ((String) -> Void)? { get set }
     var onPCMChunkSent: ((Int) -> Void)? { get set }
 
-    func startStreaming(workspaceID: String?) async throws
+    func startStreaming(workspaceID: String?, meetingID: String?) async throws
     func enqueuePCM(_ data: Data)
     func stopStreaming() async
 }
@@ -127,10 +139,12 @@ final class ASRService: ASRServicing {
     private var maxBufferedPCMBytes = 96_000
     private var lastTransportActivityAt: Date?
     private var transportActivityMonitoringEnabled = false
+    private var hasReceivedSnapshot = false
     private let readyGate = ASRReadyGate()
 
     var onPartialText: ((String) -> Void)?
     var onFinalResult: ((ASRFinalResult) -> Void)?
+    var onRecognitionSnapshot: ((ASRRecognitionSnapshot) -> Void)?
     var onStateChange: ((ASRConnectionState) -> Void)?
     var onError: ((String) -> Void)?
     var onTransportEvent: ((String) -> Void)?
@@ -141,7 +155,7 @@ final class ASRService: ASRServicing {
         self.session = session
     }
 
-    func startStreaming(workspaceID: String?) async throws {
+    func startStreaming(workspaceID: String?, meetingID: String?) async throws {
         await cleanupTransport(notifyDisconnected: false)
         await readyGate.reset()
 
@@ -152,7 +166,8 @@ final class ASRService: ASRServicing {
         let response = try await apiClient.createASRSession(
             sampleRate: Int(PCMConverter.targetSampleRate),
             channels: 1,
-            workspaceID: workspaceID
+            workspaceID: workspaceID,
+            meetingID: meetingID
         )
 
         guard let descriptor = response.session,
@@ -166,6 +181,7 @@ final class ASRService: ASRServicing {
         pendingPCMChunks.removeAll(keepingCapacity: false)
         sendQueue.removeAll(keepingCapacity: false)
         isDrainingSendQueue = false
+        hasReceivedSnapshot = false
         packetByteSize = Self.makePacketByteSize(
             sampleRate: descriptor.sampleRate ?? Int(PCMConverter.targetSampleRate),
             channels: descriptor.channels ?? 1,
@@ -286,11 +302,38 @@ final class ASRService: ASRServicing {
             Task { await readyGate.markReady() }
             flushPendingChunksIfReady()
 
+        case "snapshot":
+            noteTransportActivity()
+            guard let revision = message.revision,
+                  let audioEndTimeMs = message.audioEndTimeMs else {
+                return
+            }
+
+            hasReceivedSnapshot = true
+            let utterances = (message.utterances ?? []).map {
+                ASRRecognitionUtterance(
+                    text: $0.text,
+                    startTimeMs: $0.startTimeMs,
+                    endTimeMs: $0.endTimeMs,
+                    definite: $0.definite
+                )
+            }
+            onRecognitionSnapshot?(
+                ASRRecognitionSnapshot(
+                    revision: revision,
+                    fullText: message.fullText ?? "",
+                    audioEndTimeMs: audioEndTimeMs,
+                    utterances: utterances
+                )
+            )
+
         case "partial":
+            guard !hasReceivedSnapshot else { return }
             noteTransportActivity()
             onPartialText?(message.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "")
 
         case "final":
+            guard !hasReceivedSnapshot else { return }
             noteTransportActivity()
             let result = message.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             guard !result.isEmpty else { return }
@@ -490,6 +533,7 @@ final class ASRService: ASRServicing {
         isDrainingSendQueue = false
         transportActivityMonitoringEnabled = false
         lastTransportActivityAt = nil
+        hasReceivedSnapshot = false
         await readyGate.reset()
 
         onPartialText?("")
