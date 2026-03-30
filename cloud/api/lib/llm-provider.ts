@@ -1,5 +1,5 @@
 import type { LlmRuntimeConfig } from './types';
-import { normalizeOpenAIPath } from './llm-config';
+import { DEFAULT_LLM_SETTINGS, normalizeOpenAIPath } from './llm-config';
 
 export type LlmProvider = 'gemini' | 'minimax' | 'openai';
 
@@ -12,6 +12,7 @@ export interface LlmGenerateInput {
   messages: LlmMessage[];
   temperature?: number;
   maxTokens?: number;
+  reasoningEffort?: 'low' | 'medium' | 'high';
   preferredProvider?: LlmProvider;
   runtimeConfig?: LlmRuntimeConfig;
 }
@@ -104,7 +105,7 @@ function getOpenAIConfig(input: LlmGenerateInput) {
 
   return {
     apiKey: runtime?.apiKey || process.env.OPENAI_API_KEY || '',
-    model: runtime?.model || process.env.OPENAI_MODEL || 'gpt-4o-mini',
+    model: runtime?.model || process.env.OPENAI_MODEL || DEFAULT_LLM_SETTINGS.openaiModel,
     baseUrl:
       (runtime?.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(
         /\/+$/,
@@ -238,18 +239,30 @@ async function callGemini(input: LlmGenerateInput): Promise<string> {
 
 function extractOpenAIContent(content: unknown): string {
   if (typeof content === 'string') return content;
+  if (content && typeof content === 'object') {
+    if ('text' in content) {
+      const text = (content as { text?: unknown }).text;
+      if (typeof text === 'string') return text;
+    }
+    if ('parts' in content) {
+      return extractOpenAIContent((content as { parts?: unknown }).parts);
+    }
+    if ('content' in content) {
+      return extractOpenAIContent((content as { content?: unknown }).content);
+    }
+    return '';
+  }
   if (!Array.isArray(content)) return '';
 
   return content
     .map((part) => {
-      if (typeof part === 'string') return part;
-      if (part && typeof part === 'object' && 'text' in part) {
-        const text = (part as { text?: unknown }).text;
-        return typeof text === 'string' ? text : '';
-      }
-      return '';
+      return extractOpenAIContent(part);
     })
     .join('');
+}
+
+function isGemini3Model(model: string): boolean {
+  return /^gemini-3(?:[.-]|$)/i.test(model.trim());
 }
 
 async function callOpenAI(input: LlmGenerateInput): Promise<string> {
@@ -258,18 +271,26 @@ async function callOpenAI(input: LlmGenerateInput): Promise<string> {
     throw new Error('OPENAI_API_KEY 未配置');
   }
 
+  const requestBody: Record<string, unknown> = {
+    model,
+    messages: input.messages,
+    temperature: input.temperature ?? 0.5,
+    max_tokens: input.maxTokens ?? 4096,
+  };
+
+  if (input.reasoningEffort) {
+    requestBody.reasoning_effort = input.reasoningEffort;
+  } else if (isGemini3Model(model)) {
+    requestBody.reasoning_effort = 'low';
+  }
+
   const res = await fetch(`${baseUrl}${path}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     },
-    body: JSON.stringify({
-      model,
-      messages: input.messages,
-      temperature: input.temperature ?? 0.5,
-      max_tokens: input.maxTokens ?? 4096,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   if (!res.ok) {
@@ -569,9 +590,10 @@ export async function probeConfiguredLlm(timeoutMs = 6_000): Promise<{ provider:
   }
 
   const probeInput: LlmGenerateInput = {
-    messages: [{ role: 'user', content: '请只回复 OK。' }],
+    messages: [{ role: 'user', content: '请只回复 OK，不要解释。' }],
     temperature: 0,
-    maxTokens: 8,
+    maxTokens: 32,
+    reasoningEffort: 'low',
   };
 
   const errors: string[] = [];

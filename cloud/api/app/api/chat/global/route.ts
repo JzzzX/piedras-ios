@@ -1,13 +1,14 @@
 import { NextRequest } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, textResponse } from '@/lib/api-error';
+import {
+  buildGlobalChatSystemPrompt,
+  normalizePromptOptions,
+} from '@/lib/chat-prompts';
 import { buildGlobalChatContextMessage } from '@/lib/meeting-ai-context';
 import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
 import { retrieveGlobalMeetingContext, type GlobalChatFilters } from '@/lib/global-chat';
 import { selectRetrievalResult } from '@/lib/global-chat-selection';
-import type { PromptOptions } from '@/lib/types';
-
-type PromptOptionsInput = Partial<PromptOptions> | undefined;
 
 function createTextStream(text: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
@@ -55,38 +56,6 @@ function createTextStream(text: string): ReadableStream<Uint8Array> {
   });
 }
 
-function normalizePromptOptions(input: PromptOptionsInput): PromptOptions {
-  return {
-    meetingType: input?.meetingType || '通用',
-    outputStyle: input?.outputStyle || '平衡',
-    includeActionItems: input?.includeActionItems ?? true,
-  };
-}
-
-function buildGlobalChatSystemPrompt(options: PromptOptions): string {
-  const styleMap: Record<PromptOptions['outputStyle'], string> = {
-    简洁: '回答尽量精炼，优先给出结论。',
-    平衡: '在完整性与简洁性之间保持平衡。',
-    详细: '回答时补充必要背景、原因和前后文。',
-    行动导向: '回答优先给出可执行建议和下一步安排。',
-  };
-
-  const actionRule = options.includeActionItems
-    ? '当问题涉及执行安排时，尽量提炼行动项。'
-    : '除非用户明确要求，不主动输出行动项。';
-
-  const basePrompt = `你是一位跨工作区知识助手。你会收到历史会议与资料的检索结果（带来源编号 S1/S2/...）。
-
-回答要求：
-1. 只能使用提供的检索内容回答，不要臆造未出现的信息。
-2. ${styleMap[options.outputStyle]}
-3. ${actionRule}
-4. 回答中尽量在关键结论后标注来源编号（例如：[S1]、[S2]）。
-5. 使用中文回答。`;
-
-  return basePrompt;
-}
-
 function formatSources(
   sources: Array<{ ref: string; type: 'meeting' | 'asset'; title: string; date: string }>
 ) {
@@ -111,7 +80,7 @@ function buildNoResultMessage(filters: GlobalChatFilters): string {
   }
 
   if (conditions.length === 0) {
-      return '未检索到可用会议或资料。请先保存会议记录或导入资料后再提问。';
+    return '未检索到可用会议或资料。请先保存会议记录或导入资料后再提问。';
   }
   return `在当前筛选条件下未检索到会议或资料：${conditions.join('，')}。请调整筛选条件后重试。`;
 }

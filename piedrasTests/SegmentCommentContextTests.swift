@@ -96,6 +96,32 @@ struct SegmentCommentContextTests {
     }
 
     @Test
+    func meetingChatPayloadIncludesMeetingNoteAttachmentsContext() throws {
+        let meeting = Meeting(
+            title: "附件问答测试",
+            userNotesPlainText: "用户笔记只写了要看附件。",
+            enhancedNotes: "AI 笔记里没有发布时间。"
+        )
+        meeting.noteAttachmentFileNames = ["timeline.png"]
+        meeting.noteAttachmentTextContext = "图片1：\n路线图写着：4 月 8 日灰度，4 月 15 日全量。"
+        meeting.noteAttachmentTextStatus = .ready
+        meeting.noteAttachmentTextUpdatedAt = .now
+
+        let payload = MeetingPayloadMapper.makeChatPayload(
+            from: meeting,
+            question: "发布时间是什么？"
+        )
+
+        let encoded = try JSONEncoder().encode(payload)
+        let json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        let context = try #require(json["noteAttachmentsContext"] as? String)
+
+        #expect(context.contains("--- 主笔记附件资料 ---"))
+        #expect(context.contains("图片1："))
+        #expect(context.contains("4 月 8 日灰度"))
+    }
+
+    @Test
     func segmentCommentsContextIncludesImageTextEvenWithoutTypedComment() throws {
         let segment = TranscriptSegment(
             speaker: "Speaker A",

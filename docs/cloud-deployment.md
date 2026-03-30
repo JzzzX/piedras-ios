@@ -63,8 +63,9 @@ ASR_MODE=doubao
 
 OPENAI_API_KEY=
 OPENAI_BASE_URL=<沿用你当前的 AiHub/AiHubMix 地址>
-OPENAI_MODEL=<沿用你当前线上模型>
+OPENAI_MODEL=gemini-3-flash-preview
 OPENAI_PATH=<沿用你当前路径，常见为 /chat/completions>
+LLM_PROVIDER=openai
 
 ASR_PROXY_SESSION_SECRET=
 ASR_PROXY_PUBLIC_BASE_URL=https://piedras.preview.aliyun-zeabur.cn
@@ -87,6 +88,7 @@ DOUBAO_ASR_WS_URL=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
 
 - 你现在提供的 Zeabur 环境变量里只有豆包凭据和 `ZBPACK_DOCKERFILE_NAME`
 - 还必须补上 `DATABASE_URL`、`ADMIN_API_SECRET`、`ASR_MODE`、`ASR_PROXY_PUBLIC_BASE_URL`、`ASR_PROXY_HEALTH_PATH`、`ASR_PROXY_WS_PATH`，以及现有 `OPENAI_*` 变量
+- 建议显式设置 `LLM_PROVIDER=openai`，把线上流量锁定在 AiHubMix 的 OpenAI-compatible 链路，避免后续新增其他 provider 凭证后自动切换
 - `ASR_PROXY_PUBLIC_BASE_URL` 必须写成实际公网域名，当前就是 `https://piedras.preview.aliyun-zeabur.cn`
 - 如果现在线上数据库还是旧版共享数据结构，新增代码会在服务启动时自动补账号 schema
 - 如果你希望旧数据自动挂到两个可登录测试账号，再补一个 `LEGACY_BOOTSTRAP_PASSWORD`；服务首次启动后会自动创建：
