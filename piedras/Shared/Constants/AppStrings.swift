@@ -205,6 +205,30 @@ struct AppStringTable {
         isChinese ? "最多只能添加 \(limit) 张图片。" : "You can attach up to \(limit) images."
     }
 
+    func noteAttachmentsAdded(_ count: Int) -> String {
+        let normalized = max(count, 0)
+        return isChinese ? "已添加 \(normalized) 张图片。" : "Added \(normalized) images."
+    }
+
+    func duplicateNoteAttachmentSkipped() -> String {
+        isChinese ? "这张照片已添加过。" : "That photo has already been added."
+    }
+
+    func noteAttachmentsSkippedDuplicates(_ duplicateCount: Int) -> String {
+        let duplicates = max(duplicateCount, 0)
+        return isChinese
+            ? "跳过 \(duplicates) 张重复图片。"
+            : "Skipped \(duplicates) duplicate images."
+    }
+
+    func noteAttachmentsAddedSkippingDuplicates(addedCount: Int, duplicateCount: Int) -> String {
+        let added = max(addedCount, 0)
+        let duplicates = max(duplicateCount, 0)
+        return isChinese
+            ? "已添加 \(added) 张，跳过 \(duplicates) 张重复图片。"
+            : "Added \(added), skipped \(duplicates) duplicate images."
+    }
+
     // ── EnhancedNotesView ────────────────────────────────────────
 
     var noAINotesYet: String { isChinese ? "暂无 AI 笔记。" : "No AI notes yet." }

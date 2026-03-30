@@ -127,6 +127,8 @@ final class Meeting {
     var enhancedNotes: String
     @Attribute(originalName: "noteAttachmentFileNames")
     private var noteAttachmentFileNamesValue: [String]?
+    @Attribute(originalName: "noteAttachmentAssetIdentifiersRaw")
+    private var noteAttachmentAssetIdentifiersRawValue: String?
     @Attribute(originalName: "noteAttachmentTextContext")
     private var noteAttachmentTextContextValue: String?
     @Attribute(originalName: "noteAttachmentTextStatusRaw")
@@ -177,6 +179,7 @@ final class Meeting {
         userNotesPlainText: String = "",
         enhancedNotes: String = "",
         noteAttachmentFileNames: [String] = [],
+        noteAttachmentAssetIdentifiersByFileName: [String: String] = [:],
         noteAttachmentTextContext: String = "",
         noteAttachmentTextStatus: AnnotationImageTextStatus = .idle,
         noteAttachmentTextUpdatedAt: Date? = nil,
@@ -214,6 +217,9 @@ final class Meeting {
         self.userNotesPlainText = userNotesPlainText
         self.enhancedNotes = enhancedNotes
         self.noteAttachmentFileNamesValue = noteAttachmentFileNames
+        self.noteAttachmentAssetIdentifiersRawValue = Self.encodeAttachmentAssetIdentifiers(
+            noteAttachmentAssetIdentifiersByFileName
+        )
         self.noteAttachmentTextContextValue = noteAttachmentTextContext
         self.noteAttachmentTextStatusRawValue = noteAttachmentTextStatus.rawValue
         self.noteAttachmentTextUpdatedAt = noteAttachmentTextUpdatedAt
@@ -271,6 +277,15 @@ final class Meeting {
     var noteAttachmentFileNames: [String] {
         get { noteAttachmentFileNamesValue ?? [] }
         set { noteAttachmentFileNamesValue = newValue }
+    }
+
+    var noteAttachmentAssetIdentifiersByFileName: [String: String] {
+        get {
+            Self.decodeAttachmentAssetIdentifiers(
+                noteAttachmentAssetIdentifiersRawValue ?? Self.encodeAttachmentAssetIdentifiers([:])
+            )
+        }
+        set { noteAttachmentAssetIdentifiersRawValue = Self.encodeAttachmentAssetIdentifiers(newValue) }
     }
 
     var noteAttachmentTextContext: String {
@@ -455,6 +470,26 @@ final class Meeting {
         }
 
         return speakers
+    }
+
+    private static func encodeAttachmentAssetIdentifiers(_ mapping: [String: String]) -> String {
+        guard JSONSerialization.isValidJSONObject(mapping),
+              let data = try? JSONSerialization.data(withJSONObject: mapping, options: [.sortedKeys]),
+              let value = String(data: data, encoding: .utf8) else {
+            return "{}"
+        }
+
+        return value
+    }
+
+    private static func decodeAttachmentAssetIdentifiers(_ rawValue: String) -> [String: String] {
+        guard let data = rawValue.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let mapping = object as? [String: String] else {
+            return [:]
+        }
+
+        return mapping
     }
 
     private static func generatedSpeakerIndex(from speaker: String) -> Int? {

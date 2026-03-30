@@ -147,6 +147,7 @@ struct SchemaMigrationCompatibilityTests {
         #expect(meetings.first?.meetingTypeRaw == "通用")
         #expect(meetings.first?.meetingType == "通用")
         #expect(meetings.first?.noteAttachmentFileNames == [])
+        #expect(meetings.first?.noteAttachmentAssetIdentifiersByFileName == [String: String]())
         #expect(meetings.first?.noteAttachmentTextContext == "")
         #expect(meetings.first?.noteAttachmentTextStatus == .idle)
         #expect(meetings.first?.noteAttachmentTextUpdatedAt == nil)

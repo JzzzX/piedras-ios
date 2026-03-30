@@ -57,6 +57,11 @@ private struct BackgroundTranscriptChunk {
     let durationMS: Double
 }
 
+enum NoteAttachmentAddResult: Equatable {
+    case added
+    case skippedDuplicate
+}
+
 @MainActor
 @Observable
 final class MeetingStore {
@@ -383,10 +388,21 @@ final class MeetingStore {
         noteAttachmentLimit(for: meeting) > 0
     }
 
-    func addNoteAttachment(_ image: UIImage, to meeting: Meeting) {
+    func addNoteAttachment(
+        _ image: UIImage,
+        to meeting: Meeting,
+        assetIdentifier: String? = nil
+    ) -> NoteAttachmentAddResult {
+        let normalizedAssetIdentifier = assetIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let normalizedAssetIdentifier,
+           !normalizedAssetIdentifier.isEmpty,
+           meeting.noteAttachmentAssetIdentifiersByFileName.values.contains(normalizedAssetIdentifier) {
+            return .skippedDuplicate
+        }
+
         guard canAddNoteAttachment(to: meeting) else {
             lastErrorMessage = AppStrings.current.noteAttachmentLimitReached(Self.maxNoteAttachmentsPerMeeting)
-            return
+            return .skippedDuplicate
         }
 
         do {
@@ -395,11 +411,19 @@ final class MeetingStore {
                 meetingID: meeting.id
             )
             meeting.noteAttachmentFileNames.append(fileName)
+            if let normalizedAssetIdentifier,
+               !normalizedAssetIdentifier.isEmpty {
+                var assetIdentifiers = meeting.noteAttachmentAssetIdentifiersByFileName
+                assetIdentifiers[fileName] = normalizedAssetIdentifier
+                meeting.noteAttachmentAssetIdentifiersByFileName = assetIdentifiers
+            }
             meeting.updatedAt = .now
             persistChanges()
             scheduleNoteAttachmentTextRefresh(for: meeting)
+            return .added
         } catch {
             lastErrorMessage = error.localizedDescription
+            return .skippedDuplicate
         }
     }
 
@@ -408,6 +432,9 @@ final class MeetingStore {
         cancelNoteAttachmentTextTask(for: meeting.id)
         MeetingNoteAttachmentStorage.deleteImage(meetingID: meeting.id, fileName: fileName)
         meeting.noteAttachmentFileNames.removeAll { $0 == fileName }
+        var assetIdentifiers = meeting.noteAttachmentAssetIdentifiersByFileName
+        assetIdentifiers.removeValue(forKey: fileName)
+        meeting.noteAttachmentAssetIdentifiersByFileName = assetIdentifiers
         meeting.updatedAt = .now
 
         if meeting.noteAttachmentFileNames.isEmpty {

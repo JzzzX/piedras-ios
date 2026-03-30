@@ -100,6 +100,7 @@ struct MeetingNoteAttachmentTests {
         let meeting = Meeting()
 
         #expect(meeting.noteAttachmentFileNames.isEmpty)
+        #expect(meeting.noteAttachmentAssetIdentifiersByFileName.isEmpty)
         #expect(meeting.noteAttachmentTextContext.isEmpty)
         #expect(meeting.noteAttachmentTextStatus == .idle)
         #expect(meeting.noteAttachmentTextUpdatedAt == nil)
@@ -153,11 +154,138 @@ struct MeetingNoteAttachmentTests {
     }
 
     @MainActor
+    @Test
+    func addingSamePhotoAssetTwiceOnlyKeepsOneAttachment() async throws {
+        let container = try ModelContainerFactory.makeContainer(inMemory: true)
+        let repository = MeetingRepository(modelContext: container.mainContext)
+        let chatRepository = ChatSessionRepository(modelContext: container.mainContext)
+        let store = makeStore(repository: repository, chatRepository: chatRepository)
+
+        let meeting = try repository.createDraftMeeting(hiddenWorkspaceID: nil)
+        defer { MeetingNoteAttachmentStorage.deleteAllAttachments(meetingID: meeting.id) }
+
+        let firstResult = store.addNoteAttachment(
+            makeTestImage(),
+            to: meeting,
+            assetIdentifier: "ph://asset-1"
+        )
+        let secondResult = store.addNoteAttachment(
+            makeTestImage(),
+            to: meeting,
+            assetIdentifier: "ph://asset-1"
+        )
+
+        try await waitUntil {
+            meeting.noteAttachmentFileNames.count == 1
+        }
+
+        #expect(firstResult == .added)
+        #expect(secondResult == .skippedDuplicate)
+        #expect(meeting.noteAttachmentFileNames.count == 1)
+        #expect(meeting.noteAttachmentAssetIdentifiersByFileName.count == 1)
+        #expect(meeting.noteAttachmentAssetIdentifiersByFileName.values.sorted() == ["ph://asset-1"])
+    }
+
+    @MainActor
+    @Test
+    func deletingPhotoAssetAllowsAddingItAgain() async throws {
+        let container = try ModelContainerFactory.makeContainer(inMemory: true)
+        let repository = MeetingRepository(modelContext: container.mainContext)
+        let chatRepository = ChatSessionRepository(modelContext: container.mainContext)
+        let store = makeStore(repository: repository, chatRepository: chatRepository)
+
+        let meeting = try repository.createDraftMeeting(hiddenWorkspaceID: nil)
+        defer { MeetingNoteAttachmentStorage.deleteAllAttachments(meetingID: meeting.id) }
+
+        let firstResult = store.addNoteAttachment(
+            makeTestImage(),
+            to: meeting,
+            assetIdentifier: "ph://asset-2"
+        )
+        try await waitUntil {
+            meeting.noteAttachmentFileNames.count == 1
+        }
+        let firstFileName = try #require(meeting.noteAttachmentFileNames.first)
+
+        store.removeNoteAttachment(fileName: firstFileName, from: meeting)
+
+        let secondResult = store.addNoteAttachment(
+            makeTestImage(),
+            to: meeting,
+            assetIdentifier: "ph://asset-2"
+        )
+
+        try await waitUntil {
+            meeting.noteAttachmentFileNames.count == 1
+        }
+
+        #expect(firstResult == .added)
+        #expect(secondResult == .added)
+        #expect(meeting.noteAttachmentFileNames.count == 1)
+        #expect(meeting.noteAttachmentAssetIdentifiersByFileName.count == 1)
+        #expect(meeting.noteAttachmentAssetIdentifiersByFileName.values.sorted() == ["ph://asset-2"])
+    }
+
+    @MainActor
+    @Test
+    func cameraStyleAttachmentsRemainAddableWithoutAssetIdentifier() async throws {
+        let container = try ModelContainerFactory.makeContainer(inMemory: true)
+        let repository = MeetingRepository(modelContext: container.mainContext)
+        let chatRepository = ChatSessionRepository(modelContext: container.mainContext)
+        let store = makeStore(repository: repository, chatRepository: chatRepository)
+
+        let meeting = try repository.createDraftMeeting(hiddenWorkspaceID: nil)
+        defer { MeetingNoteAttachmentStorage.deleteAllAttachments(meetingID: meeting.id) }
+
+        let firstResult = store.addNoteAttachment(makeTestImage(), to: meeting, assetIdentifier: nil)
+        let secondResult = store.addNoteAttachment(makeTestImage(), to: meeting, assetIdentifier: nil)
+
+        try await waitUntil {
+            meeting.noteAttachmentFileNames.count == 2
+        }
+
+        #expect(firstResult == .added)
+        #expect(secondResult == .added)
+        #expect(meeting.noteAttachmentFileNames.count == 2)
+        #expect(meeting.noteAttachmentAssetIdentifiersByFileName.isEmpty)
+    }
+
+    @MainActor
     private func makeSettingsStore() -> SettingsStore {
         let suiteName = "piedras.tests.meeting-note-attachment.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         return SettingsStore(defaults: defaults)
+    }
+
+    @MainActor
+    private func makeStore(
+        repository: MeetingRepository,
+        chatRepository: ChatSessionRepository
+    ) -> MeetingStore {
+        let settingsStore = makeSettingsStore()
+        let apiClient = APIClient(settingsStore: settingsStore)
+
+        return MeetingStore(
+            repository: repository,
+            chatSessionRepository: chatRepository,
+            settingsStore: settingsStore,
+            recordingSessionStore: RecordingSessionStore(),
+            appActivityCoordinator: AppActivityCoordinator(),
+            recordingLiveActivityCoordinator: NoopMeetingNoteAttachmentLiveActivityCoordinator(),
+            audioRecorderService: NoopMeetingNoteAttachmentAudioRecorderService(),
+            audioFileTranscriptionService: NoopMeetingNoteAttachmentAudioFileTranscriptionService(),
+            apiClient: apiClient,
+            asrService: NoopMeetingNoteAttachmentASRService(),
+            workspaceBootstrapService: WorkspaceBootstrapService(
+                apiClient: apiClient,
+                settingsStore: settingsStore
+            ),
+            meetingSyncService: StubMeetingNoteAttachmentSyncService(),
+            noteAttachmentImageTextExtractor: MockMeetingNoteAttachmentImageTextExtractor(
+                extractedText: "白板写着：4 月 8 日灰度发布。"
+            )
+        )
     }
 
     @MainActor

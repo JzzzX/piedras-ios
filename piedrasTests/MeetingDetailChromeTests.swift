@@ -148,4 +148,28 @@ struct MeetingDetailChromeTests {
             ) == AppStrings.current.writeHere
         )
     }
+
+    @Test
+    func recordingAttachmentDockMetricsShowAtMostTwoRows() {
+        let hidden = RecordingAttachmentDockMetrics.forAttachmentCount(0)
+        let singleRow = RecordingAttachmentDockMetrics.forAttachmentCount(4)
+        let doubleRow = RecordingAttachmentDockMetrics.forAttachmentCount(8)
+        let overflow = RecordingAttachmentDockMetrics.forAttachmentCount(10)
+
+        #expect(hidden.isVisible == false)
+        #expect(hidden.visibleRowCount == 0)
+        #expect(hidden.showsInternalScroll == false)
+
+        #expect(singleRow.isVisible)
+        #expect(singleRow.visibleRowCount == 1)
+        #expect(singleRow.showsInternalScroll == false)
+
+        #expect(doubleRow.isVisible)
+        #expect(doubleRow.visibleRowCount == 2)
+        #expect(doubleRow.showsInternalScroll == false)
+
+        #expect(overflow.isVisible)
+        #expect(overflow.visibleRowCount == 2)
+        #expect(overflow.showsInternalScroll)
+    }
 }

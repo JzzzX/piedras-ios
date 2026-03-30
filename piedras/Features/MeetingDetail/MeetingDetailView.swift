@@ -121,48 +121,10 @@ struct MeetingDetailView: View {
         ZStack(alignment: .top) {
             AppGlassBackdrop()
 
-            ScrollViewReader { proxy in
-                ScrollView(showsIndicators: false) {
-                    VStack(alignment: .leading, spacing: isRecordingThisMeeting ? 12 : 20) {
-                        Color.clear
-                            .frame(height: 0)
-                            .id(topAnchorID)
-
-                        if let transcriptionStatus = meetingStore.fileTranscriptionStatus(meetingID: meeting.id) {
-                            fileTranscriptionStatusView(transcriptionStatus, meetingID: meeting.id)
-                        }
-
-                        if !isRecordingThisMeeting {
-                            titleBlock(meeting: meeting)
-                        }
-
-                        documentPage(meeting: meeting)
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 16)
-                    .padding(.bottom, contentBottomPadding(for: meeting))
-                }
-                .onChange(of: isRecordingThisMeeting, initial: false) { wasRecording, isRecording in
-                    if wasRecording && !isRecording {
-                        // Save any pending notes before transitioning to AI notes view
-                        if let meeting = meetingStore.meeting(withID: meetingID) {
-                            noteSaveTask?.cancel()
-                            let notes = currentNotesText(for: meeting)
-                            meetingStore.updateNotes(notes, for: meeting)
-                        }
-
-                        withAnimation(.easeOut(duration: 0.4)) {
-                            proxy.scrollTo(topAnchorID, anchor: .top)
-                        }
-                    }
-
-                    if !wasRecording && isRecording {
-                        withAnimation(.easeOut(duration: 0.4)) {
-                            proxy.scrollTo(topAnchorID, anchor: .top)
-                        }
-                    }
-                }
-                .scrollDismissesKeyboard(.interactively)
+            if isRecordingThisMeeting {
+                recordingWorkspace(meeting: meeting)
+            } else {
+                standardDetailContent(meeting: meeting)
             }
 
             if let toastMessage {
@@ -190,14 +152,7 @@ struct MeetingDetailView: View {
         }
         .safeAreaInset(edge: .bottom) {
             if isRecordingThisMeeting {
-                RecordingBottomBar(
-                    meeting: meeting,
-                    onRequestTranscript: {
-                        annotationStore.dismissEditor()
-                        showsTranscriptSheet = true
-                    }
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
+                recordingBottomDock(meeting: meeting)
             } else {
                 bottomStack(for: meeting)
             }
@@ -296,6 +251,95 @@ struct MeetingDetailView: View {
         .onChange(of: selectedNoteAttachmentItems) { _, items in
             handleSelectedNoteAttachments(items)
         }
+    }
+
+    private func standardDetailContent(meeting: Meeting) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 20) {
+                    Color.clear
+                        .frame(height: 0)
+                        .id(topAnchorID)
+
+                    if let transcriptionStatus = meetingStore.fileTranscriptionStatus(meetingID: meeting.id) {
+                        fileTranscriptionStatusView(transcriptionStatus, meetingID: meeting.id)
+                    }
+
+                    titleBlock(meeting: meeting)
+                    documentPage(meeting: meeting)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 16)
+                .padding(.bottom, contentBottomPadding(for: meeting))
+            }
+            .onChange(of: isRecordingThisMeeting, initial: false) { wasRecording, isRecording in
+                if wasRecording && !isRecording {
+                    if let meeting = meetingStore.meeting(withID: meetingID) {
+                        noteSaveTask?.cancel()
+                        let notes = currentNotesText(for: meeting)
+                        meetingStore.updateNotes(notes, for: meeting)
+                    }
+
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        proxy.scrollTo(topAnchorID, anchor: .top)
+                    }
+                }
+
+                if !wasRecording && isRecording {
+                    withAnimation(.easeOut(duration: 0.4)) {
+                        proxy.scrollTo(topAnchorID, anchor: .top)
+                    }
+                }
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+    }
+
+    private func recordingWorkspace(meeting: Meeting) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let transcriptionStatus = meetingStore.fileTranscriptionStatus(meetingID: meeting.id) {
+                fileTranscriptionStatusView(transcriptionStatus, meetingID: meeting.id)
+                    .padding(.bottom, 12)
+            }
+
+            recordingTitleBlock(meeting: meeting, chrome: MeetingDetailChrome.recordingDocument)
+                .padding(.bottom, 20)
+
+            ThinDivider()
+                .padding(.bottom, 20)
+
+            ScrollView(showsIndicators: false) {
+                ZStack(alignment: .topLeading) {
+                    NoteEditorView(
+                        text: noteEditorBinding(for: meeting),
+                        showsHeader: false,
+                        title: AppStrings.current.notes,
+                        placeholder: MeetingDetailChrome.recordingNoteEditorPlaceholder(
+                            notes: currentNotesText(for: meeting),
+                            isEditorFocused: isRecordingNoteEditorFocused
+                        ),
+                        minHeight: recordingNoteEditorMinHeight,
+                        usesBodyStyle: true,
+                        focusRequestToken: recordingNoteFocusRequest,
+                        isFocused: $isRecordingNoteEditorFocused,
+                        accessibilityIdentifier: "RecordingNoteEditor"
+                    )
+
+                    if MeetingDetailChrome.showsRecordingNotePrompt(
+                        notes: currentNotesText(for: meeting),
+                        isEditorFocused: isRecordingNoteEditorFocused
+                    ) {
+                        recordingNotePrompt(chrome: MeetingDetailChrome.recordingDocument)
+                    }
+                }
+                .padding(.bottom, 24)
+            }
+            .scrollDismissesKeyboard(.interactively)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 16)
+        .padding(.bottom, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private func detailTopChrome(meeting: Meeting) -> some View {
@@ -1001,8 +1045,37 @@ struct MeetingDetailView: View {
         max(560, UIScreen.main.bounds.height * 0.66)
     }
 
+    private var recordingNoteEditorMinHeight: CGFloat {
+        max(360, UIScreen.main.bounds.height * 0.42)
+    }
+
     private var isRecordingThisMeeting: Bool {
         recordingSessionStore.meetingID == meetingID && recordingSessionStore.phase != .idle
+    }
+
+    private func recordingBottomDock(meeting: Meeting) -> some View {
+        VStack(spacing: 10) {
+            if meeting.hasNoteAttachments {
+                RecordingMeetingNoteAttachmentsDock(
+                    meeting: meeting,
+                    showsRefreshHint: meeting.hasAttachmentNotesRefreshHint,
+                    onDelete: { fileName in
+                        meetingStore.removeNoteAttachment(fileName: fileName, from: meeting)
+                    }
+                )
+                .padding(.horizontal, 12)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
+            RecordingBottomBar(
+                meeting: meeting,
+                onRequestTranscript: {
+                    annotationStore.dismissEditor()
+                    showsTranscriptSheet = true
+                }
+            )
+        }
+        .transition(.move(edge: .bottom).combined(with: .opacity))
     }
 
     private func openTitleRenameDialog(for meeting: Meeting) {
@@ -1169,7 +1242,10 @@ struct MeetingDetailView: View {
 
     private func handleCapturedNoteAttachment(_ image: UIImage) {
         guard let meeting = meetingStore.meeting(withID: meetingID) else { return }
-        meetingStore.addNoteAttachment(image, to: meeting)
+        let result = meetingStore.addNoteAttachment(image, to: meeting)
+        if result == .skippedDuplicate {
+            showToast(AppStrings.current.duplicateNoteAttachmentSkipped())
+        }
     }
 
     private func handleSelectedNoteAttachments(_ items: [PhotosPickerItem]) {
@@ -1179,18 +1255,63 @@ struct MeetingDetailView: View {
         }
 
         let allowedItems = Array(items.prefix(meetingStore.noteAttachmentLimit(for: meeting)))
-        for item in allowedItems {
-            Task {
-                guard let data = try? await item.loadTransferable(type: Data.self),
-                      let image = UIImage(data: data) else { return }
+        selectedNoteAttachmentItems = []
 
-                await MainActor.run {
-                    guard let meeting = meetingStore.meeting(withID: meetingID) else { return }
-                    meetingStore.addNoteAttachment(image, to: meeting)
+        Task {
+            var addedCount = 0
+            var duplicateCount = 0
+
+            for item in allowedItems {
+                guard let data = try? await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { continue }
+
+                let result = await MainActor.run { () -> NoteAttachmentAddResult? in
+                    guard let meeting = meetingStore.meeting(withID: meetingID) else { return nil }
+                    return meetingStore.addNoteAttachment(
+                        image,
+                        to: meeting,
+                        assetIdentifier: item.itemIdentifier
+                    )
+                }
+
+                switch result {
+                case .added:
+                    addedCount += 1
+                case .skippedDuplicate:
+                    duplicateCount += 1
+                case nil:
+                    break
                 }
             }
+
+            await MainActor.run {
+                showNoteAttachmentSelectionResultToast(
+                    addedCount: addedCount,
+                    duplicateCount: duplicateCount
+                )
+            }
         }
-        selectedNoteAttachmentItems = []
+    }
+
+    private func showNoteAttachmentSelectionResultToast(
+        addedCount: Int,
+        duplicateCount: Int
+    ) {
+        switch (addedCount, duplicateCount) {
+        case (0, let duplicates) where duplicates > 0:
+            showToast(AppStrings.current.noteAttachmentsSkippedDuplicates(duplicates))
+        case (let added, 0) where added > 0:
+            showToast(AppStrings.current.noteAttachmentsAdded(added))
+        case (let added, let duplicates) where added > 0 && duplicates > 0:
+            showToast(
+                AppStrings.current.noteAttachmentsAddedSkippingDuplicates(
+                    addedCount: added,
+                    duplicateCount: duplicates
+                )
+            )
+        default:
+            break
+        }
     }
 
     @ViewBuilder
