@@ -117,10 +117,10 @@ export async function POST(req: NextRequest) {
 
 function getDemoResponse(question: string): string {
   if (question.includes('行动') || question.includes('待办') || question.includes('TODO')) {
-    return '根据会议内容，主要的行动项包括：\n\n1. 配置默认 LLM 或 OpenAI 兼容凭证\n2. 测试实时语音转写\n3. 完善模版系统\n\n> *当前为 Demo 模式，配置可用的 LLM API 密钥后将基于实际会议内容回答*';
+    return '根据会议内容，主要行动项包括：\n\n1. 配置默认 LLM 或 OpenAI 兼容凭证\n2. 测试实时语音转写\n3. 完善模版系统\n\n当前为 Demo 模式，配置可用的 LLM API 密钥后将基于实际会议内容回答。';
   }
   if (question.includes('总结') || question.includes('摘要')) {
-    return '本次会议的核心内容总结如下：\n\n会议讨论了多项议题，各参会者充分表达了意见并达成初步共识。\n\n> *当前为 Demo 模式*';
+    return '本次会议的核心内容如下。\n\n会议讨论了多项议题，各参会者充分表达了意见并达成初步共识。\n\n当前为 Demo 模式。';
   }
-  return `关于您的问题「${question}」：\n\n基于当前会议记录的分析结果将在此显示。配置默认 LLM 或 OpenAI 兼容 API 密钥后，将使用真实 AI 基于转写和笔记内容回答您的问题。\n\n> *当前为 Demo 模式，请配置 API 密钥启用完整功能*`;
+  return `关于您的问题「${question}」，基于当前会议记录的分析结果将在此显示。\n\n配置默认 LLM 或 OpenAI 兼容 API 密钥后，将使用真实 AI 基于转写和笔记内容回答您的问题。\n\n当前为 Demo 模式，请配置 API 密钥启用完整功能。`;
 }

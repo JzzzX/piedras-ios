@@ -197,11 +197,18 @@ struct GlobalChatView: View {
                         .foregroundStyle(AppTheme.subtleInk)
                 }
             } else {
-                Text(message.content)
-                    .font(AppTheme.bodyFont(size: 15))
-                    .lineSpacing(AppTheme.editorialBodyLineSpacing)
-                    .foregroundStyle(isUser ? .white : AppTheme.ink)
-                    .textSelection(.enabled)
+                if isUser {
+                    Text(message.content)
+                        .font(AppTheme.bodyFont(size: 15))
+                        .lineSpacing(AppTheme.editorialBodyLineSpacing)
+                        .foregroundStyle(.white)
+                        .textSelection(.enabled)
+                } else {
+                    ChatMarkdownMessageView(
+                        markdown: message.content,
+                        accessibilityIdentifier: "GlobalChatAssistantMessage"
+                    )
+                }
             }
         }
         .padding(16)

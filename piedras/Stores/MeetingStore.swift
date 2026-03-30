@@ -2456,7 +2456,8 @@ final class MeetingStore {
                 let titleResponse = try await apiClient.generateMeetingTitle(
                     transcript: transcript,
                     durationSeconds: meeting.durationSeconds,
-                    meetingDate: meeting.date
+                    meetingDate: meeting.date,
+                    meetingType: meeting.meetingType
                 )
                 let generatedTitle = titleResponse.title.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !generatedTitle.isEmpty {

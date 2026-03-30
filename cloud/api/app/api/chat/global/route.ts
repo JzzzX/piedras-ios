@@ -62,7 +62,7 @@ function formatSources(
   if (sources.length === 0) return '参考来源：无';
   const lines = sources.map((s) => {
     const dateText = new Date(s.date).toLocaleString('zh-CN', { hour12: false });
-    return `- [${s.ref}] ${s.type === 'meeting' ? '会议' : '资料'}：${s.title}（${dateText}）`;
+    return `[${s.ref}] ${s.type === 'meeting' ? '会议' : '资料'}：${s.title}（${dateText}）`;
   });
   return `参考来源：\n${lines.join('\n')}`;
 }
@@ -181,7 +181,7 @@ export async function POST(req: NextRequest) {
       runtimeConfig: llmRuntimeConfig,
     });
 
-    const fullContent = `${content.trim()}\n\n---\n${formatSources(retrieval.sources)}`;
+    const fullContent = `${content.trim()}\n\n${formatSources(retrieval.sources)}`;
     const stream = createTextStream(fullContent);
 
     return textResponse(context, stream, {

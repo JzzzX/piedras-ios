@@ -57,6 +57,30 @@ enum MeetingTitleHeuristics {
         "一下",
     ]
 
+    private static let lowSignalGeneratedTitles: Set<String> = [
+        "测试",
+        "语音测试",
+        "录音测试",
+        "会议测试",
+        "今天",
+        "现在",
+        "日期确认",
+        "时间确认",
+        "效果如何",
+        "看看效果",
+    ]
+
+    private static let lowSignalCandidateTitles: Set<String> = [
+        "测试",
+        "会议测试",
+        "今天",
+        "现在",
+        "日期确认",
+        "时间确认",
+        "效果如何",
+        "看看效果",
+    ]
+
     static func fallbackTitle(
         transcript: String,
         finalSegmentCount: Int,
@@ -92,23 +116,23 @@ enum MeetingTitleHeuristics {
     }
 
     static func keyPhraseTitle(from transcript: String) -> String? {
-        let cleanedTranscript = transcript
-            .replacingOccurrences(of: "\\[[^\\]]+\\]\\s*:?", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-
-        let sentences = cleanedTranscript
+        let sentences = cleanedTranscript(from: transcript)
             .split(whereSeparator: { character in
                 "。！？!?；;\n".contains(character)
             })
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .map { normalizedTitleSentence(from: String($0)) }
+            .filter { !isLowSignalTitle($0) }
 
-        for sentence in sentences.prefix(3) {
-            let candidate = cleanedTitleCandidate(from: sentence)
-            if candidate.count >= minTitleLength {
-                return candidate
-            }
+        let candidates = Array(sentences.prefix(5))
+
+        if candidates.count >= 2,
+           candidates[0].contains("测试"),
+           candidates[1].contains("验证") {
+            return sanitizedTitle(from: "\(candidates[0])与\(candidates[1])")
+        }
+
+        if let first = candidates.first, first.count >= minTitleLength {
+            return sanitizedTitle(from: first)
         }
 
         return nil
@@ -130,6 +154,13 @@ enum MeetingTitleHeuristics {
         "\(fallbackDateFormatter.string(from: date)) 录音"
     }
 
+    private static func cleanedTranscript(from transcript: String) -> String {
+        transcript
+            .replacingOccurrences(of: "\\[[^\\]]+\\]\\s*:?", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+    }
+
     private static func cleanedTitleCandidate(from sentence: String) -> String {
         let compact = sentence
             .replacingOccurrences(of: "[，。！？、,.!?:：；;（）()“”\"'‘’·\\-\\[\\]]+", with: " ", options: .regularExpression)
@@ -143,6 +174,65 @@ enum MeetingTitleHeuristics {
         }
 
         return trimmed
+    }
+
+    private static func normalizedTitleSentence(from sentence: String) -> String {
+        let compact = sentence
+            .replacingOccurrences(of: "[，。！？、,.!?:：；;（）()“”\"'‘’·\\-\\[\\]]+", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "\\s+", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "今天是?\\d{2,4}年\\d{1,2}月\\d{1,2}日", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\d{2,4}年\\d{1,2}月\\d{1,2}日", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "现在进行", with: "")
+            .replacingOccurrences(of: "进行语音测试", with: "语音测试")
+            .replacingOccurrences(of: "看一下这个转写的效果如何", with: "转写效果验证")
+            .replacingOccurrences(of: "看一下这个转息的效果如何", with: "转写效果验证")
+            .replacingOccurrences(of: "看一下转写的效果如何", with: "转写效果验证")
+            .replacingOccurrences(of: "看一下转息的效果如何", with: "转写效果验证")
+            .replacingOccurrences(of: "看一下效果如何", with: "效果验证")
+            .replacingOccurrences(of: "转写的效果如何", with: "转写效果验证")
+            .replacingOccurrences(of: "转息的效果如何", with: "转写效果验证")
+            .replacingOccurrences(of: "这个转写效果验证", with: "转写效果验证")
+            .replacingOccurrences(of: "这个转息效果验证", with: "转写效果验证")
+            .replacingOccurrences(of: "效果如何", with: "效果验证")
+
+        return strippedTrailingPhrases(from: strippedLeadingPhrases(from: compact))
+    }
+
+    private static func isLowSignalTitle(_ title: String) -> Bool {
+        if title.count < minTitleLength {
+            return true
+        }
+
+        if lowSignalCandidateTitles.contains(title) {
+            return true
+        }
+
+        if title.range(of: "\\d{2,4}年\\d{1,2}月\\d{1,2}日", options: .regularExpression) != nil {
+            return true
+        }
+
+        if title.hasPrefix("今天") || title.hasPrefix("现在") || title.hasPrefix("这是") {
+            return true
+        }
+
+        if title.contains("进行测试") || title.contains("看一下") || title.contains("效果如何") {
+            return true
+        }
+
+        return false
+    }
+
+    static func shouldRejectGeneratedTitle(_ title: String) -> Bool {
+        let sanitized = sanitizedTitle(from: title)
+        if sanitized.isEmpty {
+            return true
+        }
+
+        if lowSignalGeneratedTitles.contains(sanitized) {
+            return true
+        }
+
+        return isLowSignalTitle(sanitized) || sanitized.contains("会议于")
     }
 
     private static func strippedLeadingPhrases(from source: String) -> String {

@@ -10,6 +10,7 @@ private struct MeetingTitleRequestPayload: Encodable {
     let transcript: String
     let durationSeconds: Int
     let meetingDate: String
+    let promptOptions: PromptOptions?
 }
 
 private struct AuthLoginRequestPayload: Encodable {
@@ -330,7 +331,8 @@ final class APIClient: AuthNetworking {
     func generateMeetingTitle(
         transcript: String,
         durationSeconds: Int,
-        meetingDate: Date
+        meetingDate: Date,
+        meetingType: String
     ) async throws -> RemoteMeetingTitleResponse {
         try await sendJSONRequest(
             path: "/api/meetings/title",
@@ -338,7 +340,12 @@ final class APIClient: AuthNetworking {
             body: MeetingTitleRequestPayload(
                 transcript: transcript,
                 durationSeconds: durationSeconds,
-                meetingDate: Self.iso8601WithFractionalSeconds.string(from: meetingDate)
+                meetingDate: Self.iso8601WithFractionalSeconds.string(from: meetingDate),
+                promptOptions: PromptOptions(
+                    meetingType: meetingType,
+                    outputStyle: "平衡",
+                    includeActionItems: true
+                )
             )
         )
     }

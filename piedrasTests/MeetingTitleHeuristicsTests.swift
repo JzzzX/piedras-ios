@@ -39,4 +39,17 @@ struct MeetingTitleHeuristicsTests {
 
         #expect(title == "3月18日 20:46 录音")
     }
+
+    @Test
+    func skipsDateAndTestingFillerWhenBuildingFallbackTopicTitle() {
+        let meetingDate = ISO8601DateFormatter().date(from: "2026-03-30T00:43:00+08:00") ?? .now
+        let title = MeetingTitleHeuristics.fallbackTitle(
+            transcript: "[麦克风]: 今天是 2016 年 3 月 30 日。\n[麦克风]: 现在进行语音测试。\n[麦克风]: 看一下这个转写的效果如何。",
+            finalSegmentCount: 3,
+            durationSeconds: 120,
+            meetingDate: meetingDate
+        )
+
+        #expect(title == "语音测试与转写效果验证")
+    }
 }

@@ -199,12 +199,19 @@ struct ChatView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                Text(message.content)
-                    .font(AppTheme.bodyFont(size: 16))
-                    .lineSpacing(AppTheme.editorialBodyLineSpacing)
-                    .foregroundStyle(AppTheme.ink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
+                if isUser {
+                    Text(message.content)
+                        .font(AppTheme.bodyFont(size: 16))
+                        .lineSpacing(AppTheme.editorialBodyLineSpacing)
+                        .foregroundStyle(AppTheme.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                } else {
+                    ChatMarkdownMessageView(
+                        markdown: message.content,
+                        accessibilityIdentifier: "MeetingChatAssistantMessage"
+                    )
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

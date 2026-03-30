@@ -53,6 +53,21 @@ struct MarkdownDocumentView: View {
                 .foregroundStyle(AppTheme.ink)
                 .fixedSize(horizontal: false, vertical: true)
 
+        case let .orderedList(index):
+            HStack(alignment: .top, spacing: 10) {
+                Text("\(index).")
+                    .font(AppTheme.bodyFont(size: 15, weight: .semibold))
+                    .foregroundStyle(AppTheme.ink)
+                    .padding(.top, 1)
+
+                Text(block.attributedText)
+                    .font(AppTheme.bodyFont(size: 15))
+                    .lineSpacing(bodyLineSpacing)
+                    .foregroundStyle(AppTheme.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
         case .bullet:
             HStack(alignment: .top, spacing: 10) {
                 Rectangle()
@@ -109,13 +124,14 @@ enum MarkdownDocumentFormatter {
     enum BlockKind {
         case heading(level: Int)
         case paragraph
+        case orderedList(index: Int)
         case bullet
         case checklist(isChecked: Bool)
         case quote
 
         var isListLike: Bool {
             switch self {
-            case .bullet, .checklist:
+            case .orderedList, .bullet, .checklist:
                 return true
             case .heading, .paragraph, .quote:
                 return false
@@ -235,6 +251,12 @@ enum MarkdownDocumentFormatter {
                 continue
             }
 
+            if let orderedList = trimmed.orderedListContent() {
+                flushParagraph()
+                blocks.append(Block(kind: .orderedList(index: orderedList.index), source: orderedList.content))
+                continue
+            }
+
             if let bullet = trimmed.bulletContent() {
                 flushParagraph()
                 blocks.append(Block(kind: .bullet, source: bullet))
@@ -264,6 +286,8 @@ enum MarkdownDocumentFormatter {
                 text = block.plainText
             case .paragraph:
                 text = block.plainText
+            case let .orderedList(index):
+                text = "\(index). \(block.plainText)"
             case .bullet:
                 text = "• \(block.plainText)"
             case let .checklist(isChecked):
@@ -309,6 +333,23 @@ private extension String {
 
     func bulletContent() -> String? {
         dropPrefix("- ") ?? dropPrefix("* ") ?? dropPrefix("• ")
+    }
+
+    func orderedListContent() -> (index: Int, content: String)? {
+        let pattern = #"^(\d+)\.\s+(.+)$"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(startIndex..<endIndex, in: self)
+        guard let match = regex.firstMatch(in: self, options: [], range: range),
+              match.numberOfRanges == 3,
+              let indexRange = Range(match.range(at: 1), in: self),
+              let contentRange = Range(match.range(at: 2), in: self),
+              let index = Int(self[indexRange]) else {
+            return nil
+        }
+
+        let content = String(self[contentRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else { return nil }
+        return (index, content)
     }
 
     func dropPrefix(_ prefix: String) -> String? {

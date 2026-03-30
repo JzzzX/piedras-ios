@@ -20,6 +20,8 @@ test('buildMeetingChatSystemPrompt enforces grounded answer order and evidence p
   assert.match(prompt, /先直接回答结论，再补充依据/);
   assert.match(prompt, /用户笔记 > 主笔记附件资料 > AI 会议纪要 > 会议转写 > 转写片段评论/);
   assert.match(prompt, /若证据不足，请明确说明缺少哪类信息/);
+  assert.match(prompt, /优先使用自然段回答，只有在确实需要分点时才使用短列表/);
+  assert.match(prompt, /不要输出 Markdown 标题、代码块或仅用于排版的粗体标签/);
   assert.match(prompt, /当前任务 Recipe 指令：请重点关注发布时间。/);
 });
 
@@ -36,4 +38,6 @@ test('buildGlobalChatSystemPrompt keeps citation requirement and forbids unsuppo
   assert.match(prompt, /先直接回答结论，再给出来源依据/);
   assert.match(prompt, /如果检索内容不足以回答，请明确说明不足/);
   assert.match(prompt, /回答中尽量在关键结论后标注来源编号/);
+  assert.match(prompt, /优先使用自然段回答，只有在确实需要分点时才使用短列表/);
+  assert.match(prompt, /不要输出 Markdown 标题、代码块或仅用于排版的粗体标签/);
 });
