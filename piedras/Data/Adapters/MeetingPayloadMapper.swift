@@ -34,7 +34,22 @@ struct RemoteBackendHealth: Decodable {
     let database: Bool?
     let asr: RemoteASRStatus?
     let llm: RemoteLLMStatus?
+    let startupBootstrap: RemoteStartupBootstrapStatus?
     let checkedAt: Date?
+}
+
+struct RemoteStartupBootstrapStatus: Decodable {
+    let ready: Bool
+    let status: String
+    let attempts: Int
+    let startedAt: Date?
+    let completedAt: Date?
+    let lastError: String?
+    let schemaReady: Bool
+    let missingItems: [String]
+    let legacyUsers: [String]
+    let retryScheduled: Bool
+    let retryAt: Date?
 }
 
 struct RemoteASRSession: Decodable {

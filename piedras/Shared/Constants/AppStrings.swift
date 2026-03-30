@@ -90,6 +90,8 @@ struct AppStringTable {
     var audioTranscriptionFailed: String { isChinese ? "文件转写失败" : "Audio transcription failed" }
     var noSpeechDetectedInAudio: String { isChinese ? "这段音频里没有检测到可转写的人声。" : "No speech was detected in this audio." }
     var audioFileNeedsReexport: String { isChinese ? "当前音频暂时无法稳定解析，请重新导出为 m4a、mp3 或 wav 后重试。" : "This audio could not be parsed reliably. Please re-export it as m4a, mp3, or wav and try again." }
+    var audioTranscriptionConnectionIssue: String { isChinese ? "当前网络或转写连接不稳定，请稍后重试。" : "The network or transcription connection is unstable. Please try again shortly." }
+    var audioTranscriptionServiceUnavailable: String { isChinese ? "当前转写服务暂时不可用，请稍后重试。" : "The transcription service is temporarily unavailable. Please try again shortly." }
     var audioPlaybackFailed: String { isChinese ? "当前音频暂时无法播放，请重试或重新导出为 m4a、mp3 或 wav。" : "This audio cannot be played right now. Please try again or re-export it as m4a, mp3, or wav." }
     var speakerDiarizationFailed: String { isChinese ? "说话人整理失败" : "Speaker separation failed" }
     var retryTranscription: String { isChinese ? "重新转写" : "Retry transcription" }
@@ -373,6 +375,7 @@ struct AppStringTable {
     var asr: String { "ASR" }
     var ai: String { "AI" }
     var sync: String { isChinese ? "同步" : "Sync" }
+    var recentSync: String { isChinese ? "最近同步" : "Recent sync" }
     var syncIdleState: String { isChinese ? "空闲" : "Idle" }
     var standby: String { isChinese ? "待命" : "Standby" }
 

@@ -132,7 +132,7 @@ struct DeveloperSettingsView: View {
                             ThinDivider()
                             statusRow(title: AppStrings.current.ai, value: llmStateLabel)
                             ThinDivider()
-                            statusRow(title: AppStrings.current.sync, value: syncValue)
+                            statusRow(title: AppStrings.current.recentSync, value: syncValue)
                         }
                         .padding(16)
                         .softCard()

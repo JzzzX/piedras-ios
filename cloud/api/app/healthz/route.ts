@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getAsrRuntimeStatus } from "@/lib/asr";
+import { buildBackendHealthPayload } from "@/lib/backend-health";
 import { getConfiguredProviders } from "@/lib/llm-provider";
 import { getLlmRuntimeStatus } from "@/lib/llm-health";
 import { getAudioFinalizationRuntimeStatus } from "@/lib/recording-runtime-health";
+import { getStartupBootstrapSnapshot } from "@/lib/startup-bootstrap-state";
 
 export async function GET(req: NextRequest) {
   const mode = req.nextUrl.searchParams.get('mode')?.toLowerCase();
+  const startupBootstrap = getStartupBootstrapSnapshot();
   let database = false;
 
   try {
@@ -16,12 +19,17 @@ export async function GET(req: NextRequest) {
     database = false;
   }
 
+  const checkedAt = new Date().toISOString();
+
   if (mode === 'basic') {
-    return NextResponse.json({
-      ok: database,
-      database,
-      checkedAt: new Date().toISOString(),
-    });
+    return NextResponse.json(
+      buildBackendHealthPayload({
+        mode: 'basic',
+        database,
+        startupBootstrap,
+        checkedAt,
+      })
+    );
   }
 
   const asr = await getAsrRuntimeStatus().catch((error) => ({
@@ -51,16 +59,16 @@ export async function GET(req: NextRequest) {
     lastError: error instanceof Error ? error.message : String(error),
     message: error instanceof Error ? error.message : String(error),
   }));
-  const recordingReady = database && asr.ready && audioFinalization.ready;
-
-  return NextResponse.json({
-    ok: recordingReady,
-    database,
-    llmProviders: getConfiguredProviders(),
-    asr,
-    audioFinalization,
-    recordingReady,
-    llm,
-    checkedAt: new Date().toISOString(),
-  });
+  return NextResponse.json(
+    buildBackendHealthPayload({
+      mode: 'full',
+      database,
+      llmProviders: getConfiguredProviders(),
+      asr,
+      audioFinalization,
+      llm,
+      startupBootstrap,
+      checkedAt,
+    })
+  );
 }

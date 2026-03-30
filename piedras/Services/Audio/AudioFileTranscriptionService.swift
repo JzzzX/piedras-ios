@@ -372,7 +372,10 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
             )
         } catch {
             throw AudioFileTranscriptionError.sessionCreationFailed(
-                detailedError(error, diagnostics: diagnostics)
+                detailedError(
+                    Self.userVisibleServiceFailureMessage(for: error),
+                    diagnostics: diagnostics
+                )
             )
         }
 
@@ -443,7 +446,10 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
             throw error
         } catch {
             throw AudioFileTranscriptionError.connectionFailed(
-                detailedError(error, diagnostics: diagnostics)
+                detailedError(
+                    Self.userVisibleTransportFailureMessage(for: error),
+                    diagnostics: diagnostics
+                )
             )
         }
 
@@ -484,7 +490,10 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
                 await transportState.markClosed(closeCode: closeCode)
             } else {
                 throw AudioFileTranscriptionError.audioStreamingFailed(
-                    detailedError(error, diagnostics: diagnostics)
+                    detailedError(
+                        Self.userVisibleTransportFailureMessage(for: error),
+                        diagnostics: diagnostics
+                    )
                 )
             }
         }
@@ -502,7 +511,10 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
             diagnostics.record("finished")
         } catch {
             throw AudioFileTranscriptionError.audioStreamingFailed(
-                detailedError(error, diagnostics: diagnostics)
+                detailedError(
+                    Self.userVisibleTransportFailureMessage(for: error),
+                    diagnostics: diagnostics
+                )
             )
         }
     }
@@ -592,7 +604,9 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
             )
 
         case "error":
-            let detail = message.message ?? "文件转写服务异常。"
+            let detail = Self.userVisibleServiceFailureMessage(
+                from: message.message ?? "文件转写服务异常。"
+            )
             diagnostics.record("proxy-error")
             await transportState.markServiceErrorReceived()
             await transportState.fail(
@@ -697,7 +711,13 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
             throw error
         } catch {
             throw AudioFileTranscriptionError.audioDecodingFailed(
-                detailedError(error, diagnostics: diagnostics)
+                detailedError(
+                    Self.userVisibleImportFailureMessage(
+                        for: error,
+                        fallback: AppStrings.current.audioFileNeedsReexport
+                    ),
+                    diagnostics: diagnostics
+                )
             )
         }
 
@@ -748,7 +768,10 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
             throw error
         } catch {
             throw AudioFileTranscriptionError.audioStreamingFailed(
-                detailedError(error, diagnostics: diagnostics)
+                detailedError(
+                    Self.userVisibleTransportFailureMessage(for: error),
+                    diagnostics: diagnostics
+                )
             )
         }
     }
@@ -781,7 +804,7 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
             return
         case .failed:
             throw AudioFileTranscriptionError.normalizationFailed(
-                Self.userVisibleAudioProcessingMessage(
+                Self.userVisibleImportFailureMessage(
                     for: exporter.error,
                     fallback: "当前音频文件在 iPhone 上无法自动转换，请先重新导出为 m4a、mp3 或 wav 后重试。"
                 )
@@ -848,7 +871,10 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
             try await transportState.ensureHealthy()
         } catch {
             throw AudioFileTranscriptionError.connectionFailed(
-                detailedError(error, diagnostics: diagnostics)
+                detailedError(
+                    Self.userVisibleTransportFailureMessage(for: error),
+                    diagnostics: diagnostics
+                )
             )
         }
     }
@@ -870,14 +896,60 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
         decorateDetail(Self.describe(error), diagnostics: diagnostics)
     }
 
+    private func detailedError(
+        _ detail: String,
+        diagnostics: AudioFileTranscriptionDiagnostics
+    ) -> String {
+        decorateDetail(detail, diagnostics: diagnostics)
+    }
+
     private func decorateDetail(
         _ detail: String,
         diagnostics: AudioFileTranscriptionDiagnostics
     ) -> String {
         let compactDetail = detail.trimmingCharacters(in: .whitespacesAndNewlines)
+#if DEBUG
         let summary = diagnostics.summary
         guard !summary.isEmpty else { return compactDetail }
         return "\(compactDetail) | 轨迹: \(summary)"
+#else
+        return compactDetail
+#endif
+    }
+
+    nonisolated static func userVisibleImportFailureMessage(
+        for error: Error?,
+        fallback: String
+    ) -> String {
+        guard let error else {
+            return fallback
+        }
+
+        return UserVisibleMediaErrorFormatter.transcriptionImportFailureDetail(
+            from: (error as NSError).localizedDescription,
+            fallback: fallback
+        )
+    }
+
+    nonisolated static func userVisibleTransportFailureMessage(for error: Error) -> String {
+        UserVisibleMediaErrorFormatter.transcriptionTransportFailureDetail(
+            from: (error as NSError).localizedDescription,
+            fallback: AppStrings.current.audioTranscriptionConnectionIssue
+        )
+    }
+
+    nonisolated static func userVisibleServiceFailureMessage(for error: Error) -> String {
+        UserVisibleMediaErrorFormatter.transcriptionServiceFailureDetail(
+            from: (error as NSError).localizedDescription,
+            fallback: AppStrings.current.audioTranscriptionServiceUnavailable
+        )
+    }
+
+    nonisolated static func userVisibleServiceFailureMessage(from rawMessage: String) -> String {
+        UserVisibleMediaErrorFormatter.transcriptionServiceFailureDetail(
+            from: rawMessage,
+            fallback: AppStrings.current.audioTranscriptionServiceUnavailable
+        )
     }
 
     nonisolated static func userVisibleAudioProcessingMessage(
@@ -889,7 +961,7 @@ final class AudioFileTranscriptionService: AudioFileTranscriptionServicing {
         }
 
         let message = UserVisibleMediaErrorFormatter.transcriptionFailureDetail(
-            from: (error as NSError).localizedDescription
+            from: (error as NSError).localizedDescription,
         )
         return message ?? fallback
     }

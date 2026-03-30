@@ -7,6 +7,7 @@ const zlib = require('node:zlib');
 const next = require('next');
 const { WebSocketServer, WebSocket } = require('ws');
 const { bootstrapAuthRuntime } = require('./lib/auth-startup-bootstrap.cjs');
+const { createStartupBootstrapController } = require('./lib/startup-bootstrap-controller.cjs');
 
 const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOSTNAME || '0.0.0.0';
@@ -66,6 +67,17 @@ const proxyWSPaths = Array.from(
     '/asr-proxy/ws/asr',
   ])
 );
+
+const startupBootstrapController = createStartupBootstrapController({
+  bootstrap: async () =>
+    bootstrapAuthRuntime((event, detail = {}) => {
+      log(event, detail);
+    }),
+  logger: (event, detail = {}) => {
+    log(event, detail);
+  },
+  retryDelayMS: Number(process.env.STARTUP_BOOTSTRAP_RETRY_DELAY_MS || 5_000),
+});
 
 function log(event, detail = {}) {
   console.log(
@@ -736,16 +748,6 @@ function attachAsrProxy(server) {
 }
 
 async function main() {
-  const bootstrapResult = await bootstrapAuthRuntime((event, detail = {}) => {
-    log(event, detail);
-  });
-
-  log('startup_bootstrap_state', {
-    schemaReady: bootstrapResult.schemaStatus.ready,
-    missingItems: bootstrapResult.schemaStatus.missingItems,
-    legacyUsers: bootstrapResult.legacyUsers,
-  });
-
   const app = next({
     dev: false,
     dir: __dirname,
@@ -779,6 +781,7 @@ async function main() {
       proxyHealthPath,
       proxyWSPaths,
     });
+    void startupBootstrapController.start();
   });
 }
 

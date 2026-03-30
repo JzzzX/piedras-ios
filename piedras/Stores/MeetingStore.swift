@@ -2523,6 +2523,17 @@ final class MeetingStore {
             return "\(AppEnvironment.cloudName) 已响应，数据库异常"
         }
 
+        if let startupBootstrap = health.startupBootstrap, !startupBootstrap.ready {
+            switch startupBootstrap.status {
+            case "running":
+                return "\(AppEnvironment.cloudName) 启动初始化中"
+            case "failed":
+                return "\(AppEnvironment.cloudName) 已响应，启动初始化失败"
+            default:
+                return "\(AppEnvironment.cloudName) 已响应，启动初始化未完成"
+            }
+        }
+
         if health.ok == false {
             return "\(AppEnvironment.cloudName) 已响应"
         }
