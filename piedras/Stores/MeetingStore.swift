@@ -89,6 +89,7 @@ final class MeetingStore {
     private let workspaceBootstrapService: WorkspaceBootstrapService
     private let meetingSyncService: any MeetingSyncServicing
     private let noteAttachmentImageTextExtractor: any AnnotationImageTextExtracting
+    private let syncRecoveryRetryDelays: [Duration]
 
     var meetings: [Meeting] = []
     var selectedMeetingID: String?
@@ -110,6 +111,9 @@ final class MeetingStore {
     private var backendPreparationTask: Task<Void, Never>?
     private var asrReconnectTask: Task<Void, Never>?
     private var asrReconnectAttempt = 0
+    private var syncRecoveryTask: Task<Void, Never>?
+    private var syncRecoveryAttempt = 0
+    private var isSceneActive = true
     private var scheduledSyncTasks: [String: Task<Void, Never>] = [:]
     private var fileTranscriptionTasks: [String: Task<Void, Never>] = [:]
     private var chatStreamingTasks: [String: Task<Bool, Never>] = [:]
@@ -139,6 +143,13 @@ final class MeetingStore {
         asrService: any ASRServicing,
         workspaceBootstrapService: WorkspaceBootstrapService,
         meetingSyncService: any MeetingSyncServicing,
+        syncRecoveryRetryDelays: [Duration] = [
+            .seconds(10),
+            .seconds(30),
+            .seconds(60),
+            .seconds(180),
+            .seconds(600),
+        ],
         noteAttachmentImageTextExtractor: any AnnotationImageTextExtracting = VisionAnnotationImageTextExtractor()
     ) {
         self.repository = repository
@@ -153,6 +164,7 @@ final class MeetingStore {
         self.asrService = asrService
         self.workspaceBootstrapService = workspaceBootstrapService
         self.meetingSyncService = meetingSyncService
+        self.syncRecoveryRetryDelays = syncRecoveryRetryDelays
         self.noteAttachmentImageTextExtractor = noteAttachmentImageTextExtractor
 
         self.audioRecorderService.onProgress = { [weak self] level, duration in
@@ -286,10 +298,11 @@ final class MeetingStore {
         settingsStore.hiddenWorkspaceID = nil
         settingsStore.workspaceBootstrapState = .idle
         settingsStore.workspaceStatusMessage = "等待登录"
-        settingsStore.syncStatusMessage = ""
+        settingsStore.clearSyncStatus()
         settingsStore.resetRemoteStatus()
         didLoad = false
         didStartBackendPreparation = false
+        syncRecoveryAttempt = 0
     }
 
     func loadIfNeeded() {
@@ -788,6 +801,7 @@ final class MeetingStore {
     }
 
     func handleScenePhaseChange(_ phase: ScenePhase) {
+        isSceneActive = phase == .active
         let isBackground = phase == .background
         recordingSessionStore.isAppInBackground = isBackground
 
@@ -795,6 +809,12 @@ final class MeetingStore {
            didStartBackendPreparation,
            (!settingsStore.apiReachable || settingsStore.workspaceBootstrapState != .success) {
             scheduleBackendPreparationIfNeeded(retryDelays: [.zero, .seconds(2)])
+        } else if phase != .active {
+            cancelSyncRecoveryTask()
+        }
+
+        if phase == .active, shouldAttemptSyncRecovery {
+            scheduleSyncRecovery(trigger: .sceneActive, immediate: true)
         }
 
         guard let meetingID = recordingSessionStore.meetingID else {
@@ -914,6 +934,10 @@ final class MeetingStore {
         if backendHealth?.llm == nil, let llmError {
             settingsStore.markLLMRequestFailed(message: llmError.localizedDescription)
         }
+
+        if shouldAttemptSyncRecovery {
+            scheduleSyncRecovery(trigger: .sceneActive, immediate: true)
+        }
     }
 
     @discardableResult
@@ -937,38 +961,16 @@ final class MeetingStore {
     }
 
     func syncAllMeetings() async {
-        await appActivityCoordinator.performExpiringActivity(named: "sync-all-meetings") { [weak self] in
-            guard let self else { return }
-            guard !settingsStore.isSyncing else {
-                return
-            }
+        await repairCloudState()
+    }
 
-            settingsStore.isSyncing = true
-            defer { settingsStore.isSyncing = false }
+    func repairCloudState() async {
+        cancelSyncRecoveryTask()
+        _ = await runSyncRecovery(trigger: .manual, forceBackendCheck: true)
+    }
 
-            guard await ensureBackendReachable(force: true) else {
-                settingsStore.syncStatusMessage = settingsStore.blockingMessage(for: .sync) ?? "Backend unavailable."
-                return
-            }
-
-            guard await bootstrapHiddenWorkspace(force: false, surfaceBlockingError: false) != nil else {
-                settingsStore.syncStatusMessage = "隐藏工作区初始化失败。"
-                return
-            }
-
-            let batchResult = await meetingSyncService.syncPendingMeetings()
-
-            do {
-                let refreshedCount = try await meetingSyncService.refreshRemoteMeetings()
-                loadMeetings()
-                settingsStore.syncStatusMessage = "已推送 \(batchResult.syncedCount) 条，失败 \(batchResult.failedCount) 条，刷新 \(refreshedCount) 条。"
-            } catch {
-                recordBackgroundSyncIssue(
-                    detail: error.localizedDescription,
-                    summary: "推送完成，但刷新远端失败。"
-                )
-            }
-        }
+    func handleAuthenticationRecovered() {
+        scheduleSyncRecovery(trigger: .authRecovered, immediate: true)
     }
 
     func generateEnhancedNotes(for meetingID: String) async {
@@ -2115,39 +2117,11 @@ final class MeetingStore {
     }
 
     private func prepareBackendForUse(markBackendUnreachableOnFailure: Bool) async -> Bool {
-        do {
-            let health = try await apiClient.fetchBackendWarmup()
-            settingsStore.markBackendReachable(
-                message: backendStatusMessage(from: health),
-                checkedAt: health.checkedAt
-            )
-        } catch {
-            settingsStore.syncStatusMessage = "正在唤醒云端服务…"
-            if markBackendUnreachableOnFailure {
-                settingsStore.markBackendUnreachable(message: error.localizedDescription)
-                settingsStore.syncStatusMessage = "云端暂时不可用，本地功能仍可使用。"
-            }
-            return false
+        let didRecover = await runSyncRecovery(trigger: .startup, forceBackendCheck: true)
+        if !didRecover && markBackendUnreachableOnFailure && !settingsStore.apiReachable {
+            settingsStore.syncStatusMessage = "云端暂时不可用，本地功能仍可使用。"
         }
-
-        guard await bootstrapHiddenWorkspace(force: false, surfaceBlockingError: false) != nil else {
-            settingsStore.syncStatusMessage = "云端工作区初始化失败，稍后自动重试。"
-            return false
-        }
-
-        let batchResult = await meetingSyncService.syncPendingMeetings()
-        do {
-            let refreshedCount = try await meetingSyncService.refreshRemoteMeetings()
-            loadMeetings()
-            settingsStore.syncStatusMessage = "启动同步完成：推送 \(batchResult.syncedCount) 条，刷新 \(refreshedCount) 条。"
-        } catch {
-            recordBackgroundSyncIssue(
-                detail: error.localizedDescription,
-                summary: "云端稍后刷新，本地内容已可使用。"
-            )
-        }
-
-        return true
+        return didRecover
     }
 
     private func ensureBackendReachable(force: Bool) async -> Bool {
@@ -2346,9 +2320,11 @@ final class MeetingStore {
             if meeting.syncState == .deleted {
                 guard await ensureBackendReachable(force: false) else {
                     recordBackgroundSyncIssue(
+                        kind: .backendOffline,
                         detail: settingsStore.blockingMessage(for: .backend) ?? "\(AppEnvironment.cloudName) 暂时不可用。",
                         summary: "后台删除同步失败，将稍后自动重试。"
                     )
+                    scheduleSyncRecovery(trigger: .automaticRetry)
                     if let userVisibleFailurePrefix {
                         if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
                             lastErrorMessage = nil
@@ -2362,11 +2338,14 @@ final class MeetingStore {
                 do {
                     try await meetingSyncService.syncMeeting(id: meetingID)
                     loadMeetings()
+                    settingsStore.markSyncSuccess(summary: "后台删除同步成功。")
                 } catch {
                     recordBackgroundSyncIssue(
+                        kind: .syncFailed,
                         detail: error.localizedDescription,
                         summary: "后台删除同步失败，将稍后自动重试。"
                     )
+                    scheduleSyncRecovery(trigger: .automaticRetry)
                     if let userVisibleFailurePrefix {
                         if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
                             lastErrorMessage = nil
@@ -2381,7 +2360,12 @@ final class MeetingStore {
 
             guard await ensureBackendReachable(force: false) else {
                 let message = "云端暂时不可用，将稍后自动重试。"
-                settingsStore.syncStatusMessage = message
+                recordBackgroundSyncIssue(
+                    kind: .backendOffline,
+                    detail: settingsStore.blockingMessage(for: .backend) ?? message,
+                    summary: message
+                )
+                scheduleSyncRecovery(trigger: .automaticRetry)
                 if let userVisibleFailurePrefix {
                     if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
                         lastErrorMessage = nil
@@ -2393,7 +2377,12 @@ final class MeetingStore {
             }
             guard await bootstrapHiddenWorkspace(force: false, surfaceBlockingError: false) != nil else {
                 let message = "云端工作区初始化失败，将稍后自动重试。"
-                settingsStore.syncStatusMessage = message
+                recordBackgroundSyncIssue(
+                    kind: .workspaceBootstrapFailed,
+                    detail: settingsStore.workspaceStatusMessage,
+                    summary: message
+                )
+                scheduleSyncRecovery(trigger: .automaticRetry)
                 if let userVisibleFailurePrefix {
                     if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
                         lastErrorMessage = nil
@@ -2407,11 +2396,14 @@ final class MeetingStore {
             do {
                 try await meetingSyncService.syncMeeting(id: meetingID)
                 loadMeetings()
+                settingsStore.markSyncSuccess(summary: "后台同步已恢复。")
             } catch {
                 recordBackgroundSyncIssue(
+                    kind: .syncFailed,
                     detail: error.localizedDescription,
                     summary: "后台同步失败，将稍后自动重试。"
                 )
+                scheduleSyncRecovery(trigger: .automaticRetry)
                 if let userVisibleFailurePrefix {
                     if userVisibleFailurePrefix == AppStrings.current.speakerDiarizationFailed {
                         lastErrorMessage = nil
@@ -2656,9 +2648,185 @@ final class MeetingStore {
         asrReconnectAttempt = 0
     }
 
-    private func recordBackgroundSyncIssue(detail: String, summary: String) {
-        settingsStore.syncStatusMessage = summary
-        settingsStore.workspaceStatusMessage = detail
+    private enum SyncRecoveryTrigger: Equatable {
+        case startup
+        case sceneActive
+        case manual
+        case authRecovered
+        case automaticRetry
+    }
+
+    private var shouldAttemptSyncRecovery: Bool {
+        hasPendingSyncWork()
+            || !settingsStore.apiReachable
+            || settingsStore.workspaceBootstrapState != .success
+            || settingsStore.requiresSyncRecoveryAttention
+    }
+
+    private func hasPendingSyncWork() -> Bool {
+        let candidates = (try? repository.fetchMeetings(includeDeleted: true)) ?? []
+        return candidates.contains {
+            ($0.syncState == .pending || $0.syncState == .failed || $0.syncState == .deleted)
+                && $0.transcriptPipelineState != .initializing
+        }
+    }
+
+    private func runSyncRecovery(
+        trigger: SyncRecoveryTrigger,
+        forceBackendCheck: Bool
+    ) async -> Bool {
+        await appActivityCoordinator.performExpiringActivity(named: "sync-recovery") { [weak self] in
+            guard let self else { return }
+            guard !settingsStore.isSyncing else { return }
+            guard trigger == .manual || shouldAttemptSyncRecovery else { return }
+
+            settingsStore.isSyncing = true
+            defer { settingsStore.isSyncing = false }
+
+            settingsStore.markSyncRecovering(
+                summary: trigger == .manual ? "正在修复云端状态…" : "正在自动恢复同步…",
+                retryCount: max(syncRecoveryAttempt, settingsStore.syncRetryCount),
+                nextRetryAt: nil
+            )
+
+            guard await ensureBackendReachable(force: forceBackendCheck) else {
+                handleSyncRecoveryFailure(
+                    kind: .backendOffline,
+                    detail: settingsStore.blockingMessage(for: .backend) ?? "\(AppEnvironment.cloudName) 暂时不可用。",
+                    summary: trigger == .startup
+                        ? "云端暂时不可用，本地功能仍可使用。"
+                        : "云端暂时不可用，将稍后自动重试。"
+                )
+                return
+            }
+
+            guard await bootstrapHiddenWorkspace(force: false, surfaceBlockingError: false) != nil else {
+                handleSyncRecoveryFailure(
+                    kind: .workspaceBootstrapFailed,
+                    detail: settingsStore.workspaceStatusMessage,
+                    summary: "云端工作区初始化失败，将稍后自动重试。"
+                )
+                return
+            }
+
+            let batchResult = await meetingSyncService.syncPendingMeetings()
+
+            do {
+                let refreshedCount = try await meetingSyncService.refreshRemoteMeetings()
+                loadMeetings()
+
+                if batchResult.failedCount > 0 {
+                    handleSyncRecoveryFailure(
+                        kind: .syncFailed,
+                        detail: "仍有 \(batchResult.failedCount) 条待同步任务失败。",
+                        summary: "后台同步失败，将稍后自动重试。"
+                    )
+                    return
+                }
+
+                syncRecoveryAttempt = 0
+                let summary: String
+                switch trigger {
+                case .startup:
+                    summary = "启动同步完成：推送 \(batchResult.syncedCount) 条，刷新 \(refreshedCount) 条。"
+                case .manual:
+                    summary = "已推送 \(batchResult.syncedCount) 条，失败 0 条，刷新 \(refreshedCount) 条。"
+                case .sceneActive, .authRecovered, .automaticRetry:
+                    summary = "同步已恢复：推送 \(batchResult.syncedCount) 条，刷新 \(refreshedCount) 条。"
+                }
+                settingsStore.markSyncSuccess(summary: summary)
+                cancelSyncRecoveryTask()
+            } catch {
+                handleSyncRecoveryFailure(
+                    kind: .refreshFailed,
+                    detail: error.localizedDescription,
+                    summary: "云端稍后刷新，本地内容已可使用。"
+                )
+            }
+        }
+
+        return !settingsStore.requiresSyncRecoveryAttention
+    }
+
+    private func handleSyncRecoveryFailure(
+        kind: SyncIssueKind,
+        detail: String,
+        summary: String
+    ) {
+        syncRecoveryAttempt += 1
+        let nextRetryDelay = syncRecoveryRetryDelay(forAttempt: syncRecoveryAttempt)
+        let nextRetryAt = Date().addingTimeInterval(timeInterval(for: nextRetryDelay))
+        settingsStore.markSyncIssue(
+            kind: kind,
+            detail: detail,
+            summary: summary,
+            retryCount: syncRecoveryAttempt,
+            nextRetryAt: nextRetryAt,
+            isAutoRecovering: isSceneActive
+        )
+        scheduleSyncRecovery(trigger: .automaticRetry)
+    }
+
+    private func scheduleSyncRecovery(trigger: SyncRecoveryTrigger, immediate: Bool = false) {
+        guard isSceneActive else { return }
+        guard trigger == .manual || shouldAttemptSyncRecovery else { return }
+
+        let delay = immediate ? Duration.zero : syncRecoveryRetryDelay(forAttempt: max(syncRecoveryAttempt, 1))
+        let nextRetryAt = delay == .zero
+            ? nil
+            : Date().addingTimeInterval(timeInterval(for: delay))
+
+        settingsStore.markSyncRecovering(
+            retryCount: max(syncRecoveryAttempt, settingsStore.syncRetryCount),
+            nextRetryAt: nextRetryAt
+        )
+
+        syncRecoveryTask?.cancel()
+        syncRecoveryTask = Task { @MainActor [weak self] in
+            if delay != .zero {
+                try? await Task.sleep(for: delay)
+            }
+            guard let self, !Task.isCancelled else { return }
+            self.syncRecoveryTask = nil
+            _ = await self.runSyncRecovery(trigger: trigger, forceBackendCheck: false)
+        }
+    }
+
+    private func syncRecoveryRetryDelay(forAttempt attempt: Int) -> Duration {
+        guard !syncRecoveryRetryDelays.isEmpty else {
+            return .seconds(10)
+        }
+
+        let index = min(max(attempt - 1, 0), syncRecoveryRetryDelays.count - 1)
+        return syncRecoveryRetryDelays[index]
+    }
+
+    private func timeInterval(for duration: Duration) -> TimeInterval {
+        let components = duration.components
+        return Double(components.seconds) + (Double(components.attoseconds) / 1_000_000_000_000_000_000)
+    }
+
+    private func cancelSyncRecoveryTask() {
+        syncRecoveryTask?.cancel()
+        syncRecoveryTask = nil
+    }
+
+    private func recordBackgroundSyncIssue(
+        kind: SyncIssueKind = .syncFailed,
+        detail: String,
+        summary: String
+    ) {
+        settingsStore.markSyncIssue(
+            kind: kind,
+            detail: detail,
+            summary: summary,
+            retryCount: max(syncRecoveryAttempt, 1),
+            nextRetryAt: nil,
+            isAutoRecovering: isSceneActive
+        )
+        if kind == .workspaceBootstrapFailed {
+            settingsStore.workspaceStatusMessage = detail
+        }
     }
 
     private func cancelAllBackgroundTasks() {
@@ -2666,6 +2834,7 @@ final class MeetingStore {
         backendPreparationTask = nil
         asrReconnectTask?.cancel()
         asrReconnectTask = nil
+        cancelSyncRecoveryTask()
         backgroundTranscriptBackfillTask?.cancel()
         backgroundTranscriptBackfillTask = nil
 

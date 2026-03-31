@@ -89,7 +89,120 @@ private final class InMemoryAuthTokenStoreTestsDouble: AuthTokenStoring {
     }
 }
 
+@MainActor
+private final class InMemoryAuthSessionSnapshotStoreTestsDouble: AuthSessionSnapshotStoring {
+    var snapshot: CachedAuthSessionSnapshot?
+
+    init(snapshot: CachedAuthSessionSnapshot? = nil) {
+        self.snapshot = snapshot
+    }
+
+    func clearSnapshot() {
+        snapshot = nil
+    }
+}
+
 struct AuthStoreTests {
+    @MainActor
+    @Test
+    func hydrateCachedSessionAuthenticatesImmediatelyWhenRefreshTokenExists() async {
+        let apiClient = StubAuthClient()
+        let tokenStore = InMemoryAuthTokenStoreTestsDouble(refreshToken: "refresh-token")
+        let snapshotStore = InMemoryAuthSessionSnapshotStoreTestsDouble(
+            snapshot: CachedAuthSessionSnapshot(
+                user: .init(id: "cached-user", email: "cached@example.com"),
+                workspace: .init(id: "cached-workspace", name: "Cached"),
+                expiresAt: Date(timeIntervalSince1970: 2_000),
+                savedAt: Date(timeIntervalSince1970: 1_500)
+            )
+        )
+        let store = AuthStore(
+            apiClient: apiClient,
+            tokenStore: tokenStore,
+            snapshotStore: snapshotStore
+        )
+
+        let hydrated = await store.hydrateCachedSessionIfPossible()
+
+        #expect(hydrated == true)
+        #expect(store.phase == .authenticated)
+        #expect(store.currentUser?.email == "cached@example.com")
+        #expect(store.currentWorkspace?.id == "cached-workspace")
+        #expect(store.hasResolvedInitialSession == true)
+        #expect(store.isSessionValidated == false)
+        #expect(store.isValidatingCachedSession == true)
+    }
+
+    @MainActor
+    @Test
+    func bootstrapSessionPersistsSnapshotAfterNetworkRestore() async {
+        let apiClient = StubAuthClient()
+        let tokenStore = InMemoryAuthTokenStoreTestsDouble(sessionToken: "session-token")
+        let snapshotStore = InMemoryAuthSessionSnapshotStoreTestsDouble()
+        let store = AuthStore(
+            apiClient: apiClient,
+            tokenStore: tokenStore,
+            snapshotStore: snapshotStore
+        )
+        apiClient.sessionResult = .success(
+            RemoteAuthSessionState(
+                user: .init(id: "user-1", email: "test@example.com"),
+                workspace: .init(id: "workspace-1", name: "Piedras"),
+                session: .init(expiresAt: Date(timeIntervalSince1970: 2_000))
+            )
+        )
+
+        await store.bootstrapSession()
+
+        #expect(store.phase == .authenticated)
+        #expect(store.hasResolvedInitialSession == true)
+        #expect(store.isSessionValidated == true)
+        #expect(store.isValidatingCachedSession == false)
+        #expect(snapshotStore.snapshot?.user.email == "test@example.com")
+        #expect(snapshotStore.snapshot?.workspace.id == "workspace-1")
+        #expect(snapshotStore.snapshot?.expiresAt == Date(timeIntervalSince1970: 2_000))
+    }
+
+    @MainActor
+    @Test
+    func validateCachedSessionClearsSnapshotWhenRefreshFails() async {
+        let apiClient = StubAuthClient()
+        let tokenStore = InMemoryAuthTokenStoreTestsDouble(
+            sessionToken: "expired-token",
+            refreshToken: "refresh-token"
+        )
+        let snapshotStore = InMemoryAuthSessionSnapshotStoreTestsDouble(
+            snapshot: CachedAuthSessionSnapshot(
+                user: .init(id: "cached-user", email: "cached@example.com"),
+                workspace: .init(id: "cached-workspace", name: "Cached"),
+                expiresAt: Date(timeIntervalSince1970: 2_000),
+                savedAt: Date(timeIntervalSince1970: 1_500)
+            )
+        )
+        let store = AuthStore(
+            apiClient: apiClient,
+            tokenStore: tokenStore,
+            snapshotStore: snapshotStore
+        )
+        apiClient.sessionResult = .failure(APIClientError.requestFailed("expired"))
+        apiClient.refreshResult = .failure(APIClientError.requestFailed("refresh failed"))
+
+        let hydrated = await store.hydrateCachedSessionIfPossible()
+        #expect(hydrated == true)
+
+        await store.validateCachedSession()
+
+        #expect(store.phase == .unauthenticated)
+        #expect(store.currentUser == nil)
+        #expect(store.currentWorkspace == nil)
+        #expect(store.hasResolvedInitialSession == true)
+        #expect(store.isSessionValidated == false)
+        #expect(store.isValidatingCachedSession == false)
+        #expect(tokenStore.sessionToken == nil)
+        #expect(tokenStore.refreshToken == nil)
+        #expect(snapshotStore.snapshot == nil)
+    }
+
     @MainActor
     @Test
     func authenticateCreatesNewAccountWhenEmailIsNotRegistered() async {

@@ -378,6 +378,12 @@ struct AppStringTable {
     var recentSync: String { isChinese ? "最近同步" : "Recent sync" }
     var syncIdleState: String { isChinese ? "空闲" : "Idle" }
     var standby: String { isChinese ? "待命" : "Standby" }
+    var syncRepairAction: String { isChinese ? "立即修复云端状态" : "Repair Cloud State" }
+    var syncDetail: String { isChinese ? "同步详情" : "Sync detail" }
+    var lastFailure: String { isChinese ? "最近失败" : "Last failure" }
+    var nextRetry: String { isChinese ? "下次重试" : "Next retry" }
+    var lastSuccess: String { isChinese ? "最近成功" : "Last success" }
+    var notAvailableShort: String { isChinese ? "暂无" : "N/A" }
 
     var liveTranscription: String { "LIVE TRANSCRIPTION" }
     var reconnecting: String { isChinese ? "重连中" : "RECONNECTING" }

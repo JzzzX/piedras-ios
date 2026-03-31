@@ -22,6 +22,13 @@ enum RemoteCapabilityKind {
     case sync
 }
 
+enum SyncIssueKind: String, Codable {
+    case backendOffline
+    case workspaceBootstrapFailed
+    case syncFailed
+    case refreshFailed
+}
+
 @MainActor
 @Observable
 final class SettingsStore {
@@ -40,10 +47,22 @@ final class SettingsStore {
         let llmPreset: String?
     }
 
+    private struct SyncStatusSnapshot: Codable {
+        let summaryMessage: String
+        let detailMessage: String
+        let issueKind: SyncIssueKind?
+        let lastFailureAt: Date?
+        let retryCount: Int
+        let nextRetryAt: Date?
+        let lastSuccessfulSyncAt: Date?
+        let isAutoRecovering: Bool
+    }
+
     private enum Key {
         static let hiddenWorkspaceID = "piedras.settings.hiddenWorkspaceID"
         static let appLanguage = "piedras.settings.appLanguage"
         static let remoteStatusSnapshot = "piedras.settings.remoteStatusSnapshot"
+        static let syncStatusSnapshot = "piedras.settings.syncStatusSnapshot"
 #if DEBUG
         static let debugBackendBaseURLString = "piedras.settings.debugBackendBaseURLString"
 #endif
@@ -51,6 +70,7 @@ final class SettingsStore {
 
     private enum Constants {
         static let restoredStatusMaxAge: TimeInterval = 6 * 60 * 60
+        static let restoredSyncStatusMaxAge: TimeInterval = 7 * 24 * 60 * 60
     }
 
     private let defaults: UserDefaults
@@ -101,6 +121,13 @@ final class SettingsStore {
     var llmPreset: String?
     var workspaceStatusMessage = "尚未初始化"
     var syncStatusMessage = ""
+    var syncDetailMessage = ""
+    var syncIssueKind: SyncIssueKind?
+    var syncLastFailureAt: Date?
+    var syncRetryCount = 0
+    var syncNextRetryAt: Date?
+    var lastSuccessfulSyncAt: Date?
+    var isAutoRecoveringSync = false
     var isCheckingHealth = false
     var isSyncing = false
 
@@ -117,6 +144,7 @@ final class SettingsStore {
         workspaceStatusMessage = "等待连接云端"
         resetRemoteStatus()
         restoreRemoteStatusSnapshotIfAvailable()
+        restoreSyncStatusSnapshotIfAvailable()
     }
 
     var backendBaseURL: URL? {
@@ -161,9 +189,7 @@ final class SettingsStore {
 
         switch capability {
         case .ai:
-            if lastHealthCheckAt != nil, !llmReady {
-                return llmStatusMessage
-            }
+            return nil
         case .asr:
             if lastHealthCheckAt != nil,
                !asrReady,
@@ -176,6 +202,21 @@ final class SettingsStore {
         }
 
         return nil
+    }
+
+    func warningMessage(for capability: RemoteCapabilityKind) -> String? {
+        switch capability {
+        case .ai:
+            guard apiReachable,
+                  lastHealthCheckAt != nil,
+                  !llmReady else {
+                return nil
+            }
+
+            return llmStatusMessage
+        case .backend, .asr, .sync:
+            return nil
+        }
     }
 
     func markBackendReachable(
@@ -357,9 +398,69 @@ final class SettingsStore {
     func markBackendUnconfigured() {
         resetRemoteStatus()
         clearRemoteStatusSnapshot()
+        clearSyncStatus()
     }
 
     static let simulatorLoopbackBaseURLString = "http://127.0.0.1:3000"
+
+    var requiresSyncRecoveryAttention: Bool {
+        syncIssueKind != nil || isAutoRecoveringSync || syncRetryCount > 0
+    }
+
+    func markSyncRecovering(
+        summary: String = "正在自动恢复同步…",
+        retryCount: Int,
+        nextRetryAt: Date?
+    ) {
+        syncStatusMessage = summary
+        syncRetryCount = retryCount
+        syncNextRetryAt = nextRetryAt
+        isAutoRecoveringSync = true
+        persistSyncStatusSnapshot()
+    }
+
+    func markSyncIssue(
+        kind: SyncIssueKind,
+        detail: String,
+        summary: String,
+        retryCount: Int,
+        nextRetryAt: Date?,
+        failureAt: Date = .now,
+        isAutoRecovering: Bool
+    ) {
+        syncStatusMessage = summary
+        syncDetailMessage = detail
+        syncIssueKind = kind
+        syncLastFailureAt = failureAt
+        syncRetryCount = retryCount
+        syncNextRetryAt = nextRetryAt
+        isAutoRecoveringSync = isAutoRecovering
+        persistSyncStatusSnapshot()
+    }
+
+    func markSyncSuccess(summary: String, syncedAt: Date = .now) {
+        syncStatusMessage = summary
+        syncDetailMessage = ""
+        syncIssueKind = nil
+        syncLastFailureAt = nil
+        syncRetryCount = 0
+        syncNextRetryAt = nil
+        lastSuccessfulSyncAt = syncedAt
+        isAutoRecoveringSync = false
+        persistSyncStatusSnapshot()
+    }
+
+    func clearSyncStatus() {
+        syncStatusMessage = ""
+        syncDetailMessage = ""
+        syncIssueKind = nil
+        syncLastFailureAt = nil
+        syncRetryCount = 0
+        syncNextRetryAt = nil
+        lastSuccessfulSyncAt = nil
+        isAutoRecoveringSync = false
+        clearSyncStatusSnapshot()
+    }
 
     private func normalized(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -411,8 +512,54 @@ final class SettingsStore {
         defaults.set(data, forKey: Key.remoteStatusSnapshot)
     }
 
+    private func restoreSyncStatusSnapshotIfAvailable() {
+        guard let data = defaults.data(forKey: Key.syncStatusSnapshot),
+              let snapshot = try? JSONDecoder().decode(SyncStatusSnapshot.self, from: data) else {
+            return
+        }
+
+        let referenceDate = snapshot.lastFailureAt ?? snapshot.lastSuccessfulSyncAt
+        if let referenceDate,
+           Date().timeIntervalSince(referenceDate) > Constants.restoredSyncStatusMaxAge {
+            clearSyncStatusSnapshot()
+            return
+        }
+
+        syncStatusMessage = snapshot.summaryMessage
+        syncDetailMessage = snapshot.detailMessage
+        syncIssueKind = snapshot.issueKind
+        syncLastFailureAt = snapshot.lastFailureAt
+        syncRetryCount = snapshot.retryCount
+        syncNextRetryAt = snapshot.nextRetryAt
+        lastSuccessfulSyncAt = snapshot.lastSuccessfulSyncAt
+        isAutoRecoveringSync = snapshot.isAutoRecovering
+    }
+
+    private func persistSyncStatusSnapshot() {
+        let snapshot = SyncStatusSnapshot(
+            summaryMessage: syncStatusMessage,
+            detailMessage: syncDetailMessage,
+            issueKind: syncIssueKind,
+            lastFailureAt: syncLastFailureAt,
+            retryCount: syncRetryCount,
+            nextRetryAt: syncNextRetryAt,
+            lastSuccessfulSyncAt: lastSuccessfulSyncAt,
+            isAutoRecovering: isAutoRecoveringSync
+        )
+
+        guard let data = try? JSONEncoder().encode(snapshot) else {
+            return
+        }
+
+        defaults.set(data, forKey: Key.syncStatusSnapshot)
+    }
+
     private func clearRemoteStatusSnapshot() {
         defaults.removeObject(forKey: Key.remoteStatusSnapshot)
+    }
+
+    private func clearSyncStatusSnapshot() {
+        defaults.removeObject(forKey: Key.syncStatusSnapshot)
     }
 }
 

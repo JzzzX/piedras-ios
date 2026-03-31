@@ -10,6 +10,7 @@ final class AppContainer {
     let router: AppRouter
     let settingsStore: SettingsStore
     let authTokenStore: any AuthTokenStoring
+    let authSessionSnapshotStore: any AuthSessionSnapshotStoring
     let authStore: AuthStore
     let recordingSessionStore: RecordingSessionStore
     let appActivityCoordinator: AppActivityCoordinator
@@ -53,7 +54,12 @@ final class AppContainer {
             defaults: settingsDefaults,
             debugDefaultBackendBaseURLString: shouldDefaultToSimulatorBackend ? SettingsStore.simulatorLoopbackBaseURLString : nil
         )
-        authTokenStore = UserDefaultsAuthTokenStore(defaults: settingsDefaults)
+        if shouldUseIsolatedDefaults {
+            authTokenStore = UserDefaultsAuthTokenStore(defaults: settingsDefaults)
+        } else {
+            authTokenStore = KeychainAuthTokenStore()
+        }
+        authSessionSnapshotStore = UserDefaultsAuthSessionSnapshotStore(defaults: settingsDefaults)
         recordingSessionStore = RecordingSessionStore()
         appActivityCoordinator = AppActivityCoordinator()
         recordingLiveActivityCoordinator = RecordingLiveActivityCoordinator()
@@ -62,7 +68,11 @@ final class AppContainer {
         meetingRepository = MeetingRepository(modelContext: modelContainer.mainContext)
         chatSessionRepository = ChatSessionRepository(modelContext: modelContainer.mainContext)
         apiClient = APIClient(settingsStore: settingsStore, authTokenStore: authTokenStore)
-        authStore = AuthStore(apiClient: apiClient, tokenStore: authTokenStore)
+        authStore = AuthStore(
+            apiClient: apiClient,
+            tokenStore: authTokenStore,
+            snapshotStore: authSessionSnapshotStore
+        )
         audioFileTranscriptionService = AudioFileTranscriptionService(apiClient: apiClient)
         asrService = ASRService(apiClient: apiClient)
         workspaceBootstrapService = WorkspaceBootstrapService(
@@ -106,13 +116,14 @@ final class AppContainer {
         authStore.logoutBlockMessageProvider = { [weak meetingStore] in
             meetingStore?.logoutBlockingMessage()
         }
-        authStore.didAuthenticate = { [weak settingsStore, weak globalChatStore] user, workspace in
+        authStore.didAuthenticate = { [weak settingsStore, weak globalChatStore, weak meetingStore] user, workspace in
             guard let settingsStore else { return }
             settingsStore.hiddenWorkspaceID = workspace.id
             settingsStore.workspaceBootstrapState = .success
             settingsStore.workspaceStatusMessage = "已连接 \(user.email)"
-            settingsStore.syncStatusMessage = ""
+            settingsStore.clearSyncStatus()
             globalChatStore?.startNewDraft()
+            meetingStore?.handleAuthenticationRecovered()
         }
         authStore.didUnauthenticate = { [weak router, weak meetingStore, weak globalChatStore] in
             meetingStore?.resetLocalAccountData()
@@ -129,6 +140,8 @@ final class AppContainer {
 
         if inMemory {
             authStore.phase = .authenticated
+            authStore.hasResolvedInitialSession = true
+            authStore.isSessionValidated = true
             authStore.currentUser = .init(id: "preview-user", email: "preview@piedras.local")
             authStore.currentWorkspace = .init(id: "preview-workspace", name: "Preview")
             meetingRepository.seedPreviewDataIfNeeded(

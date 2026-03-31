@@ -1,11 +1,11 @@
-import { DEFAULT_LLM_SETTINGS, inferOpenAIPreset } from './llm-config';
+import { DEFAULT_LLM_SETTINGS, inferOpenAIPreset } from './llm-config.ts';
 import {
   getConfiguredProviders,
   hasAvailableLlm,
   probeConfiguredLlm,
   type LlmProvider,
-} from './llm-provider';
-import { getCachedRuntimeHealth, toErrorMessage } from './runtime-health';
+} from './llm-provider.ts';
+import { toErrorMessage } from './runtime-health.ts';
 
 export interface LlmRuntimeStatus {
   configured: boolean;
@@ -17,6 +17,66 @@ export interface LlmRuntimeStatus {
   model: string | null;
   preset: string | null;
   message: string;
+}
+
+interface LlmRuntimeHealthConfig {
+  probeTimeoutMs: number;
+  successTtlMs: number;
+  failureTtlMs: number;
+}
+
+interface CachedLlmProbeStatus {
+  reachable: boolean;
+  checkedAt: string;
+  lastError: string | null;
+  provider: LlmProvider;
+}
+
+type LlmProbeCacheEntry = {
+  expiresAt: number;
+  value: CachedLlmProbeStatus;
+};
+
+export function resolveLlmRuntimeHealthConfig(): LlmRuntimeHealthConfig {
+  return {
+    probeTimeoutMs: Number(process.env.LLM_STATUS_PROBE_TIMEOUT_MS || 3_000),
+    successTtlMs: Number(process.env.LLM_STATUS_SUCCESS_TTL_MS || 300_000),
+    failureTtlMs: Number(process.env.LLM_STATUS_FAILURE_TTL_MS || 30_000),
+  };
+}
+
+function getLlmProbeCache(): Map<string, LlmProbeCacheEntry> {
+  const globalScope = globalThis as typeof globalThis & {
+    __piedrasLlmProbeCache?: Map<string, LlmProbeCacheEntry>;
+  };
+
+  if (!globalScope.__piedrasLlmProbeCache) {
+    globalScope.__piedrasLlmProbeCache = new Map();
+  }
+
+  return globalScope.__piedrasLlmProbeCache;
+}
+
+async function getCachedLlmProbeStatus(
+  key: string,
+  config: LlmRuntimeHealthConfig,
+  resolver: () => Promise<CachedLlmProbeStatus>
+): Promise<CachedLlmProbeStatus> {
+  const cache = getLlmProbeCache();
+  const now = Date.now();
+  const cached = cache.get(key);
+
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
+  }
+
+  const value = await resolver();
+  cache.set(key, {
+    expiresAt: now + (value.reachable ? config.successTtlMs : config.failureTtlMs),
+    value,
+  });
+
+  return value;
 }
 
 function resolveModel(provider: LlmProvider): string | null {
@@ -59,14 +119,15 @@ export async function getLlmRuntimeStatus(): Promise<LlmRuntimeStatus> {
   }
 
   const configuredProvider = getConfiguredProviders()[0] ?? 'openai';
-  const probe = await getCachedRuntimeHealth(
+  const config = resolveLlmRuntimeHealthConfig();
+  const probe = await getCachedLlmProbeStatus(
     `llm:${configuredProvider}:${process.env.OPENAI_MODEL || ''}:${process.env.OPENAI_BASE_URL || ''}`,
-    60_000,
-    async (): Promise<{ reachable: boolean; checkedAt: string; lastError: string | null; provider: LlmProvider }> => {
+    config,
+    async (): Promise<CachedLlmProbeStatus> => {
       const checkedAt = new Date().toISOString();
 
       try {
-        const result = await probeConfiguredLlm();
+        const result = await probeConfiguredLlm(config.probeTimeoutMs);
         return {
           reachable: true,
           checkedAt,

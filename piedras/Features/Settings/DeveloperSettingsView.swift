@@ -137,6 +137,44 @@ struct DeveloperSettingsView: View {
                         .padding(16)
                         .softCard()
                     }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel(title: AppStrings.current.sync)
+
+                        VStack(alignment: .leading, spacing: 12) {
+                            statusRow(title: AppStrings.current.recentSync, value: syncValue)
+                            ThinDivider(inset: 0)
+                            statusRow(title: AppStrings.current.syncDetail, value: syncDetailValue)
+                            ThinDivider(inset: 0)
+                            statusRow(title: AppStrings.current.lastFailure, value: formatted(syncDate: settingsStore.syncLastFailureAt))
+                            ThinDivider(inset: 0)
+                            statusRow(title: AppStrings.current.nextRetry, value: formatted(syncDate: settingsStore.syncNextRetryAt))
+                            ThinDivider(inset: 0)
+                            statusRow(title: AppStrings.current.lastSuccess, value: formatted(syncDate: settingsStore.lastSuccessfulSyncAt))
+
+                            Button {
+                                Task {
+                                    await meetingStore.repairCloudState()
+                                }
+                            } label: {
+                                Text(settingsStore.isSyncing ? AppStrings.current.checking : AppStrings.current.syncRepairAction)
+                                    .font(AppTheme.bodyFont(size: 14, weight: .semibold))
+                                    .foregroundStyle(settingsStore.isSyncing ? AppTheme.subtleInk : AppTheme.surface)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 42)
+                                    .background(settingsStore.isSyncing ? AppTheme.surface : AppTheme.ink)
+                                    .overlay(
+                                        Rectangle()
+                                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                                    )
+                                    .retroHardShadow()
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(settingsStore.isSyncing)
+                        }
+                        .padding(16)
+                        .softCard()
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)
@@ -228,6 +266,11 @@ struct DeveloperSettingsView: View {
         return message.isEmpty ? AppStrings.current.syncIdleState : message
     }
 
+    private var syncDetailValue: String {
+        let message = settingsStore.syncDetailMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        return message.isEmpty ? AppStrings.current.notAvailableShort : message
+    }
+
     private var backendStateLabel: String {
         switch settingsStore.backendCapabilityStatus {
         case .checking:
@@ -270,5 +313,17 @@ struct DeveloperSettingsView: View {
             let model = settingsStore.llmModel.flatMap { $0.isEmpty ? nil : $0 }
             return [provider, preset, model].compactMap { $0 }.joined(separator: " · ")
         }
+    }
+
+    private func formatted(syncDate: Date?) -> String {
+        guard let syncDate else {
+            return AppStrings.current.notAvailableShort
+        }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: AppStrings.currentLanguage == .chinese ? "zh_CN" : "en_US_POSIX")
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: syncDate)
     }
 }

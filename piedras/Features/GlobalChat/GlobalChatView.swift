@@ -338,11 +338,11 @@ struct GlobalChatView: View {
     }
 
     private var availabilityMessage: String? {
-        settingsStore.blockingMessage(for: .ai)
+        settingsStore.warningMessage(for: .ai)
     }
 
     private var isComposerBlocked: Bool {
-        availabilityMessage != nil || globalChatStore.phase == .preparing
+        settingsStore.blockingMessage(for: .ai) != nil || globalChatStore.phase == .preparing
     }
 
     private var trimmedInput: String {
@@ -373,7 +373,8 @@ struct GlobalChatView: View {
         let isReady = await meetingStore.prepareAI(force: false)
 
         guard isReady else {
-            let message = settingsStore.blockingMessage(for: .ai)
+            let message = settingsStore.blockingMessage(for: .backend)
+                ?? settingsStore.blockingMessage(for: .ai)
                 ?? (settingsStore.llmStatusMessage.isEmpty
                     ? "\(AppEnvironment.cloudName) 暂时不可用。"
                     : settingsStore.llmStatusMessage)

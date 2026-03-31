@@ -1,5 +1,5 @@
-import type { LlmRuntimeConfig } from './types';
-import { DEFAULT_LLM_SETTINGS, normalizeOpenAIPath } from './llm-config';
+import type { LlmRuntimeConfig } from './types.ts';
+import { DEFAULT_LLM_SETTINGS, normalizeOpenAIPath } from './llm-config.ts';
 
 export type LlmProvider = 'gemini' | 'minimax' | 'openai';
 
@@ -15,6 +15,8 @@ export interface LlmGenerateInput {
   reasoningEffort?: 'low' | 'medium' | 'high';
   preferredProvider?: LlmProvider;
   runtimeConfig?: LlmRuntimeConfig;
+  timeoutMs?: number;
+  retries?: number;
 }
 
 export interface LlmGenerateOutput {
@@ -182,6 +184,25 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
         reject(err);
       });
   });
+}
+
+function isRetryableProviderError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+
+  return (
+    normalized.includes('请求超时') ||
+    normalized.includes('timeout') ||
+    normalized.includes('timed out') ||
+    normalized.includes('network') ||
+    normalized.includes('fetch failed') ||
+    normalized.includes('econnreset') ||
+    normalized.includes('econnrefused') ||
+    normalized.includes('socket hang up') ||
+    normalized.includes('http 429') ||
+    normalized.includes('限流') ||
+    normalized.includes('http 5') ||
+    normalized.includes('上游服务异常')
+  );
 }
 
 async function callGemini(input: LlmGenerateInput): Promise<string> {
@@ -546,8 +567,8 @@ function sleep(ms: number): Promise<void> {
 export async function generateTextWithFallback(
   input: LlmGenerateInput
 ): Promise<LlmGenerateOutput> {
-  const timeoutMs = Number(process.env.LLM_TIMEOUT_MS || DEFAULT_TIMEOUT_MS);
-  const retries = Number(process.env.LLM_RETRIES || DEFAULT_RETRIES);
+  const timeoutMs = Number(input.timeoutMs ?? process.env.LLM_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
+  const retries = Number(input.retries ?? process.env.LLM_RETRIES ?? DEFAULT_RETRIES);
   const providers = resolveProviderOrder(input.preferredProvider, input.runtimeConfig);
 
   if (providers.length === 0) {
@@ -573,9 +594,12 @@ export async function generateTextWithFallback(
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         errors.push(`${provider}#${attempt}: ${message}`);
-        if (attempt < attempts) {
+        if (attempt < attempts && isRetryableProviderError(message)) {
           await sleep(300 * attempt);
+          continue;
         }
+
+        break;
       }
     }
   }

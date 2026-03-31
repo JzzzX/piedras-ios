@@ -6,7 +6,6 @@ struct AppRootView: View {
     @Environment(AuthStore.self) private var authStore
     @Environment(SettingsStore.self) private var settingsStore
     @Environment(MeetingStore.self) private var meetingStore
-    @State private var didAttemptSessionRestore = false
 
     var body: some View {
         Group {
@@ -19,26 +18,23 @@ struct AppRootView: View {
             }
         }
         .task {
-            guard !authStore.isAuthenticated else {
-                didAttemptSessionRestore = true
-                return
-            }
-
-            guard !didAttemptSessionRestore else { return }
-            didAttemptSessionRestore = true
-            await authStore.restoreSession()
+            guard !authStore.hasResolvedInitialSession else { return }
+            await authStore.bootstrapSession()
         }
         .onChange(of: authStore.phase, initial: true) { _, newPhase in
             guard newPhase == .authenticated else { return }
-            didAttemptSessionRestore = true
+            handleAuthenticatedAppearance()
+        }
+        .onChange(of: authStore.isSessionValidated, initial: true) { _, isValidated in
+            guard authStore.isAuthenticated, isValidated else { return }
             handleAuthenticatedAppearance()
         }
         .onChange(of: scenePhase, initial: true) { _, newPhase in
-            guard authStore.isAuthenticated else { return }
+            guard authStore.isAuthenticated, authStore.isSessionValidated else { return }
             meetingStore.handleScenePhaseChange(newPhase)
         }
         .onChange(of: settingsStore.requiresInitialBackendSetup, initial: true) { _, requiresSetup in
-            guard authStore.isAuthenticated, requiresSetup else { return }
+            guard authStore.isAuthenticated, authStore.isSessionValidated, requiresSetup else { return }
             presentSettingsIfNeeded()
         }
     }
@@ -103,12 +99,16 @@ struct AppRootView: View {
     }
 
     private var isResolvingSession: Bool {
-        authStore.phase == .restoring || (!didAttemptSessionRestore && !authStore.isAuthenticated)
+        !authStore.hasResolvedInitialSession
     }
 
     private func handleAuthenticatedAppearance() {
-        meetingStore.loadIfNeeded()
-        meetingStore.handleScenePhaseChange(scenePhase)
-        presentSettingsIfNeeded()
+        if authStore.isSessionValidated {
+            meetingStore.loadIfNeeded()
+            meetingStore.handleScenePhaseChange(scenePhase)
+            presentSettingsIfNeeded()
+        } else {
+            meetingStore.loadMeetings()
+        }
     }
 }

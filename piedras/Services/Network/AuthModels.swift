@@ -1,6 +1,6 @@
 import Foundation
 
-struct RemoteAuthUser: Decodable, Equatable {
+struct RemoteAuthUser: Codable, Equatable {
     let id: String
     let email: String
     let displayName: String?
@@ -12,7 +12,7 @@ struct RemoteAuthUser: Decodable, Equatable {
     }
 }
 
-struct RemoteAuthSession: Decodable, Equatable {
+struct RemoteAuthSession: Codable, Equatable {
     let token: String?
     let refreshToken: String?
     let expiresAt: Date

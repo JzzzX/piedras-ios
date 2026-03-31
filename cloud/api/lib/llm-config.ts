@@ -1,4 +1,4 @@
-import type { LlmSettings, OpenAICompatiblePreset } from './types';
+import type { LlmSettings, OpenAICompatiblePreset } from './types.ts';
 
 export interface OpenAICompatiblePresetConfig {
   label: string;

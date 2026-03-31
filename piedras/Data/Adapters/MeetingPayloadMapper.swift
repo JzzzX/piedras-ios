@@ -1,6 +1,6 @@
 import Foundation
 
-struct RemoteWorkspace: Decodable, Equatable {
+struct RemoteWorkspace: Codable, Equatable {
     let id: String
     let name: String
 }

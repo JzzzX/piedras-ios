@@ -16,10 +16,14 @@ enum AuthPhase: Equatable {
 final class AuthStore {
     private let apiClient: any AuthNetworking
     private let tokenStore: any AuthTokenStoring
+    private let snapshotStore: any AuthSessionSnapshotStoring
 
     var phase: AuthPhase = .unauthenticated
     var currentUser: RemoteAuthUser?
     var currentWorkspace: RemoteWorkspace?
+    var hasResolvedInitialSession = false
+    var isSessionValidated = false
+    var isValidatingCachedSession = false
     var lastErrorMessage: String?
     var lastInfoMessage: String?
     var pendingVerificationEmail: String?
@@ -31,9 +35,14 @@ final class AuthStore {
     var didUnauthenticate: (() async -> Void)?
     private var pendingPasswordSetupResponse: RemoteAuthResponse?
 
-    init(apiClient: any AuthNetworking, tokenStore: any AuthTokenStoring) {
+    init(
+        apiClient: any AuthNetworking,
+        tokenStore: any AuthTokenStoring,
+        snapshotStore: (any AuthSessionSnapshotStoring)? = nil
+    ) {
         self.apiClient = apiClient
         self.tokenStore = tokenStore
+        self.snapshotStore = snapshotStore ?? DiscardingAuthSessionSnapshotStore()
     }
 
     var isAuthenticated: Bool {
@@ -62,7 +71,8 @@ final class AuthStore {
             let sessionState = try await apiClient.fetchAuthSession()
             await applyAuthenticatedSession(
                 user: sessionState.user,
-                workspace: sessionState.workspace
+                workspace: sessionState.workspace,
+                session: sessionState.session
             )
             return true
         } catch {
@@ -72,50 +82,46 @@ final class AuthStore {
         }
     }
 
-    func restoreSession() async {
+    func bootstrapSession() async {
         resetTransientMessages()
 
-        guard tokenStore.sessionToken?.nilIfBlank != nil || tokenStore.refreshToken?.nilIfBlank != nil else {
-            await clearSession()
+        if await hydrateCachedSessionIfPossible() {
+            await validateCachedSession()
             return
         }
 
-        phase = .restoring
+        await performSessionRestore(silentValidation: false)
+    }
 
-        if let sessionToken = tokenStore.sessionToken?.nilIfBlank {
-            do {
-                let sessionState = try await apiClient.fetchAuthSession()
-                tokenStore.sessionToken = sessionToken
-                await applyAuthenticatedSession(
-                    user: sessionState.user,
-                    workspace: sessionState.workspace
-                )
-                return
-            } catch {
-                if tokenStore.refreshToken?.nilIfBlank == nil {
-                    lastErrorMessage = error.localizedDescription
-                    await clearSession()
-                    return
-                }
-            }
+    @discardableResult
+    func hydrateCachedSessionIfPossible() async -> Bool {
+        guard tokenStore.refreshToken?.nilIfBlank != nil,
+              let snapshot = snapshotStore.snapshot else {
+            return false
         }
 
-        guard let refreshToken = tokenStore.refreshToken?.nilIfBlank else {
-            await clearSession()
-            return
-        }
+        currentUser = snapshot.user
+        currentWorkspace = snapshot.workspace
+        pendingVerificationEmail = nil
+        pendingOneTimeCodeEmail = nil
+        pendingOneTimeCodeIntent = nil
+        pendingPasswordSetupResponse = nil
+        logoutBlockedMessage = nil
+        phase = .authenticated
+        hasResolvedInitialSession = true
+        isSessionValidated = false
+        isValidatingCachedSession = true
+        await didAuthenticate?(snapshot.user, snapshot.workspace)
+        return true
+    }
 
-        do {
-            let response = try await apiClient.refreshAuthSession(refreshToken: refreshToken)
-            persistSession(response.session)
-            await applyAuthenticatedSession(
-                user: response.user,
-                workspace: response.workspace
-            )
-        } catch {
-            lastErrorMessage = error.localizedDescription
-            await clearSession()
-        }
+    func validateCachedSession() async {
+        guard isValidatingCachedSession else { return }
+        await performSessionRestore(silentValidation: true)
+    }
+
+    func restoreSession() async {
+        await performSessionRestore(silentValidation: false)
     }
 
     @discardableResult
@@ -127,7 +133,8 @@ final class AuthStore {
             persistSession(response.session)
             await applyAuthenticatedSession(
                 user: response.user,
-                workspace: response.workspace
+                workspace: response.workspace,
+                session: response.session
             )
             return true
         } catch {
@@ -158,7 +165,8 @@ final class AuthStore {
             persistSession(registration.session)
             await applyAuthenticatedSession(
                 user: registration.user,
-                workspace: registration.workspace
+                workspace: registration.workspace,
+                session: registration.session
             )
             return true
         } catch {
@@ -174,7 +182,8 @@ final class AuthStore {
             persistSession(response.session)
             await applyAuthenticatedSession(
                 user: response.user,
-                workspace: response.workspace
+                workspace: response.workspace,
+                session: response.session
             )
             return true
         } catch {
@@ -224,7 +233,8 @@ final class AuthStore {
             persistSession(response.session)
             await applyAuthenticatedSession(
                 user: response.user,
-                workspace: response.workspace
+                workspace: response.workspace,
+                session: response.session
             )
             return true
         } catch {
@@ -288,7 +298,8 @@ final class AuthStore {
             persistSession(response.session)
             await applyAuthenticatedSession(
                 user: response.user,
-                workspace: response.workspace
+                workspace: response.workspace,
+                session: response.session
             )
             return true
         } catch {
@@ -307,7 +318,8 @@ final class AuthStore {
         resetTransientMessages()
         await applyAuthenticatedSession(
             user: response.user,
-            workspace: response.workspace
+            workspace: response.workspace,
+            session: response.session
         )
         return true
     }
@@ -398,7 +410,8 @@ final class AuthStore {
 
     private func applyAuthenticatedSession(
         user: RemoteAuthUser,
-        workspace: RemoteWorkspace
+        workspace: RemoteWorkspace,
+        session: RemoteAuthSession
     ) async {
         currentUser = user
         currentWorkspace = workspace
@@ -407,12 +420,22 @@ final class AuthStore {
         pendingOneTimeCodeIntent = nil
         pendingPasswordSetupResponse = nil
         lastInfoMessage = nil
+        snapshotStore.snapshot = CachedAuthSessionSnapshot(
+            user: user,
+            workspace: workspace,
+            expiresAt: session.expiresAt,
+            savedAt: .now
+        )
         phase = .authenticated
+        hasResolvedInitialSession = true
+        isSessionValidated = true
+        isValidatingCachedSession = false
         await didAuthenticate?(user, workspace)
     }
 
     private func clearSession() async {
         tokenStore.clearTokens()
+        snapshotStore.clearSnapshot()
         currentUser = nil
         currentWorkspace = nil
         pendingVerificationEmail = nil
@@ -420,12 +443,67 @@ final class AuthStore {
         pendingOneTimeCodeIntent = nil
         pendingPasswordSetupResponse = nil
         phase = .unauthenticated
+        hasResolvedInitialSession = true
+        isSessionValidated = false
+        isValidatingCachedSession = false
         await didUnauthenticate?()
     }
 
     private func persistSession(_ session: RemoteAuthSession) {
         tokenStore.sessionToken = session.token
         tokenStore.refreshToken = session.refreshToken
+    }
+
+    private func performSessionRestore(silentValidation: Bool) async {
+        resetTransientMessages()
+
+        guard tokenStore.sessionToken?.nilIfBlank != nil || tokenStore.refreshToken?.nilIfBlank != nil else {
+            await clearSession()
+            return
+        }
+
+        if !silentValidation {
+            phase = .restoring
+        } else {
+            isValidatingCachedSession = true
+        }
+
+        if let sessionToken = tokenStore.sessionToken?.nilIfBlank {
+            do {
+                let sessionState = try await apiClient.fetchAuthSession()
+                tokenStore.sessionToken = sessionToken
+                await applyAuthenticatedSession(
+                    user: sessionState.user,
+                    workspace: sessionState.workspace,
+                    session: sessionState.session
+                )
+                return
+            } catch {
+                if tokenStore.refreshToken?.nilIfBlank == nil {
+                    lastErrorMessage = error.localizedDescription
+                    await clearSession()
+                    return
+                }
+            }
+        }
+
+        guard let refreshToken = tokenStore.refreshToken?.nilIfBlank else {
+            await clearSession()
+            return
+        }
+
+        do {
+            let response = try await apiClient.refreshAuthSession(refreshToken: refreshToken)
+            persistSession(response.session)
+            await applyAuthenticatedSession(
+                user: response.user,
+                workspace: response.workspace,
+                session: response.session
+            )
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            await clearSession()
+        }
     }
 
     private func resetTransientMessages() {
