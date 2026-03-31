@@ -1,7 +1,8 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 const AUDIO_FILE_NAME = 'audio.bin';
 const STORAGE_ROOT_ENV_KEY = 'MEETING_AUDIO_STORAGE_ROOT';
@@ -83,6 +84,19 @@ export async function saveMeetingAudioFile(meetingId: string, buffer: Buffer) {
   await mkdir(dir, { recursive: true });
   const filePath = getMeetingAudioPath(meetingId);
   await writeFile(filePath, buffer);
+  return filePath;
+}
+
+export async function saveMeetingAudioStream(
+  meetingId: string,
+  stream: Readable | ReadableStream<Uint8Array>
+) {
+  const dir = getMeetingAudioDir(meetingId);
+  await mkdir(dir, { recursive: true });
+  const filePath = getMeetingAudioPath(meetingId);
+  const source = stream instanceof Readable ? stream : Readable.fromWeb(stream as any);
+
+  await pipeline(source, createWriteStream(filePath));
   return filePath;
 }
 

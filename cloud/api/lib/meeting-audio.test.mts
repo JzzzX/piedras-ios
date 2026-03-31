@@ -7,8 +7,9 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import {
   deleteMeetingAudioFile,
   getMeetingAudioStorageConfig,
-  saveMeetingAudioFile,
   hasMeetingAudioFile,
+  saveMeetingAudioFile,
+  saveMeetingAudioStream,
 } from './meeting-audio.ts';
 
 test('saveMeetingAudioFile stores meeting audio under configured storage root', async () => {
@@ -47,4 +48,35 @@ test('getMeetingAudioStorageConfig marks production fallback storage as not read
   assert.equal(storage.configured, false);
   assert.equal(storage.persistent, false);
   assert.match(storage.message, /MEETING_AUDIO_STORAGE_ROOT/);
+});
+
+test('saveMeetingAudioStream writes audio payloads without buffering the whole file in the caller', async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'piedras-meeting-audio-stream-'));
+  const originalRoot = process.env.MEETING_AUDIO_STORAGE_ROOT;
+
+  process.env.MEETING_AUDIO_STORAGE_ROOT = tempRoot;
+
+  try {
+    const filePath = await saveMeetingAudioStream(
+      'meeting-2',
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('hello '));
+          controller.enqueue(new TextEncoder().encode('stream'));
+          controller.close();
+        },
+      })
+    );
+
+    assert.equal(filePath, path.join(tempRoot, 'meeting-2', 'audio.bin'));
+    assert.equal(await hasMeetingAudioFile('meeting-2'), true);
+    assert.equal((await readFile(filePath, 'utf8')).toString(), 'hello stream');
+  } finally {
+    if (originalRoot === undefined) {
+      delete process.env.MEETING_AUDIO_STORAGE_ROOT;
+    } else {
+      process.env.MEETING_AUDIO_STORAGE_ROOT = originalRoot;
+    }
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 });

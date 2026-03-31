@@ -71,37 +71,43 @@ model InviteCode {
 }
 
 model Meeting {
-  id            String   @id @default(uuid())
-  title         String   @default("")
-  date          DateTime @default(now())
-  status        String   @default("idle")
-  duration      Int      @default(0)
-  audioMimeType String?
-  audioDuration Int?
+  id                      String   @id @default(uuid())
+  title                   String   @default("")
+  date                    DateTime @default(now())
+  status                  String   @default("idle")
+  duration                Int      @default(0)
+  audioMimeType           String?
+  audioDuration           Int?
   audioUpdatedAt DateTime?
-  userNotes     String   @default("")
-  enhancedNotes String   @default("")
-  audioEnhancedNotes String @default("")
-  audioEnhancedNotesStatus String @default("idle")
-  audioEnhancedNotesError String @default("")
+  audioProcessingState     String   @default("idle")
+  audioProcessingError     String   @default("")
+  audioProcessingAttempts  Int      @default(0)
+  audioProcessingRequestedAt DateTime?
+  audioProcessingStartedAt DateTime?
+  audioProcessingCompletedAt DateTime?
+  userNotes               String   @default("")
+  enhancedNotes           String   @default("")
+  audioEnhancedNotes      String   @default("")
+  audioEnhancedNotesStatus String  @default("idle")
+  audioEnhancedNotesError String   @default("")
   audioEnhancedNotesUpdatedAt DateTime?
   audioEnhancedNotesProvider String?
   audioEnhancedNotesModel String?
-  enhanceRecipeId String?
-  roundLabel    String   @default("")
+  enhanceRecipeId         String?
+  roundLabel              String   @default("")
   interviewerName String @default("")
-  recommendation String  @default("pending")
-  handoffNote   String   @default("")
-  speakers      String   @default("{}")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  collectionId  String? @map("folderId")
-  workspaceId   String
+  recommendation         String   @default("pending")
+  handoffNote            String   @default("")
+  speakers               String   @default("{}")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  collectionId           String?  @map("folderId")
+  workspaceId            String
 
   segments     TranscriptSegment[]
   chatMessages ChatMessage[]
   collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
-  workspace    Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 }
 
 model Collection {

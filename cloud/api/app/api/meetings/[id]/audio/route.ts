@@ -4,17 +4,25 @@ import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-err
 import { prisma } from '@/lib/db';
 import {
   buildMeetingAudioResponse,
-  getMeetingAudioPath,
   hasMeetingAudioFile,
   saveMeetingAudioFile,
+  saveMeetingAudioStream,
 } from '@/lib/meeting-audio';
 import {
-  finalizeMeetingTranscriptFromAudio,
-  isEmptyTranscriptFinalizationFailure,
-} from '@/lib/meeting-transcript-finalizer';
-import type { FinalizedTranscript } from '@/lib/meeting-transcript-finalizer';
+  buildMeetingAudioProcessingStatus,
+  queueMeetingAudioProcessing,
+  recoverPendingMeetingAudioProcessing,
+} from '@/lib/meeting-audio-processing';
 
 export const runtime = 'nodejs';
+
+interface PersistAudioUploadOptions {
+  meetingId: string;
+  duration: number | null;
+  mimeType: string;
+  shouldFinalizeTranscript: boolean;
+  requestId: string;
+}
 
 export async function GET(
   req: NextRequest,
@@ -28,6 +36,7 @@ export async function GET(
   }
 
   try {
+    await recoverPendingMeetingAudioProcessing();
     const { id } = await params;
 
     const meeting = await prisma.meeting.findFirst({
@@ -74,124 +83,27 @@ export async function POST(
     const shouldFinalizeTranscript = req.nextUrl.searchParams.get('finalizeTranscript') === 'true';
     const formData = await req.formData();
     const file = formData.get('file');
-    const duration = Number(formData.get('duration') || 0);
-    const mimeType = String(formData.get('mimeType') || '');
+    const duration = normalizeDuration(formData.get('duration'));
 
     if (!(file instanceof File)) {
       return errorResponse(context, 400, '缺少音频文件');
     }
 
-    const meeting = await prisma.meeting.findFirst({
-      where: {
-        id,
-        workspaceId: auth.workspace.id,
-      },
-      select: { id: true },
-    });
+    const mimeType = normalizeMimeType(String(formData.get('mimeType') || ''), file);
 
-    if (!meeting) {
-      return errorResponse(context, 404, '会议不存在，无法保存音频');
-    }
+    await requireMeetingOwnership(id, auth.workspace.id);
 
     const arrayBuffer = await file.arrayBuffer();
     await saveMeetingAudioFile(id, Buffer.from(arrayBuffer));
-    if (!(await hasMeetingAudioFile(id))) {
-      throw new Error('会议音频落盘校验失败');
-    }
-
-    const normalizedDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null;
-    const normalizedMimeType = mimeType || file.type || 'audio/webm';
-
-    if (shouldFinalizeTranscript) {
-      let finalizedTranscript: FinalizedTranscript | null = null;
-      try {
-        finalizedTranscript = await finalizeMeetingTranscriptFromAudio({
-          audioPath: getMeetingAudioPath(id),
-          mimeType: normalizedMimeType,
-          requestId: context.requestId,
-          userId: `meeting-${id}`,
-        });
-      } catch (error) {
-        if (!isEmptyTranscriptFinalizationFailure(error)) {
-          throw error;
-        }
-      }
-
-      const hydratedMeeting = await prisma.$transaction(async (tx: any) => {
-        const meetingData: Record<string, unknown> = {
-          audioMimeType: normalizedMimeType,
-          audioDuration: normalizedDuration,
-          audioUpdatedAt: new Date(),
-        };
-        if (finalizedTranscript) {
-          meetingData.speakers = JSON.stringify(finalizedTranscript.speakers);
-        }
-
-        await tx.meeting.update({
-          where: { id },
-          data: meetingData,
-        });
-
-        if (finalizedTranscript) {
-          await tx.transcriptSegment.deleteMany({
-            where: { meetingId: id },
-          });
-
-          if (finalizedTranscript.segments.length > 0) {
-            await tx.transcriptSegment.createMany({
-              data: finalizedTranscript.segments.map((segment, index) => ({
-                id: crypto.randomUUID(),
-                meetingId: id,
-                speaker: segment.speaker,
-                text: segment.text,
-                startTime: segment.startTime,
-                endTime: segment.endTime,
-                isFinal: segment.isFinal,
-                order: index,
-              })),
-            });
-          }
-        }
-
-        return tx.meeting.findUnique({
-          where: { id },
-          include: {
-            collection: true,
-            segments: { orderBy: { order: 'asc' } },
-            chatMessages: { orderBy: { timestamp: 'asc' } },
-          },
-        });
-      });
-
-      return jsonResponse(context, {
-        ...hydratedMeeting,
-        speakers: hydratedMeeting ? JSON.parse(hydratedMeeting.speakers) : {},
-        hasAudio: true,
-        audioUrl: `/api/meetings/${id}/audio?t=${hydratedMeeting?.audioUpdatedAt?.getTime() || Date.now()}`,
-      });
-    }
-
-    const updated = await prisma.meeting.update({
-      where: { id },
-      data: {
-        audioMimeType: normalizedMimeType,
-        audioDuration: normalizedDuration,
-        audioUpdatedAt: new Date(),
-      },
-      select: {
-        audioMimeType: true,
-        audioDuration: true,
-        audioUpdatedAt: true,
-      },
+    const payload = await persistAudioUpload({
+      meetingId: id,
+      duration,
+      mimeType,
+      shouldFinalizeTranscript,
+      requestId: context.requestId,
     });
 
-    return jsonResponse(context, {
-      hasAudio: true,
-      audioMimeType: updated.audioMimeType,
-      audioDuration: updated.audioDuration,
-      audioUpdatedAt: updated.audioUpdatedAt?.toISOString() || null,
-      audioUrl: `/api/meetings/${id}/audio?t=${updated.audioUpdatedAt?.getTime() || Date.now()}`,
-    });
+    return jsonResponse(context, payload);
   } catch (error) {
     return errorResponse(
       context,
@@ -200,4 +112,119 @@ export async function POST(
       error
     );
   }
+}
+
+export async function PUT(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const context = createRequestContext(req, '/api/meetings/[id]/audio');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  try {
+    const { id } = await params;
+    const shouldFinalizeTranscript = req.nextUrl.searchParams.get('finalizeTranscript') === 'true';
+    const duration = normalizeDuration(req.headers.get('x-audio-duration'));
+    const mimeType = normalizeMimeType(req.headers.get('content-type'), null);
+
+    if (!req.body) {
+      return errorResponse(context, 400, '缺少音频数据');
+    }
+
+    await requireMeetingOwnership(id, auth.workspace.id);
+    await saveMeetingAudioStream(id, req.body);
+
+    const payload = await persistAudioUpload({
+      meetingId: id,
+      duration,
+      mimeType,
+      shouldFinalizeTranscript,
+      requestId: context.requestId,
+    });
+
+    return jsonResponse(context, payload);
+  } catch (error) {
+    return errorResponse(
+      context,
+      500,
+      error instanceof Error ? `上传会议音频失败：${error.message}` : '上传会议音频失败，请稍后重试。',
+      error
+    );
+  }
+}
+
+async function requireMeetingOwnership(meetingId: string, workspaceId: string) {
+  const meeting = await prisma.meeting.findFirst({
+    where: {
+      id: meetingId,
+      workspaceId,
+    },
+    select: { id: true },
+  });
+
+  if (!meeting) {
+    throw new Error('会议不存在，无法保存音频');
+  }
+}
+
+async function persistAudioUpload(options: PersistAudioUploadOptions) {
+  if (!(await hasMeetingAudioFile(options.meetingId))) {
+    throw new Error('会议音频落盘校验失败');
+  }
+
+  const requestedAt = options.shouldFinalizeTranscript ? new Date() : null;
+  const updated = await prisma.meeting.update({
+    where: { id: options.meetingId },
+    data: {
+      audioMimeType: options.mimeType,
+      audioDuration: options.duration,
+      audioUpdatedAt: new Date(),
+      audioProcessingState: options.shouldFinalizeTranscript ? 'queued' : 'idle',
+      audioProcessingError: '',
+      audioProcessingAttempts: 0,
+      audioProcessingRequestedAt: requestedAt,
+      audioProcessingStartedAt: null,
+      audioProcessingCompletedAt: null,
+    },
+    select: {
+      audioMimeType: true,
+      audioDuration: true,
+      audioUpdatedAt: true,
+      audioProcessingState: true,
+      audioProcessingError: true,
+      audioProcessingAttempts: true,
+      audioProcessingRequestedAt: true,
+      audioProcessingStartedAt: true,
+      audioProcessingCompletedAt: true,
+    },
+  });
+
+  if (options.shouldFinalizeTranscript) {
+    await queueMeetingAudioProcessing({
+      meetingId: options.meetingId,
+      requestId: options.requestId,
+    });
+  }
+
+  return {
+    hasAudio: true,
+    audioMimeType: updated.audioMimeType,
+    audioDuration: updated.audioDuration,
+    audioUpdatedAt: updated.audioUpdatedAt?.toISOString() || null,
+    audioUrl: `/api/meetings/${options.meetingId}/audio?t=${updated.audioUpdatedAt?.getTime() || Date.now()}`,
+    ...buildMeetingAudioProcessingStatus(updated),
+  };
+}
+
+function normalizeDuration(value: FormDataEntryValue | string | null) {
+  const normalized = Number(value || 0);
+  return Number.isFinite(normalized) && normalized > 0 ? Math.round(normalized) : null;
+}
+
+function normalizeMimeType(value: string | null | undefined, file: File | null) {
+  return value?.trim() || file?.type || 'audio/webm';
 }

@@ -61,7 +61,22 @@ function normalizePath(value, fallback) {
   return normalized.replace(/\/{2,}/g, '/');
 }
 
-const proxyHealthPath = normalizePath(process.env.ASR_PROXY_HEALTH_PATH, '/asr-proxy/healthz');
+function resolveProxyHealthPath() {
+  const configuredPath = normalizePath(process.env.ASR_PROXY_HEALTH_PATH, '/asr-proxy/healthz');
+
+  if (configuredPath === '/healthz') {
+    log('proxy-health-path-overridden', {
+      configuredPath,
+      effectivePath: '/asr-proxy/healthz',
+      reason: 'reserved-for-backend-health',
+    });
+    return '/asr-proxy/healthz';
+  }
+
+  return configuredPath;
+}
+
+const proxyHealthPath = resolveProxyHealthPath();
 const proxyWSPaths = Array.from(
   new Set([
     normalizePath(process.env.ASR_PROXY_WS_PATH, '/ws/asr'),

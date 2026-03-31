@@ -211,4 +211,10 @@ export interface Meeting {
   audioUpdatedAt?: string | null;
   audioUrl?: string | null;
   hasAudio?: boolean;
+  audioProcessingState?: 'idle' | 'queued' | 'processing' | 'completed' | 'failed';
+  audioProcessingError?: string | null;
+  audioProcessingAttempts?: number;
+  audioProcessingRequestedAt?: string | null;
+  audioProcessingStartedAt?: string | null;
+  audioProcessingCompletedAt?: string | null;
 }

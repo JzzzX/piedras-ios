@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
+import { hasMeetingAudioFile } from '@/lib/meeting-audio';
+import { serializeMeetingDetail } from '@/lib/meeting-response';
 
 interface SegmentPayload {
   id: string;
@@ -243,10 +245,12 @@ export async function POST(req: NextRequest) {
       });
     });
 
-    return jsonResponse(context, {
-      ...meeting,
-      speakers: meeting ? JSON.parse(meeting.speakers) : {},
-    });
+    const hasAudio = meeting?.audioMimeType ? await hasMeetingAudioFile(meeting.id) : false;
+
+    return jsonResponse(
+      context,
+      meeting ? serializeMeetingDetail(meeting, { hasAudio }) : null
+    );
   } catch (error) {
     return errorResponse(
       context,

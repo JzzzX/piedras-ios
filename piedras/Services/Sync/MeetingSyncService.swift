@@ -127,17 +127,16 @@ final class MeetingSyncService: MeetingSyncServicing {
         let fallbackDuration = max(meeting.audioDuration, meeting.durationSeconds)
 
         if meeting.speakerDiarizationState == .processing || meeting.speakerDiarizationState == .failed {
-            let remoteMeeting = try await apiClient.uploadAudioAndFinalizeTranscript(
+            let uploadResponse = try await apiClient.uploadAudio(
                 meetingID: meeting.id,
                 fileURL: URL(fileURLWithPath: audioLocalPath),
                 duration: max(fallbackDuration, 0),
-                mimeType: meeting.audioMimeType ?? "audio/m4a"
+                mimeType: meeting.audioMimeType ?? "audio/m4a",
+                requestTranscriptFinalization: true
             )
-            meeting.speakerDiarizationState = .ready
-            meeting.transcriptPipelineState = .ready
-            meeting.speakerDiarizationErrorMessage = nil
+            apply(uploadResponse: uploadResponse, to: meeting, fallbackDuration: fallbackDuration)
             try repository.save()
-            return remoteMeeting
+            return try await pollForFinalizedMeetingIfNeeded(meetingID: meeting.id, meeting: meeting)
         }
 
         let uploadResponse = try await apiClient.uploadAudio(
@@ -147,12 +146,57 @@ final class MeetingSyncService: MeetingSyncServicing {
             mimeType: meeting.audioMimeType ?? "audio/m4a"
         )
 
+        apply(uploadResponse: uploadResponse, to: meeting, fallbackDuration: fallbackDuration)
+        try repository.save()
+        return nil
+    }
+
+    private func pollForFinalizedMeetingIfNeeded(
+        meetingID: String,
+        meeting: Meeting
+    ) async throws -> RemoteMeetingDetail? {
+        for _ in 0 ..< 10 {
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            let status = try await apiClient.fetchMeetingProcessingStatus(meetingID: meetingID)
+            MeetingPayloadMapper.apply(processingStatus: status, to: meeting)
+            try repository.save()
+
+            switch status.audioProcessingState {
+            case "completed":
+                return try await apiClient.getMeeting(id: meetingID)
+            case "failed":
+                return nil
+            default:
+                continue
+            }
+        }
+
+        return nil
+    }
+
+    private func apply(
+        uploadResponse: RemoteAudioUploadResponse,
+        to meeting: Meeting,
+        fallbackDuration: Int
+    ) {
         meeting.audioRemotePath = apiClient.resolveAbsoluteURLString(uploadResponse.audioUrl) ?? meeting.audioRemotePath
         meeting.audioMimeType = uploadResponse.audioMimeType ?? meeting.audioMimeType
         meeting.audioDuration = uploadResponse.audioDuration ?? fallbackDuration
         meeting.audioUpdatedAt = uploadResponse.audioUpdatedAt ?? meeting.audioUpdatedAt ?? .now
-        try repository.save()
-        return nil
+
+        if let state = uploadResponse.audioProcessingState {
+            let processingStatus = RemoteMeetingProcessingStatus(
+                meetingId: meeting.id,
+                hasAudio: uploadResponse.hasAudio,
+                audioProcessingState: state,
+                audioProcessingError: uploadResponse.audioProcessingError,
+                audioProcessingAttempts: uploadResponse.audioProcessingAttempts,
+                audioProcessingRequestedAt: uploadResponse.audioProcessingRequestedAt,
+                audioProcessingStartedAt: uploadResponse.audioProcessingStartedAt,
+                audioProcessingCompletedAt: uploadResponse.audioProcessingCompletedAt
+            )
+            MeetingPayloadMapper.apply(processingStatus: processingStatus, to: meeting)
+        }
     }
 
     func refreshRemoteMeetings() async throws -> Int {

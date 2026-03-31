@@ -4,6 +4,8 @@ import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
 import { deleteMeetingAudioFile, hasMeetingAudioFile } from '@/lib/meeting-audio';
+import { recoverPendingMeetingAudioProcessing } from '@/lib/meeting-audio-processing';
+import { serializeMeetingDetail } from '@/lib/meeting-response';
 
 // GET /api/meetings/[id] — 获取单个会议详情
 export async function GET(
@@ -18,6 +20,7 @@ export async function GET(
   }
 
   try {
+    await recoverPendingMeetingAudioProcessing();
     const { id } = await params;
 
     const meeting = await prisma.meeting.findFirst({
@@ -39,14 +42,7 @@ export async function GET(
     const hasAudio =
       Boolean(meeting.audioMimeType) && (await hasMeetingAudioFile(meeting.id));
 
-    return jsonResponse(context, {
-      ...meeting,
-      speakers: JSON.parse(meeting.speakers),
-      hasAudio,
-      audioUrl: hasAudio
-        ? `/api/meetings/${meeting.id}/audio?t=${meeting.audioUpdatedAt?.getTime() || 0}`
-        : null,
-    });
+    return jsonResponse(context, serializeMeetingDetail(meeting, { hasAudio }));
   } catch (error) {
     return errorResponse(
       context,
@@ -174,15 +170,12 @@ export async function PUT(
         ? await hasMeetingAudioFile(hydratedMeeting.id)
         : false;
 
-    return jsonResponse(context, {
-      ...hydratedMeeting,
-      speakers: hydratedMeeting ? JSON.parse(hydratedMeeting.speakers) : {},
-      hasAudio,
-      audioUrl:
-        hydratedMeeting && hasAudio
-          ? `/api/meetings/${hydratedMeeting.id}/audio?t=${hydratedMeeting.audioUpdatedAt?.getTime() || 0}`
-          : null,
-    });
+    return jsonResponse(
+      context,
+      hydratedMeeting
+        ? serializeMeetingDetail(hydratedMeeting, { hasAudio })
+        : null
+    );
   } catch (error) {
     return errorResponse(
       context,

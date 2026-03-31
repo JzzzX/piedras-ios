@@ -122,6 +122,12 @@ struct RemoteMeetingDetail: Decodable {
     let chatMessages: [RemoteChatMessage]
     let hasAudio: Bool?
     let audioUrl: String?
+    let audioProcessingState: String?
+    let audioProcessingError: String?
+    let audioProcessingAttempts: Int?
+    let audioProcessingRequestedAt: Date?
+    let audioProcessingStartedAt: Date?
+    let audioProcessingCompletedAt: Date?
 
     init(
         id: String,
@@ -147,7 +153,13 @@ struct RemoteMeetingDetail: Decodable {
         segments: [RemoteTranscriptSegment],
         chatMessages: [RemoteChatMessage],
         hasAudio: Bool?,
-        audioUrl: String?
+        audioUrl: String?,
+        audioProcessingState: String? = nil,
+        audioProcessingError: String? = nil,
+        audioProcessingAttempts: Int? = nil,
+        audioProcessingRequestedAt: Date? = nil,
+        audioProcessingStartedAt: Date? = nil,
+        audioProcessingCompletedAt: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -173,6 +185,12 @@ struct RemoteMeetingDetail: Decodable {
         self.chatMessages = chatMessages
         self.hasAudio = hasAudio
         self.audioUrl = audioUrl
+        self.audioProcessingState = audioProcessingState
+        self.audioProcessingError = audioProcessingError
+        self.audioProcessingAttempts = audioProcessingAttempts
+        self.audioProcessingRequestedAt = audioProcessingRequestedAt
+        self.audioProcessingStartedAt = audioProcessingStartedAt
+        self.audioProcessingCompletedAt = audioProcessingCompletedAt
     }
 }
 
@@ -182,6 +200,23 @@ struct RemoteAudioUploadResponse: Decodable {
     let audioDuration: Int?
     let audioUpdatedAt: Date?
     let audioUrl: String?
+    let audioProcessingState: String?
+    let audioProcessingError: String?
+    let audioProcessingAttempts: Int?
+    let audioProcessingRequestedAt: Date?
+    let audioProcessingStartedAt: Date?
+    let audioProcessingCompletedAt: Date?
+}
+
+struct RemoteMeetingProcessingStatus: Decodable {
+    let meetingId: String
+    let hasAudio: Bool
+    let audioProcessingState: String?
+    let audioProcessingError: String?
+    let audioProcessingAttempts: Int?
+    let audioProcessingRequestedAt: Date?
+    let audioProcessingStartedAt: Date?
+    let audioProcessingCompletedAt: Date?
 }
 
 struct RemoteEnhanceResponse: Decodable {
@@ -390,7 +425,7 @@ enum MeetingPayloadMapper {
 
     static func makeMeeting(from remote: RemoteMeetingDetail, baseURL: URL?) -> Meeting {
         let status = mapStatus(remote.status)
-        return Meeting(
+        let meeting = Meeting(
             id: remote.id,
             title: remote.title ?? "",
             date: remote.date,
@@ -419,6 +454,8 @@ enum MeetingPayloadMapper {
             segments: makeSegments(from: remote.segments),
             chatMessages: makeChatMessages(from: remote.chatMessages)
         )
+        applyRemoteAudioProcessing(remote, to: meeting)
+        return meeting
     }
 
     static func apply(
@@ -459,6 +496,7 @@ enum MeetingPayloadMapper {
         meeting.lastSyncedAt = .now
         meeting.createdAt = remote.createdAt ?? meeting.createdAt
         meeting.updatedAt = remote.updatedAt ?? .now
+        applyRemoteAudioProcessing(remote, to: meeting)
 
         repository.replaceSegments(for: meeting, with: makeSegments(from: remote.segments))
         let remoteChatMessages = makeChatMessages(from: remote.chatMessages)
@@ -490,12 +528,62 @@ enum MeetingPayloadMapper {
         }
     }
 
+    static func apply(
+        processingStatus remote: RemoteMeetingProcessingStatus,
+        to meeting: Meeting
+    ) {
+        applyRemoteAudioProcessing(
+            audioProcessingState: remote.audioProcessingState,
+            audioProcessingError: remote.audioProcessingError,
+            to: meeting
+        )
+    }
+
     static func transcriptText(from meeting: Meeting) -> String {
         let finalSegments = meeting.orderedSegments.filter(\.isFinal)
         let source = finalSegments.isEmpty ? meeting.orderedSegments : finalSegments
         return source
             .map { "[\(meeting.displayName(forSpeaker: $0.speaker))]: \($0.text)" }
             .joined(separator: "\n")
+    }
+
+    private static func applyRemoteAudioProcessing(
+        _ remote: RemoteMeetingDetail,
+        to meeting: Meeting
+    ) {
+        applyRemoteAudioProcessing(
+            audioProcessingState: remote.audioProcessingState,
+            audioProcessingError: remote.audioProcessingError,
+            to: meeting
+        )
+    }
+
+    private static func applyRemoteAudioProcessing(
+        audioProcessingState: String?,
+        audioProcessingError: String?,
+        to meeting: Meeting
+    ) {
+        switch audioProcessingState {
+        case "queued", "processing":
+            meeting.speakerDiarizationState = .processing
+            meeting.speakerDiarizationErrorMessage = nil
+            if meeting.status == .ended {
+                meeting.transcriptPipelineState = .refining
+            }
+        case "failed":
+            meeting.speakerDiarizationState = .failed
+            let errorMessage = audioProcessingError?.trimmingCharacters(in: .whitespacesAndNewlines)
+            meeting.speakerDiarizationErrorMessage = (errorMessage?.isEmpty == false) ? errorMessage : nil
+            meeting.transcriptPipelineState = .failed
+        case "completed":
+            meeting.speakerDiarizationState = .ready
+            meeting.speakerDiarizationErrorMessage = nil
+            if meeting.status == .ended {
+                meeting.transcriptPipelineState = .ready
+            }
+        default:
+            break
+        }
     }
 
     private static func makeSegments(from remoteSegments: [RemoteTranscriptSegment]) -> [TranscriptSegment] {

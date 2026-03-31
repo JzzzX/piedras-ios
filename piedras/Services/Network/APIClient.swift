@@ -272,56 +272,35 @@ final class APIClient: AuthNetworking {
         meetingID: String,
         fileURL: URL,
         duration: Int,
-        mimeType: String
+        mimeType: String,
+        requestTranscriptFinalization: Bool = false
     ) async throws -> RemoteAudioUploadResponse {
-        guard let fileData = try? Data(contentsOf: fileURL) else {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
             throw APIClientError.unreadableFile
         }
 
-        let boundary = "Boundary-\(UUID().uuidString.lowercased())"
-        var request = try makeRequest(path: "/api/meetings/\(meetingID)/audio", method: "POST")
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = makeMultipartBody(
-            boundary: boundary,
-            fileData: fileData,
-            filename: fileURL.lastPathComponent,
-            duration: duration,
-            mimeType: mimeType
+        var request = try makeRequest(
+            path: "/api/meetings/\(meetingID)/audio",
+            method: "PUT",
+            queryItems: requestTranscriptFinalization
+                ? [URLQueryItem(name: "finalizeTranscript", value: "true")]
+                : []
         )
+        request.timeoutInterval = 15 * 60
+        request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
+        request.setValue(String(max(duration, 0)), forHTTPHeaderField: "X-Audio-Duration")
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await session.upload(for: request, fromFile: fileURL)
         try validate(response: response, data: data)
         return try decoder.decode(RemoteAudioUploadResponse.self, from: data)
     }
 
-    func uploadAudioAndFinalizeTranscript(
-        meetingID: String,
-        fileURL: URL,
-        duration: Int,
-        mimeType: String
-    ) async throws -> RemoteMeetingDetail {
-        guard let fileData = try? Data(contentsOf: fileURL) else {
-            throw APIClientError.unreadableFile
-        }
-
-        let boundary = "Boundary-\(UUID().uuidString.lowercased())"
-        var request = try makeRequest(
-            path: "/api/meetings/\(meetingID)/audio",
-            method: "POST",
-            queryItems: [URLQueryItem(name: "finalizeTranscript", value: "true")]
+    func fetchMeetingProcessingStatus(meetingID: String) async throws -> RemoteMeetingProcessingStatus {
+        try await sendJSONRequest(
+            path: "/api/meetings/\(meetingID)/processing-status",
+            method: "GET",
+            responseType: RemoteMeetingProcessingStatus.self
         )
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        request.httpBody = makeMultipartBody(
-            boundary: boundary,
-            fileData: fileData,
-            filename: fileURL.lastPathComponent,
-            duration: duration,
-            mimeType: mimeType
-        )
-
-        let (data, response) = try await session.data(for: request)
-        try validate(response: response, data: data)
-        return try decoder.decode(RemoteMeetingDetail.self, from: data)
     }
 
     func enhanceNotes(_ payload: EnhanceRequestPayload) async throws -> RemoteEnhanceResponse {
@@ -571,34 +550,6 @@ final class APIClient: AuthNetworking {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "。.!"))
         return "\(normalizedFallback)（HTTP \(response.statusCode)）"
-    }
-
-    private func makeMultipartBody(
-        boundary: String,
-        fileData: Data,
-        filename: String,
-        duration: Int,
-        mimeType: String
-    ) -> Data {
-        var body = Data()
-        let lineBreak = "\r\n"
-
-        body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"duration\"\(lineBreak)\(lineBreak)".data(using: .utf8)!)
-        body.append("\(duration)\(lineBreak)".data(using: .utf8)!)
-
-        body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"mimeType\"\(lineBreak)\(lineBreak)".data(using: .utf8)!)
-        body.append("\(mimeType)\(lineBreak)".data(using: .utf8)!)
-
-        body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\(lineBreak)".data(using: .utf8)!)
-        body.append("Content-Type: \(mimeType)\(lineBreak)\(lineBreak)".data(using: .utf8)!)
-        body.append(fileData)
-        body.append(lineBreak.data(using: .utf8)!)
-
-        body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
-        return body
     }
 
     private nonisolated(unsafe) static let iso8601: ISO8601DateFormatter = {
