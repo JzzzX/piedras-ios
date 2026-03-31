@@ -74,9 +74,9 @@ private struct MeetingNoteAttachmentTile: View {
             Button(action: onDelete) {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(AppTheme.surface)
+                    .foregroundStyle(AppTheme.primaryActionForeground)
                     .frame(width: 18, height: 18)
-                    .background(AppTheme.ink)
+                    .background(AppTheme.primaryActionFill)
             }
             .buttonStyle(.plain)
             .offset(x: 4, y: -4)
@@ -123,9 +123,9 @@ private struct RecordingMeetingNoteAttachmentTile: View {
             Button(action: onDelete) {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(AppTheme.surface)
+                    .foregroundStyle(AppTheme.primaryActionForeground)
                     .frame(width: 18, height: 18)
-                    .background(AppTheme.ink)
+                    .background(AppTheme.primaryActionFill)
             }
             .buttonStyle(.plain)
             .offset(x: 4, y: -4)
@@ -202,7 +202,7 @@ struct MeetingNoteAttachmentsSection: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(AppStrings.current.noteAttachmentsTitle)
                     .font(AppTheme.bodyFont(size: 16, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
+                    .foregroundStyle(AppTheme.brandInk)
 
                 Text("\(meeting.noteAttachmentFileNames.count) / 10")
                     .font(AppTheme.dataFont(size: 11))
@@ -239,12 +239,12 @@ struct MeetingNoteAttachmentsSection: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
                 .frame(width: 32, height: 32)
-                .background(AppTheme.surface)
+                .background(AppTheme.selectedChromeFill)
                 .overlay(
                     Rectangle()
-                        .stroke(AppTheme.border, lineWidth: 1)
+                        .stroke(AppTheme.selectedChromeBorder, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -286,7 +286,7 @@ struct RecordingMeetingNoteAttachmentsDock: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(AppStrings.current.noteAttachmentsTitle)
                             .font(AppTheme.bodyFont(size: 15, weight: .semibold))
-                            .foregroundStyle(AppTheme.ink)
+                            .foregroundStyle(AppTheme.brandInk)
 
                         Text("\(meeting.noteAttachmentFileNames.count) / 10")
                             .font(AppTheme.dataFont(size: 11))

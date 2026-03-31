@@ -114,7 +114,7 @@ struct TranscriptView: View {
         HStack(spacing: 4) {
             Text(label)
                 .font(AppTheme.dataFont(size: 11, weight: .bold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
 
             if isEditable {
                 Image(systemName: "pencil")
@@ -124,10 +124,10 @@ struct TranscriptView: View {
         }
         .padding(.horizontal, 8)
         .frame(height: 22)
-        .background(AppTheme.surface)
+        .background(AppTheme.selectedChromeFill)
         .overlay(
             Rectangle()
-                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.subtleBorderWidth)
         )
     }
 
@@ -139,17 +139,17 @@ struct TranscriptView: View {
             if annotation.hasComment {
                 Image(systemName: "text.quote")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(AppTheme.subtleInk)
+                    .foregroundStyle(AppTheme.brandInkMuted)
             }
             if annotation.hasImages {
                 HStack(spacing: 2) {
                     Image(systemName: "photo")
                         .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(AppTheme.subtleInk)
+                        .foregroundStyle(AppTheme.brandInkMuted)
                     if annotation.imageFileNames.count > 1 {
                         Text("\(annotation.imageFileNames.count)")
                             .font(AppTheme.dataFont(size: 9, weight: .bold))
-                            .foregroundStyle(AppTheme.subtleInk)
+                            .foregroundStyle(AppTheme.brandInkMuted)
                     }
                 }
             }

@@ -61,7 +61,7 @@ struct ChatSessionHistoryList: View {
             VStack(alignment: .leading, spacing: 6) {
                 Text(session.title)
                     .font(AppTheme.bodyFont(size: 16, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
+                    .foregroundStyle(isActive ? AppTheme.brandInk : AppTheme.ink)
                     .lineLimit(2)
 
                 Text(session.historyMetadataLine())
@@ -76,7 +76,8 @@ struct ChatSessionHistoryList: View {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .softCard(
-            borderColor: isActive ? AppTheme.highlight : AppTheme.subtleBorderColor,
+            fill: isActive ? AppTheme.selectedChromeFill : AppTheme.surface,
+            borderColor: isActive ? AppTheme.selectedChromeBorder : AppTheme.subtleBorderColor,
             lineWidth: isActive ? 1.5 : AppTheme.subtleBorderWidth
         )
         .contentShape(Rectangle())

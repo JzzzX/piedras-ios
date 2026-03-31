@@ -81,11 +81,11 @@ struct AppRootView: View {
 
             VStack(spacing: 14) {
                 ProgressView()
-                    .tint(AppTheme.ink)
+                    .tint(AppTheme.brandInk)
 
                 Text(AppStrings.current.authRestoringSession)
                     .font(AppTheme.bodyFont(size: 15, weight: .semibold))
-                    .foregroundStyle(AppTheme.ink)
+                    .foregroundStyle(AppTheme.brandInk)
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 20)

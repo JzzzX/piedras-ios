@@ -41,11 +41,11 @@ struct ChatHistoryDrawerView: View {
                 HStack(spacing: 8) {
                     Image(systemName: scopeIcon)
                         .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(AppTheme.ink)
+                        .foregroundStyle(AppTheme.brandInk)
 
                     Text(AppStrings.current.chatHistoryTitle)
                         .font(AppTheme.bodyFont(size: 15, weight: .bold))
-                        .foregroundStyle(AppTheme.ink)
+                        .foregroundStyle(AppTheme.brandInk)
                 }
 
                 Spacer()
@@ -74,11 +74,11 @@ struct ChatHistoryDrawerView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "plus")
                         .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(AppTheme.ink)
+                        .foregroundStyle(AppTheme.brandInk)
 
                     Text(AppStrings.current.newChat)
                         .font(AppTheme.bodyFont(size: 13, weight: .semibold))
-                        .foregroundStyle(AppTheme.ink)
+                        .foregroundStyle(AppTheme.brandInk)
 
                     Spacer()
                 }
@@ -136,7 +136,7 @@ struct ChatHistoryDrawerView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title.uppercased())
             .font(AppTheme.bodyFont(size: 11, weight: .semibold))
-            .foregroundStyle(AppTheme.subtleInk)
+            .foregroundStyle(AppTheme.brandInk)
             .tracking(0.4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
@@ -169,7 +169,7 @@ struct ChatHistoryDrawerView: View {
 
                     Text(session.historyMetadataLine())
                         .font(AppTheme.dataFont(size: 10))
-                        .foregroundStyle(AppTheme.subtleInk)
+                        .foregroundStyle(AppTheme.brandInkMuted)
                         .lineLimit(1)
                 }
 
@@ -178,11 +178,11 @@ struct ChatHistoryDrawerView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(isActive ? AppTheme.highlightSoft : Color.clear)
+            .background(isActive ? AppTheme.selectedChromeFill : Color.clear)
             .overlay(alignment: .leading) {
                 if isActive {
                     Rectangle()
-                        .fill(AppTheme.highlight)
+                        .fill(AppTheme.brandInk)
                         .frame(width: 3)
                 }
             }

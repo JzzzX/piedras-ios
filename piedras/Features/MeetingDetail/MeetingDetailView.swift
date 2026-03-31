@@ -132,13 +132,13 @@ struct MeetingDetailView: View {
             if let toastMessage {
                 Text(toastMessage)
                     .font(AppTheme.bodyFont(size: 13, weight: .semibold))
-                    .foregroundStyle(AppTheme.surface)
+                    .foregroundStyle(AppTheme.primaryActionForeground)
                     .padding(.horizontal, 14)
                     .frame(height: 36)
-                    .background(AppTheme.ink)
+                    .background(AppTheme.primaryActionFill)
                     .overlay(
                         Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                            .stroke(AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
                     )
                     .padding(.top, 72)
                     .transition(.opacity.combined(with: .move(edge: .top)))
@@ -1486,9 +1486,9 @@ struct MeetingDetailView: View {
     ) -> some View {
         let config = MeetingDetailChrome.entry(for: kind)
         let usesHeroChrome = kind == .chat
-        let foreground = usesHeroChrome ? AppTheme.surface : AppTheme.ink
-        let background = usesHeroChrome ? AppTheme.ink : AppTheme.surface
-        let borderColor = usesHeroChrome ? AppTheme.ink : AppTheme.border
+        let foreground = usesHeroChrome ? AppTheme.primaryActionForeground : AppTheme.ink
+        let background = usesHeroChrome ? AppTheme.primaryActionFill : AppTheme.surface
+        let borderColor = usesHeroChrome ? AppTheme.brandInk : AppTheme.border
         let lineWidth = usesHeroChrome ? CGFloat(2) : AppTheme.retroBorderWidth
 
         return Button(action: action) {
@@ -1968,7 +1968,7 @@ private struct SheetActionHeaderBar: View {
                     onSave()
                 }
                 .font(AppTheme.bodyFont(size: 16, weight: .semibold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
                 .accessibilityIdentifier("EnhancedNotesEditorSaveButton")
             }
             .padding(.horizontal, 20)

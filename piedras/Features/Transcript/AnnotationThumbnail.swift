@@ -37,9 +37,9 @@ struct AnnotationThumbnail: View {
             Button(action: onDelete) {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(AppTheme.surface)
+                    .foregroundStyle(AppTheme.primaryActionForeground)
                     .frame(width: 18, height: 18)
-                    .background(AppTheme.ink)
+                    .background(AppTheme.primaryActionFill)
             }
             .buttonStyle(.plain)
             .offset(x: 4, y: -4)

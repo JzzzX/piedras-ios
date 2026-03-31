@@ -24,8 +24,8 @@ struct AuthView: View {
 
     private var header: some View {
         Text(AppStrings.current.appTitle)
-            .font(AppTheme.bodyFont(size: 30, weight: .bold))
-            .foregroundStyle(AppTheme.ink)
+            .font(AppTheme.titleFont(size: 30))
+            .foregroundStyle(AppTheme.brandInk)
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
             .softCard()
@@ -68,13 +68,13 @@ struct AuthView: View {
             Button(action: submit) {
                 Text(primaryActionTitle)
                     .font(AppTheme.bodyFont(size: 15, weight: .semibold))
-                    .foregroundStyle(AppTheme.surface)
+                    .foregroundStyle(AppTheme.primaryActionForeground)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
-                    .background(AppTheme.ink)
+                    .background(AppTheme.primaryActionFill)
                     .overlay(
                         Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                            .stroke(AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
                     )
                     .retroHardShadow()
             }
@@ -128,7 +128,7 @@ struct AuthView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-                .foregroundStyle(AppTheme.subtleInk)
+                .foregroundStyle(AppTheme.brandInkMuted)
 
             TextField(placeholder, text: text)
                 .textInputAutocapitalization(.never)
@@ -141,7 +141,7 @@ struct AuthView: View {
                 .background(AppTheme.surface)
                 .overlay(
                     Rectangle()
-                        .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                        .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.subtleBorderWidth)
                 )
         }
     }
@@ -154,7 +154,7 @@ struct AuthView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
                 .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-                .foregroundStyle(AppTheme.subtleInk)
+                .foregroundStyle(AppTheme.brandInkMuted)
 
             SecureField(placeholder, text: text)
                 .textInputAutocapitalization(.never)
@@ -166,7 +166,7 @@ struct AuthView: View {
                 .background(AppTheme.surface)
                 .overlay(
                     Rectangle()
-                        .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                        .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.subtleBorderWidth)
                 )
         }
     }
@@ -175,30 +175,30 @@ struct AuthView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(AppStrings.current.authVerificationPendingTitle)
                 .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
 
             Text(AppStrings.current.authVerificationPendingMessage(email: verificationEmail))
                 .font(AppTheme.bodyFont(size: 12))
-                .foregroundStyle(AppTheme.subtleInk)
+                .foregroundStyle(AppTheme.brandInkMuted)
         }
         .padding(12)
-        .background(AppTheme.surface)
+        .background(AppTheme.noteIconWash)
         .overlay(
             Rectangle()
-                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.subtleBorderWidth)
         )
     }
 
     private func infoBanner(_ message: String) -> some View {
         Text(message)
             .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-            .foregroundStyle(AppTheme.ink)
+            .foregroundStyle(AppTheme.brandInk)
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(AppTheme.surface)
+            .background(AppTheme.noteIconWash)
             .overlay(
                 Rectangle()
-                    .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                    .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.subtleBorderWidth)
             )
     }
 

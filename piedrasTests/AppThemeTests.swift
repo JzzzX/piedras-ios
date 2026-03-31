@@ -5,6 +5,15 @@ import UIKit
 
 struct AppThemeTests {
     @Test
+    func appTitleUsesBrandOnlyWordmark() {
+        let chinese = AppStringTable(language: .chinese)
+        let english = AppStringTable(language: .english)
+
+        #expect(chinese.appTitle == "Piedras")
+        #expect(english.appTitle == "Piedras")
+    }
+
+    @Test
     func bodyUIFontUsesProportionalSystemFont() {
         let font = AppTheme.bodyUIFont(size: 16, weight: .semibold)
 
@@ -18,14 +27,40 @@ struct AppThemeTests {
     }
 
     @Test
-    func themeUsesWarmerLighterRetroChromeTokens() {
-        #expect(UIColor(AppTheme.border).hexRGB == 0xC8B9A6)
-        #expect(UIColor(AppTheme.mutedInk).hexRGB == 0x8A7E6B)
-        #expect(UIColor(AppTheme.subtleInk).hexRGB == 0xB5A998)
-        #expect(UIColor(AppTheme.caramel).hexRGB == 0x9C7B5C)
-        #expect(UIColor(AppTheme.iconBackground).hexRGB == 0xE8DED0)
+    func themeUsesHigherContrastPaperPaletteForHomeUI() {
+        #expect(UIColor(AppTheme.background).hexRGB == 0xF3ECDD)
+        #expect(UIColor(AppTheme.surface).hexRGB == 0xFAF5EB)
+        #expect(UIColor(AppTheme.dockSurface).hexRGB == 0xE8E1D0)
+        #expect(UIColor(AppTheme.border).hexRGB == 0xC9B8A3)
+        #expect(UIColor(AppTheme.ink).hexRGB == 0x1E1A17)
+        #expect(UIColor(AppTheme.mutedInk).hexRGB == 0x7D6E60)
+        #expect(UIColor(AppTheme.highlight).hexRGB == 0xBC6C4D)
         #expect(AppTheme.retroBorderWidth == 1)
         #expect(AppTheme.retroShadowOffset == 3)
+    }
+
+    @Test
+    func themeSeparatesMossInkBrandingFromRecordingHighlight() {
+        #expect(UIColor(AppTheme.brandInk).hexRGB == 0x31493F)
+        #expect(UIColor(AppTheme.brandInkMuted).hexRGB == 0x61786C)
+        #expect(UIColor(AppTheme.brandInkSoft).hexRGB == 0xDFE7E1)
+        #expect(UIColor(AppTheme.highlight).hexRGB == 0xBC6C4D)
+        #expect(UIColor(AppTheme.highlightPressed).hexRGB == 0x9E5D43)
+    }
+
+    @Test
+    func themeAddsMinimalNotesChromeForMossInkHomeRows() {
+        #expect(UIColor(AppTheme.noteSectionRule).hexRGB == 0xCED7D2)
+        #expect(UIColor(AppTheme.notePressFill).hexRGB == 0xEEF2EE)
+        #expect(UIColor(AppTheme.noteIconWash).hexRGB == 0xF1ECE2)
+    }
+
+    @Test
+    func themePromotesMossInkToGlobalPrimaryActionRole() {
+        #expect(UIColor(AppTheme.primaryActionFill).hexRGB == 0x31493F)
+        #expect(UIColor(AppTheme.primaryActionPressedFill).hexRGB == 0x24372F)
+        #expect(UIColor(AppTheme.primaryActionForeground).hexRGB == 0xFAF5EB)
+        #expect(UIColor(AppTheme.selectedChromeFill).hexRGB == 0xDFE7E1)
     }
 
     @Test

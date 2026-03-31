@@ -165,13 +165,13 @@ struct ChatView: View {
         } label: {
             Text(text)
                 .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(AppTheme.surface)
+                .background(AppTheme.noteIconWash)
                 .overlay(
                     Rectangle()
-                        .stroke(AppTheme.border, lineWidth: 1)
+                        .stroke(AppTheme.selectedChromeBorder, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -188,7 +188,7 @@ struct ChatView: View {
         return VStack(alignment: .leading, spacing: 10) {
             Text(isUser ? "YOU>" : "AI>")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(AppTheme.subtleInk)
+                .foregroundStyle(isUser ? AppTheme.brandInk : AppTheme.brandInkMuted)
 
             if message.content.isEmpty, !isUser, meetingStore.isStreamingChat(meetingID: meeting.id) {
                 HStack(spacing: 4) {
@@ -248,12 +248,12 @@ struct ChatView: View {
                 Button(action: sendCurrentInput) {
                     Image(systemName: "arrow.up")
                         .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(AppTheme.surface)
+                        .foregroundStyle(AppTheme.primaryActionForeground)
                         .frame(width: 52, height: 52)
-                        .background(AppTheme.ink)
+                        .background(AppTheme.primaryActionFill)
                         .overlay(
                             Rectangle()
-                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                                .stroke(AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
                         )
                 }
                 .buttonStyle(.plain)

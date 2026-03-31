@@ -38,7 +38,7 @@ struct DeveloperSettingsView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text(AppEnvironment.cloudName)
                                 .font(AppTheme.bodyFont(size: 17, weight: .semibold))
-                                .foregroundStyle(AppTheme.ink)
+                                .foregroundStyle(AppTheme.brandInk)
 
                             Text(settingsStore.backendDisplayURLString)
                                 .font(AppTheme.dataFont(size: 13))
@@ -52,13 +52,13 @@ struct DeveloperSettingsView: View {
                             } label: {
                                 Text(settingsStore.isCheckingHealth ? AppStrings.current.checking : AppStrings.current.refreshStatus)
                                     .font(AppTheme.bodyFont(size: 14, weight: .semibold))
-                                    .foregroundStyle(settingsStore.isCheckingHealth ? AppTheme.subtleInk : AppTheme.surface)
+                                    .foregroundStyle(settingsStore.isCheckingHealth ? AppTheme.subtleInk : AppTheme.primaryActionForeground)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 42)
-                                    .background(settingsStore.isCheckingHealth ? AppTheme.surface : AppTheme.ink)
+                                    .background(settingsStore.isCheckingHealth ? AppTheme.selectedChromeFill : AppTheme.primaryActionFill)
                                     .overlay(
                                         Rectangle()
-                                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                                            .stroke(settingsStore.isCheckingHealth ? AppTheme.selectedChromeBorder : AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
                                     )
                                     .retroHardShadow()
                             }
@@ -97,7 +97,7 @@ struct DeveloperSettingsView: View {
                                     }
                                     .buttonStyle(.plain)
                                     .font(AppTheme.bodyFont(size: 13, weight: .semibold))
-                                    .foregroundStyle(AppTheme.ink)
+                                    .foregroundStyle(AppTheme.brandInk)
 
                                     if settingsStore.isUsingDebugBackendOverride {
                                         Button(AppStrings.current.useCloudDefault) {
@@ -106,7 +106,7 @@ struct DeveloperSettingsView: View {
                                         }
                                         .buttonStyle(.plain)
                                         .font(AppTheme.bodyFont(size: 13, weight: .semibold))
-                                        .foregroundStyle(AppTheme.ink)
+                                        .foregroundStyle(AppTheme.brandInk)
                                     }
                                 }
                             }
@@ -198,8 +198,8 @@ struct DeveloperSettingsView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.current.devSettingsTitle)
-                    .font(AppTheme.bodyFont(size: 28, weight: .bold))
-                    .foregroundStyle(AppTheme.ink)
+                    .font(AppTheme.titleFont(size: 28, weight: .bold))
+                    .foregroundStyle(AppTheme.brandInk)
 
                 Text(AppStrings.current.developerDiagnostics)
                     .font(AppTheme.bodyFont(size: 13))
@@ -220,7 +220,7 @@ struct DeveloperSettingsView: View {
 
             Text(title)
                 .font(AppTheme.bodyFont(size: 14, weight: .semibold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
 
             Spacer()
 
@@ -236,7 +236,7 @@ struct DeveloperSettingsView: View {
         HStack {
             Text(title)
                 .font(AppTheme.bodyFont(size: 14, weight: .semibold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
 
             Spacer()
 
