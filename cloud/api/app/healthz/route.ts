@@ -8,7 +8,11 @@ import { getAudioFinalizationRuntimeStatus } from "@/lib/recording-runtime-healt
 import { getStartupBootstrapSnapshot } from "@/lib/startup-bootstrap-state";
 
 export async function GET(req: NextRequest) {
-  const mode = req.nextUrl.searchParams.get('mode')?.toLowerCase();
+  const requestedMode = req.nextUrl.searchParams.get('mode')?.toLowerCase();
+  const pathname = req.nextUrl.pathname;
+  const mode =
+    requestedMode
+    ?? (pathname === '/healthz' ? 'basic' : 'full');
   const startupBootstrap = getStartupBootstrapSnapshot();
   let database = false;
 
