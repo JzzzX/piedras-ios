@@ -102,12 +102,12 @@ struct GlobalChatView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.current.ask)
-                    .font(AppTheme.bodyFont(size: 28, weight: .bold))
-                    .foregroundStyle(AppTheme.ink)
+                    .font(AppTheme.titleFont(size: 28))
+                    .foregroundStyle(AppTheme.brandInk)
 
                 Text(AppStrings.current.allNotes)
                     .font(AppTheme.bodyFont(size: 14))
-                    .foregroundStyle(AppTheme.subtleInk)
+                    .foregroundStyle(AppTheme.brandInkMuted)
             }
 
             Spacer()
@@ -187,7 +187,7 @@ struct GlobalChatView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text(isUser ? "YOU>" : "PIEDRAS>")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundStyle(isUser ? AppTheme.surface.opacity(0.72) : AppTheme.subtleInk)
+                .foregroundStyle(isUser ? AppTheme.primaryActionForeground.opacity(0.78) : AppTheme.brandInkMuted)
 
             if message.content.isEmpty && !isUser && globalChatStore.isStreaming {
                 HStack(spacing: 4) {
@@ -201,7 +201,7 @@ struct GlobalChatView: View {
                     Text(message.content)
                         .font(AppTheme.bodyFont(size: 15))
                         .lineSpacing(AppTheme.editorialBodyLineSpacing)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(AppTheme.primaryActionForeground)
                         .textSelection(.enabled)
                 } else {
                     ChatMarkdownMessageView(
@@ -213,10 +213,10 @@ struct GlobalChatView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isUser ? AppTheme.ink : AppTheme.surface)
+        .background(isUser ? AppTheme.primaryActionFill : AppTheme.surface)
         .overlay(
             Rectangle()
-                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                .stroke(isUser ? AppTheme.brandInk : AppTheme.selectedChromeBorder, lineWidth: AppTheme.retroBorderWidth)
         )
     }
 
@@ -226,13 +226,13 @@ struct GlobalChatView: View {
         } label: {
             Text(text)
                 .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(AppTheme.surface)
+                .background(AppTheme.noteIconWash)
                 .overlay(
                     Rectangle()
-                        .stroke(AppTheme.border, lineWidth: 1)
+                        .stroke(AppTheme.selectedChromeBorder, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
@@ -267,12 +267,12 @@ struct GlobalChatView: View {
             Button(action: sendCurrentInput) {
                 Image(systemName: "arrow.up")
                     .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(AppTheme.primaryActionForeground)
                     .frame(width: 52, height: 52)
-                    .background(AppTheme.ink)
+                    .background(AppTheme.primaryActionFill)
                     .overlay(
                         Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                            .stroke(AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
                     )
             }
             .buttonStyle(.plain)
@@ -301,7 +301,7 @@ struct GlobalChatView: View {
             }
             .buttonStyle(.plain)
             .font(AppTheme.bodyFont(size: 13, weight: .semibold))
-            .foregroundStyle(AppTheme.ink)
+            .foregroundStyle(AppTheme.brandInk)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

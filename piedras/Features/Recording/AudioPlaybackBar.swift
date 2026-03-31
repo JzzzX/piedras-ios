@@ -207,20 +207,20 @@ struct TranscriptAudioControlBar: View {
                     } label: {
                         ZStack {
                             Rectangle()
-                                .fill(AppTheme.ink)
+                                .fill(AppTheme.primaryActionFill)
                                 .frame(width: 40, height: 40)
                                 .overlay(
                                     Rectangle()
-                                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                                        .stroke(AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
                                 )
 
                             if playbackController.isPreparing {
                                 ProgressView()
-                                    .tint(.white)
+                                    .tint(AppTheme.primaryActionForeground)
                             } else {
                                 Image(systemName: playbackController.isPlaying ? "pause.fill" : "play.fill")
                                     .font(.system(size: 14, weight: .bold))
-                                    .foregroundStyle(.white)
+                                    .foregroundStyle(AppTheme.primaryActionForeground)
                             }
                         }
                     }
@@ -244,13 +244,13 @@ struct TranscriptAudioControlBar: View {
                     } label: {
                         Text(rateLabel(playbackController.playbackRate))
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
-                            .foregroundStyle(AppTheme.ink)
+                            .foregroundStyle(AppTheme.brandInk)
                             .padding(.horizontal, 12)
                             .frame(height: 34)
-                            .background(AppTheme.surface)
+                            .background(AppTheme.selectedChromeFill)
                             .overlay(
                                 Rectangle()
-                                    .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                                    .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.retroBorderWidth)
                             )
                     }
                     .disabled(isRetranscribing)
@@ -276,7 +276,7 @@ struct TranscriptAudioControlBar: View {
                             }
                         }
                     )
-                    .tint(AppTheme.ink)
+                    .tint(AppTheme.primaryActionFill)
                     .disabled(playbackController.isPreparing || isRetranscribing)
                     .accessibilityIdentifier("TranscriptPlaybackSlider")
 
@@ -315,12 +315,12 @@ struct TranscriptAudioControlBar: View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
                 .frame(width: 34, height: 34)
-                .background(AppTheme.surface)
+                .background(AppTheme.selectedChromeFill)
                 .overlay(
                     Rectangle()
-                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.retroBorderWidth)
                 )
         }
         .buttonStyle(.plain)

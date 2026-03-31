@@ -211,19 +211,19 @@ struct AppGlassCircleButton: View {
         Button(action: action) {
             ZStack {
                 Rectangle()
-                    .fill(prominent ? AppTheme.ink : AppTheme.surface)
+                    .fill(prominent ? AppTheme.primaryActionFill : AppTheme.surface)
                     .overlay(
                         Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                            .stroke(prominent ? AppTheme.brandInk : AppTheme.selectedChromeBorder, lineWidth: AppTheme.retroBorderWidth)
                     )
 
                 Image(systemName: systemName)
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(prominent ? AppTheme.surface : AppTheme.ink)
+                    .foregroundStyle(prominent ? AppTheme.primaryActionForeground : AppTheme.brandInk)
             }
             .frame(width: size, height: size)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SharedChromePressStyle(prominent: prominent))
         .accessibilityLabel(accessibilityLabel)
     }
 }
@@ -239,15 +239,15 @@ struct GlassIconBadge: View {
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(AppTheme.surface)
+                .fill(AppTheme.noteIconWash)
                 .overlay(
                     Rectangle()
-                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.retroBorderWidth)
                 )
 
             Image(systemName: systemName)
                 .font(.system(size: symbolSize ?? size * 0.38, weight: .bold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInkMuted)
         }
         .frame(width: size, height: size)
     }
@@ -267,13 +267,27 @@ struct AppGlassCapsuleButton<Label: View>: View {
             label()
                 .frame(minHeight: minHeight)
                 .frame(maxWidth: fillsWidth ? .infinity : nil)
-                .background(prominent ? AppTheme.ink : AppTheme.surface)
+                .background(prominent ? AppTheme.primaryActionFill : AppTheme.surface)
                 .overlay(
                     Rectangle()
-                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        .stroke(prominent ? AppTheme.brandInk : AppTheme.selectedChromeBorder, lineWidth: AppTheme.retroBorderWidth)
                 )
                 .retroHardShadow()
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SharedChromePressStyle(prominent: prominent))
+    }
+}
+
+private struct SharedChromePressStyle: ButtonStyle {
+    let prominent: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .overlay {
+                Rectangle()
+                    .fill(prominent ? AppTheme.primaryActionPressedFill : AppTheme.selectedChromeFill)
+                    .opacity(configuration.isPressed ? (prominent ? 0.22 : 0.55) : 0)
+            }
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
     }
 }

@@ -130,8 +130,8 @@ struct SettingsView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.current.settingsTitle)
-                    .font(AppTheme.bodyFont(size: 28, weight: .bold))
-                    .foregroundStyle(AppTheme.ink)
+                    .font(AppTheme.titleFont(size: 28))
+                    .foregroundStyle(AppTheme.brandInk)
             }
 
             Spacer()
@@ -154,17 +154,17 @@ struct SettingsView: View {
                 } label: {
                     Text(lang.displayName)
                         .font(AppTheme.bodyFont(size: 15, weight: .semibold))
-                        .foregroundStyle(settingsStore.appLanguage == lang ? AppTheme.surface : AppTheme.ink)
+                        .foregroundStyle(settingsStore.appLanguage == lang ? AppTheme.primaryActionForeground : AppTheme.brandInk)
                         .frame(maxWidth: .infinity)
                         .frame(height: 40)
-                        .background(settingsStore.appLanguage == lang ? AppTheme.ink : AppTheme.surface)
+                        .background(settingsStore.appLanguage == lang ? AppTheme.primaryActionFill : AppTheme.surface)
                 }
                 .buttonStyle(.plain)
             }
         }
         .overlay(
             Rectangle()
-                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.subtleBorderWidth)
         )
     }
 
@@ -178,7 +178,7 @@ struct SettingsView: View {
 
             Text(value)
                 .font(AppTheme.dataFont(size: 13))
-                .foregroundStyle(AppTheme.subtleInk)
+                .foregroundStyle(AppTheme.brandInkMuted)
                 .multilineTextAlignment(.trailing)
         }
         .padding(.vertical, 11)

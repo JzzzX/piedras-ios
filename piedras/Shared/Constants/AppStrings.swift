@@ -25,7 +25,7 @@ struct AppStringTable {
 
     // ── MeetingListView ──────────────────────────────────────────
 
-    var appTitle: String { isChinese ? "Piedras 笔记" : "Piedras Notes" }
+    var appTitle: String { "Piedras" }
     var noNotesYet: String { isChinese ? "还没有笔记" : "No notes yet" }
     var tapMicToCapture: String { isChinese ? "点击麦克风开始你的第一条笔记。" : "Tap the mic to capture your first note." }
     var chatWithNotes: String { isChinese ? "与笔记对话" : "Chat with notes" }

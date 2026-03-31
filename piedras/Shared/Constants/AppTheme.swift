@@ -6,42 +6,68 @@ import UIKit
 enum AppTheme {
     // ── Core Palette ──────────────────────────────────────────────
     /// Manila paper background
-    static var background: Color { Color(hex: 0xEAE3D2) }
+    static var background: Color { Color(hex: 0xF3ECDD) }
     /// Slightly darker paper for secondary areas
-    static var backgroundSecondary: Color { Color(hex: 0xE2DBCA) }
+    static var backgroundSecondary: Color { Color(hex: 0xEBE2D1) }
     /// Bleached paper surface (cards/windows)
-    static var surface: Color { Color(hex: 0xF4F0E6) }
+    static var surface: Color { Color(hex: 0xFAF5EB) }
     /// Elevated surface (same as surface in retro: no transparency)
-    static var surfaceElevated: Color { Color(hex: 0xF4F0E6) }
+    static var surfaceElevated: Color { Color(hex: 0xFAF5EB) }
     /// Warm taupe border for lighter retro chrome
-    static var border: Color { Color(hex: 0xC8B9A6) }
+    static var border: Color { Color(hex: 0xC9B8A3) }
     /// Ink black for text
-    static var ink: Color { Color(hex: 0x111111) }
+    static var ink: Color { Color(hex: 0x1E1A17) }
     /// Faded ink for secondary text
-    static var mutedInk: Color { Color(hex: 0x8A7E6B) }
+    static var mutedInk: Color { Color(hex: 0x7D6E60) }
     /// Faded ink for tertiary text
-    static var subtleInk: Color { Color(hex: 0xB5A998) }
+    static var subtleInk: Color { Color(hex: 0xA99889) }
+    /// Moss-ink brand color used for brand, AI, and structural emphasis
+    static var brandInk: Color { Color(hex: 0x31493F) }
+    /// Muted moss-ink for secondary branded text and supportive labels
+    static var brandInkMuted: Color { Color(hex: 0x61786C) }
+    /// Soft moss-ink wash for subtle fills and status chips
+    static var brandInkSoft: Color { Color(hex: 0xDFE7E1) }
+    /// Hairline treatment for branded dividers and subtle structure
+    static var brandInkHairline: Color { brandInk.opacity(0.18) }
+    /// Minimal moss-tinted rule for section dividers in the notes home
+    static var noteSectionRule: Color { Color(hex: 0xCED7D2) }
+    /// Very light pressed wash so note rows acknowledge touch without becoming heavy
+    static var notePressFill: Color { Color(hex: 0xEEF2EE) }
+    /// Paper-first icon wash with only a hint of moss tint
+    static var noteIconWash: Color { Color(hex: 0xF1ECE2) }
+    /// Primary non-recording action fill across the app
+    static var primaryActionFill: Color { brandInk }
+    /// Pressed shade for primary non-recording actions
+    static var primaryActionPressedFill: Color { Color(hex: 0x24372F) }
+    /// Foreground content color used on primary non-recording actions
+    static var primaryActionForeground: Color { surface }
+    /// Soft selected fill for tabs, rows, and inline chrome
+    static var selectedChromeFill: Color { brandInkSoft }
+    /// Border tone for selected or branded structural chrome
+    static var selectedChromeBorder: Color { noteSectionRule }
     /// Muted accent (same as ink in retro)
-    static var accent: Color { Color(hex: 0x111111) }
+    static var accent: Color { Color(hex: 0x1E1A17) }
     /// Soft accent background
-    static var accentSoft: Color { Color(hex: 0xE2DBCA) }
-    /// Rubber stamp red – primary highlight
-    static var highlight: Color { Color(hex: 0xD9423E) }
+    static var accentSoft: Color { Color(hex: 0xE8DED0) }
+    /// Terracotta primary accent used for the recording CTA
+    static var highlight: Color { Color(hex: 0xBC6C4D) }
     /// Soft highlight background
-    static var highlightSoft: Color { Color(hex: 0xF4E6E5) }
-    /// Danger – same red
+    static var highlightSoft: Color { Color(hex: 0xF1E2DA) }
+    /// Danger remains red so destructive/error states stay distinct from the recording CTA
     static var danger: Color { Color(hex: 0xD9423E) }
     /// Success – typewriter green
     static var success: Color { Color(hex: 0x5F824D) }
     /// Ballpoint pen blue
     static var penBlue: Color { Color(hex: 0x2B4C7E) }
     /// Caramel accent for icons and utility emphasis
-    static var caramel: Color { Color(hex: 0x9C7B5C) }
+    static var caramel: Color { Color(hex: 0x6B4A36) }
     /// Light warm background for document and utility icons
-    static var iconBackground: Color { Color(hex: 0xE8DED0) }
+    static var iconBackground: Color { Color(hex: 0xEFE3D3) }
 
     /// Dock / toolbar surface – slightly darker than cards for visual separation
     static var dockSurface: Color { Color(hex: 0xE8E1D0) }
+    /// Pressed terracotta shade for the recording CTA
+    static var highlightPressed: Color { Color(hex: 0x9E5D43) }
 
     // Ambient colors (no gradient blobs in retro – flat)
     static var ambientBlue: Color { Color(hex: 0xEAE3D2) }
@@ -113,9 +139,18 @@ enum AppTheme {
         .system(size: size, weight: weight, design: .default)
     }
 
+    /// Serif display font used sparingly for brand/title accents.
+    static func titleFont(size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        Font.custom("Georgia", size: size).weight(weight)
+    }
+
     /// Monospaced font for timestamps, versions, and technical data.
     static func dataFont(size: CGFloat, weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .monospaced)
+    }
+
+    static var sectionFont: Font {
+        Font.custom("Georgia", size: 11).weight(.bold)
     }
 
     /// UIKit bridge for natural language content.
@@ -129,7 +164,7 @@ enum AppTheme {
     static let retroShadowOffset: CGFloat = 3
     static let retroTitleBarHeight: CGFloat = 24
     static let subtleBorderWidth: CGFloat = 1
-    static let subtleBorderColor: Color = Color(hex: 0x111111).opacity(0.13)
+    static let subtleBorderColor: Color = Color(hex: 0x1E1A17).opacity(0.14)
     static let compactIconSize: CGFloat = 32
 }
 
@@ -306,15 +341,21 @@ struct RetroButtonStyle: ButtonStyle {
     var isPrimary: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
+        let foreground = isPrimary ? AppTheme.primaryActionForeground : AppTheme.brandInk
+        let background = isPrimary
+            ? (configuration.isPressed ? AppTheme.primaryActionPressedFill : AppTheme.primaryActionFill)
+            : (configuration.isPressed ? AppTheme.selectedChromeFill : AppTheme.surface)
+        let border = isPrimary ? AppTheme.brandInk : AppTheme.selectedChromeBorder
+
         configuration.label
             .font(.system(size: 15, weight: .bold, design: .monospaced))
-            .foregroundStyle(isPrimary ? AppTheme.surface : AppTheme.ink)
+            .foregroundStyle(foreground)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(isPrimary ? AppTheme.ink : AppTheme.surface)
+            .background(background)
             .overlay(
                 Rectangle()
-                    .stroke(AppTheme.ink, lineWidth: AppTheme.retroBorderWidth)
+                    .stroke(border, lineWidth: AppTheme.retroBorderWidth)
             )
             .retroHardShadow(
                 x: configuration.isPressed ? 0 : AppTheme.retroShadowOffset,
@@ -431,7 +472,7 @@ struct ThinDivider: View {
 
     var body: some View {
         Rectangle()
-            .fill(AppTheme.subtleBorderColor)
+            .fill(AppTheme.selectedChromeBorder)
             .frame(height: AppTheme.subtleBorderWidth)
             .padding(.leading, inset)
     }
@@ -443,8 +484,8 @@ struct SectionLabel: View {
     var body: some View {
         Text(title.uppercased())
             .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-            .foregroundStyle(AppTheme.subtleInk)
-            .tracking(0.6)
+            .foregroundStyle(AppTheme.brandInk)
+            .tracking(1.0)
             .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
@@ -474,15 +515,15 @@ struct RetroIconBadge: View {
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(AppTheme.surface)
+                .fill(AppTheme.noteIconWash)
                 .overlay(
                     Rectangle()
-                        .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.retroBorderWidth)
                 )
 
             Image(systemName: systemName)
                 .font(.system(size: symbolSize ?? size * 0.38, weight: .bold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInkMuted)
         }
         .frame(width: size, height: size)
     }
@@ -501,15 +542,15 @@ struct RetroSquareButton: View {
         Button(action: action) {
             ZStack {
                 Rectangle()
-                    .fill(prominent ? AppTheme.ink : AppTheme.surface)
+                    .fill(prominent ? AppTheme.primaryActionFill : AppTheme.surface)
                     .overlay(
                         Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                            .stroke(prominent ? AppTheme.brandInk : AppTheme.selectedChromeBorder, lineWidth: AppTheme.retroBorderWidth)
                     )
 
                 Image(systemName: systemName)
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(prominent ? AppTheme.surface : AppTheme.ink)
+                    .foregroundStyle(prominent ? AppTheme.primaryActionForeground : AppTheme.brandInk)
             }
             .frame(width: size, height: size)
         }
@@ -528,18 +569,18 @@ struct SessionCountBadge: View {
         if let text = Self.displayText(for: count) {
             Text(text)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
                 .padding(.horizontal, 3)
                 .frame(minWidth: 16, minHeight: 16)
-                .background(AppTheme.backgroundSecondary)
+                .background(AppTheme.selectedChromeFill)
                 .overlay(alignment: .leading) {
                     Rectangle()
-                        .fill(AppTheme.border)
+                        .fill(AppTheme.selectedChromeBorder)
                         .frame(width: AppTheme.retroBorderWidth)
                 }
                 .overlay(alignment: .bottom) {
                     Rectangle()
-                        .fill(AppTheme.border)
+                        .fill(AppTheme.selectedChromeBorder)
                         .frame(height: AppTheme.retroBorderWidth)
                 }
                 .padding(.top, 1)

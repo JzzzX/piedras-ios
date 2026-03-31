@@ -48,12 +48,12 @@ struct MeetingSearchView: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(AppStrings.current.search)
-                    .font(AppTheme.bodyFont(size: 28, weight: .bold))
-                    .foregroundStyle(AppTheme.ink)
+                    .font(AppTheme.titleFont(size: 28))
+                    .foregroundStyle(AppTheme.brandInk)
 
                 Text(AppStrings.current.notes)
                     .font(AppTheme.bodyFont(size: 14))
-                    .foregroundStyle(AppTheme.subtleInk)
+                    .foregroundStyle(AppTheme.brandInkMuted)
             }
 
             Spacer()
@@ -83,12 +83,12 @@ struct MeetingSearchView: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(AppTheme.ink)
+                        .foregroundStyle(AppTheme.brandInk)
                         .frame(width: 24, height: 24)
-                        .background(AppTheme.surface)
+                        .background(AppTheme.noteIconWash)
                         .overlay(
                             Rectangle()
-                                .stroke(AppTheme.border, lineWidth: 1)
+                                .stroke(AppTheme.selectedChromeBorder, lineWidth: 1)
                         )
                 }
                 .buttonStyle(.plain)
@@ -99,7 +99,7 @@ struct MeetingSearchView: View {
         .background(AppTheme.surface)
         .overlay(
             Rectangle()
-                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.subtleBorderWidth)
         )
     }
 

@@ -1,5 +1,16 @@
 import SwiftUI
 
+private struct MeetingRowButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .overlay {
+                Rectangle()
+                    .fill(AppTheme.notePressFill.opacity(configuration.isPressed ? 0.72 : 0))
+            }
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
 struct MeetingRowSnapshot: Identifiable, Hashable {
     let id: String
     let title: String
@@ -33,7 +44,7 @@ struct MeetingRowView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(alignment: .top, spacing: 10) {
                         Text(snapshot.title)
-                            .font(AppTheme.bodyFont(size: 15, weight: .bold))
+                            .font(AppTheme.bodyFont(size: 15, weight: .semibold))
                             .foregroundStyle(AppTheme.ink)
                             .lineLimit(2)
 
@@ -51,7 +62,7 @@ struct MeetingRowView: View {
                     HStack(spacing: 6) {
                         Text(snapshot.metadataPrimary)
                             .font(AppTheme.bodyFont(size: 12))
-                            .foregroundStyle(AppTheme.subtleInk)
+                            .foregroundStyle(AppTheme.mutedInk)
                             .lineLimit(1)
 
                         if let metadataDuration = snapshot.metadataDuration {
@@ -61,7 +72,7 @@ struct MeetingRowView: View {
 
                             Text(metadataDuration)
                                 .font(AppTheme.dataFont(size: 12))
-                                .foregroundStyle(AppTheme.subtleInk)
+                                .foregroundStyle(AppTheme.mutedInk)
                                 .lineLimit(1)
                         }
                     }
@@ -71,13 +82,13 @@ struct MeetingRowView: View {
                             ForEach(snapshot.matchedSources, id: \.self) { source in
                                 Text(source.label)
                                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                                    .foregroundStyle(AppTheme.subtleInk)
+                                    .foregroundStyle(AppTheme.brandInkMuted)
                                     .padding(.horizontal, 6)
                                     .padding(.vertical, 3)
-                                    .background(AppTheme.background)
+                                    .background(AppTheme.noteIconWash)
                                     .overlay(
                                         Rectangle()
-                                            .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                                            .stroke(AppTheme.noteSectionRule, lineWidth: AppTheme.subtleBorderWidth)
                                     )
                             }
                         }
@@ -87,12 +98,13 @@ struct MeetingRowView: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .softCard(
-                borderColor: snapshot.isRecording ? AppTheme.highlight : AppTheme.subtleBorderColor,
+                fill: AppTheme.surface,
+                borderColor: snapshot.isRecording ? AppTheme.highlight : AppTheme.noteSectionRule,
                 lineWidth: snapshot.isRecording ? 1.5 : AppTheme.subtleBorderWidth
             )
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MeetingRowButtonStyle())
         .accessibilityIdentifier("MeetingRow")
     }
 
@@ -100,15 +112,15 @@ struct MeetingRowView: View {
         ZStack(alignment: .topTrailing) {
             ZStack {
                 Rectangle()
-                    .fill(AppTheme.iconBackground)
+                    .fill(AppTheme.noteIconWash)
                     .overlay(
                         Rectangle()
-                            .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                            .stroke(AppTheme.noteSectionRule, lineWidth: AppTheme.retroBorderWidth)
                     )
 
                 Image(systemName: "doc.text")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AppTheme.caramel)
+                    .foregroundStyle(AppTheme.brandInkMuted)
             }
             .frame(width: AppTheme.compactIconSize, height: AppTheme.compactIconSize)
 

@@ -2,7 +2,7 @@ import SwiftUI
 
 private extension View {
     func appHeaderFont() -> some View {
-        self.font(.system(size: 28, weight: .bold, design: .monospaced))
+        self.font(Font.custom("AmericanTypewriter-Bold", size: 24))
     }
 }
 
@@ -33,6 +33,54 @@ private struct MeetingHomeSectionSnapshot: Identifiable {
 
     var id: String { bucket.id }
     var title: String { bucket.title }
+}
+
+private enum MeetingHomeLayout {
+    static let listBottomInset: CGFloat = 28
+    static let emptyStateBottomPadding: CGFloat = 168
+}
+
+private struct HomeBrandWordmark: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .appHeaderFont()
+            .foregroundStyle(AppTheme.brandInk)
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+    }
+}
+
+private struct HomeSectionHeaderLabel: View {
+    let title: String
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Text(title.uppercased())
+                .font(AppTheme.sectionFont)
+                .foregroundStyle(AppTheme.brandInk)
+                .tracking(1.6)
+
+            Rectangle()
+                .fill(AppTheme.noteSectionRule)
+                .frame(maxWidth: .infinity, minHeight: 1, maxHeight: 1)
+        }
+        .padding(.vertical, 4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.background.opacity(0.94))
+    }
+}
+
+private struct HomeChatDockButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                Rectangle()
+                    .fill(AppTheme.brandInkSoft.opacity(configuration.isPressed ? 0.55 : 0))
+            )
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+    }
 }
 
 struct MeetingListView: View {
@@ -76,13 +124,9 @@ struct MeetingListView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Text(AppStrings.current.appTitle)
-                .appHeaderFont()
-                .foregroundStyle(AppTheme.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .opacity(max(0, 1.0 - Double(scrollOffset) / 30.0))
+        HStack(alignment: .center, spacing: 14) {
+            HomeBrandWordmark(title: AppStrings.current.appTitle)
+                .opacity(max(0, 1.0 - Double(scrollOffset) / 36.0))
 
             Spacer()
 
@@ -112,9 +156,8 @@ struct MeetingListView: View {
         HStack(alignment: .center, spacing: 14) {
             Text(currentSectionTitle.isEmpty ? "" : currentSectionTitle.uppercased())
                 .font(AppTheme.bodyFont(size: 14, weight: .bold))
-                .foregroundStyle(AppTheme.ink)
+                .foregroundStyle(AppTheme.brandInk)
                 .lineLimit(1)
-                .animation(.easeInOut, value: currentSectionTitle)
 
             Spacer()
 
@@ -177,7 +220,7 @@ struct MeetingListView: View {
                                     meetingStore.deleteMeeting(id: row.id)
                                 }
                             }
-                            .listRowInsets(EdgeInsets(top: 5, leading: 0, bottom: 5, trailing: 0))
+                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                         }
@@ -191,13 +234,8 @@ struct MeetingListView: View {
                             }
                         )
                     } header: {
-                        Text(section.title.uppercased())
-                            .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-                            .foregroundStyle(AppTheme.subtleInk)
+                        HomeSectionHeaderLabel(title: section.title)
                             .textCase(nil)
-                            .padding(.vertical, 4)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(AppTheme.background.opacity(0.8)) // Sticky header 背景
                     }
                 }
             }
@@ -207,6 +245,7 @@ struct MeetingListView: View {
         .scrollContentBackground(.hidden)
         .background(Color.clear)
         .contentMargins(.horizontal, 16, for: .scrollContent)
+        .contentMargins(.bottom, MeetingHomeLayout.listBottomInset, for: .scrollContent)
         .refreshable {
             await syncWithCloud()
         }
@@ -250,13 +289,12 @@ struct MeetingListView: View {
         }
         .padding(.top, 60)
         .padding(.horizontal, 18)
-        .padding(.bottom, 120)
+        .padding(.bottom, MeetingHomeLayout.emptyStateBottomPadding)
         .frame(maxWidth: .infinity, minHeight: UIScreen.main.bounds.height * 0.48, alignment: .topLeading)
     }
 
     private var bottomDock: some View {
         VStack(spacing: 0) {
-            // 向上渐变 scrim — 让滚动内容柔和淡出
             LinearGradient(
                 colors: [
                     AppTheme.background.opacity(0),
@@ -279,7 +317,7 @@ struct MeetingListView: View {
             recordingButton
 
             Rectangle()
-                .fill(AppTheme.subtleBorderColor)
+                .fill(AppTheme.brandInkHairline)
                 .frame(width: AppTheme.subtleBorderWidth, height: 28)
 
             homeChatLauncher
@@ -293,7 +331,7 @@ struct MeetingListView: View {
         )
         .overlay(
             Rectangle()
-                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                .stroke(AppTheme.brandInkHairline, lineWidth: AppTheme.subtleBorderWidth)
         )
     }
 
@@ -302,18 +340,18 @@ struct MeetingListView: View {
             HStack(spacing: 10) {
                 Image(systemName: "bubble.left.and.text.bubble.right")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppTheme.subtleInk)
+                    .foregroundStyle(AppTheme.brandInk)
 
                 Text(AppStrings.current.chatWithNotes)
                     .font(AppTheme.bodyFont(size: 14))
-                    .foregroundStyle(AppTheme.subtleInk)
+                    .foregroundStyle(AppTheme.brandInk)
 
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(HomeChatDockButtonStyle())
         .accessibilityLabel(AppStrings.current.chatWithNotes)
         .accessibilityIdentifier("HomeGlobalChatLauncher")
     }
@@ -345,6 +383,7 @@ struct MeetingListView: View {
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(AppTheme.mutedInk)
                 .frame(width: size, height: size)
+                .background(AppTheme.surface)
                 .overlay(
                     Rectangle()
                         .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
