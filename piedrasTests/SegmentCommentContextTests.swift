@@ -122,6 +122,25 @@ struct SegmentCommentContextTests {
     }
 
     @Test
+    func audioEnhancePayloadExcludesTranscriptButKeepsNotesAttachmentsAndComments() throws {
+        let meeting = makeMeetingWithComments()
+        meeting.userNotesPlainText = "用户笔记补充：先灰度一周再全量。"
+        meeting.noteAttachmentFileNames = ["timeline.png"]
+        meeting.noteAttachmentTextContext = "图片1：\n路线图写着：4 月 8 日灰度，4 月 15 日全量。"
+        meeting.noteAttachmentTextStatus = .ready
+        meeting.noteAttachmentTextUpdatedAt = .now
+
+        let payload = MeetingPayloadMapper.makeAudioEnhancePayload(from: meeting)
+        let encoded = try JSONEncoder().encode(payload)
+        let json = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+
+        #expect((json["userNotes"] as? String) == "用户笔记补充：先灰度一周再全量。")
+        #expect((json["noteAttachmentsContext"] as? String)?.contains("--- 主笔记附件资料 ---") == true)
+        #expect((json["segmentCommentsContext"] as? String)?.contains("--- 转写片段评论 ---") == true)
+        #expect(json["transcript"] == nil)
+    }
+
+    @Test
     func segmentCommentsContextIncludesImageTextEvenWithoutTypedComment() throws {
         let segment = TranscriptSegment(
             speaker: "Speaker A",

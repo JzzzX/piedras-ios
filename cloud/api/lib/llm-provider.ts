@@ -3,9 +3,31 @@ import { DEFAULT_LLM_SETTINGS, normalizeOpenAIPath } from './llm-config.ts';
 
 export type LlmProvider = 'gemini' | 'minimax' | 'openai';
 
+export interface LlmTextContentPart {
+  type: 'text';
+  text: string;
+}
+
+export interface LlmAudioContentPart {
+  type: 'audio';
+  mimeType: string;
+  data: string;
+}
+
+export interface LlmFileAudioContentPart {
+  type: 'file_audio';
+  mimeType: string;
+  fileUri: string;
+}
+
+export type LlmContentPart =
+  | LlmTextContentPart
+  | LlmAudioContentPart
+  | LlmFileAudioContentPart;
+
 export interface LlmMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | LlmContentPart[];
 }
 
 export interface LlmGenerateInput {
@@ -17,6 +39,7 @@ export interface LlmGenerateInput {
   runtimeConfig?: LlmRuntimeConfig;
   timeoutMs?: number;
   retries?: number;
+  allowedProviders?: LlmProvider[];
 }
 
 export interface LlmGenerateOutput {
@@ -24,8 +47,8 @@ export interface LlmGenerateOutput {
   content: string;
 }
 
-const DEFAULT_TIMEOUT_MS = 25_000;
-const DEFAULT_RETRIES = 1;
+const DEFAULT_TIMEOUT_MS = 18_000;
+const DEFAULT_RETRIES = 0;
 
 type ProviderName = 'Gemini' | 'MiniMax' | 'OpenAI';
 
@@ -137,13 +160,18 @@ export function hasAvailableLlm(runtimeConfig?: LlmRuntimeConfig): boolean {
 
 function resolveProviderOrder(
   preferredProvider?: LlmProvider,
-  runtimeConfig?: LlmRuntimeConfig
+  runtimeConfig?: LlmRuntimeConfig,
+  allowedProviders?: LlmProvider[]
 ): LlmProvider[] {
+  const configured =
+    allowedProviders && allowedProviders.length > 0
+      ? Array.from(new Set(allowedProviders)).filter(isProviderConfigured)
+      : getConfiguredProviders();
+
   if (runtimeConfig && runtimeConfig.provider !== 'auto') {
-    return [runtimeConfig.provider];
+    return configured.includes(runtimeConfig.provider) ? [runtimeConfig.provider] : [];
   }
 
-  const configured = getConfiguredProviders();
   if (configured.length === 0) return [];
 
   const fallbackProviders = parseProviderList(process.env.LLM_FALLBACKS);
@@ -166,6 +194,26 @@ function resolveProviderOrder(
   );
   const rest = configured.filter((p) => p !== primary && !fallback.includes(p));
   return [primary, ...fallback, ...rest];
+}
+
+function normalizeMessageParts(content: string | LlmContentPart[]): LlmContentPart[] {
+  if (typeof content === 'string') {
+    return [{ type: 'text', text: content }];
+  }
+
+  return content;
+}
+
+function mapAudioMimeTypeToOpenAIFormat(mimeType: string): 'wav' | 'mp3' {
+  const normalized = mimeType.trim().toLowerCase();
+  if (normalized === 'audio/wav' || normalized === 'audio/x-wav' || normalized === 'audio/wave') {
+    return 'wav';
+  }
+  if (normalized === 'audio/mpeg' || normalized === 'audio/mp3') {
+    return 'mp3';
+  }
+
+  throw new Error(`OpenAI 兼容音频输入暂不支持 ${mimeType}`);
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -208,14 +256,42 @@ function isRetryableProviderError(message: string): boolean {
 async function callGemini(input: LlmGenerateInput): Promise<string> {
   const { apiKey, model } = getGeminiConfig();
   if (!apiKey) throw new Error('GEMINI_API_KEY 未配置');
-  const system = input.messages.find((m) => m.role === 'system')?.content;
+  const systemMessage = input.messages.find((m) => m.role === 'system')?.content;
+  const system =
+    typeof systemMessage === 'string'
+      ? systemMessage
+      : normalizeMessageParts(systemMessage || [])
+          .filter((part): part is LlmTextContentPart => part.type === 'text')
+          .map((part) => part.text)
+          .join('\n')
+          .trim();
   const conversation = input.messages.filter((m) => m.role !== 'system');
 
   const contents =
     conversation.length > 0
       ? conversation.map((m) => ({
           role: m.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: m.content }],
+          parts: normalizeMessageParts(m.content).map((part) => {
+            if (part.type === 'text') {
+              return { text: part.text };
+            }
+
+            if (part.type === 'audio') {
+              return {
+                inlineData: {
+                  mimeType: part.mimeType,
+                  data: part.data,
+                },
+              };
+            }
+
+            return {
+              file_data: {
+                mime_type: part.mimeType,
+                file_uri: part.fileUri,
+              },
+            };
+          }),
         }))
       : [{ role: 'user', parts: [{ text: '请根据系统指令开始回答。' }] }];
 
@@ -294,7 +370,32 @@ async function callOpenAI(input: LlmGenerateInput): Promise<string> {
 
   const requestBody: Record<string, unknown> = {
     model,
-    messages: input.messages,
+    messages: input.messages.map((message) => ({
+      role: message.role,
+      content:
+        typeof message.content === 'string'
+          ? message.content
+          : normalizeMessageParts(message.content).map((part) => {
+              if (part.type === 'text') {
+                return {
+                  type: 'text',
+                  text: part.text,
+                };
+              }
+
+              if (part.type === 'audio') {
+                return {
+                  type: 'input_audio',
+                  input_audio: {
+                    data: part.data,
+                    format: mapAudioMimeTypeToOpenAIFormat(part.mimeType),
+                  },
+                };
+              }
+
+              throw new Error('OpenAI 兼容路由不支持 file_audio 输入');
+            }),
+    })),
     temperature: input.temperature ?? 0.5,
     max_tokens: input.maxTokens ?? 4096,
   };
@@ -569,7 +670,11 @@ export async function generateTextWithFallback(
 ): Promise<LlmGenerateOutput> {
   const timeoutMs = Number(input.timeoutMs ?? process.env.LLM_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
   const retries = Number(input.retries ?? process.env.LLM_RETRIES ?? DEFAULT_RETRIES);
-  const providers = resolveProviderOrder(input.preferredProvider, input.runtimeConfig);
+  const providers = resolveProviderOrder(
+    input.preferredProvider,
+    input.runtimeConfig,
+    input.allowedProviders
+  );
 
   if (providers.length === 0) {
     throw new Error('未配置可用 LLM Provider');
@@ -608,7 +713,7 @@ export async function generateTextWithFallback(
 }
 
 export async function probeConfiguredLlm(timeoutMs = 6_000): Promise<{ provider: LlmProvider }> {
-  const providers = resolveProviderOrder(undefined, undefined);
+  const providers = resolveProviderOrder(undefined, undefined, undefined);
   if (providers.length === 0) {
     throw new Error('未配置可用 LLM Provider');
   }

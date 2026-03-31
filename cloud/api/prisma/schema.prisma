@@ -81,6 +81,12 @@ model Meeting {
   audioUpdatedAt DateTime?
   userNotes     String   @default("")
   enhancedNotes String   @default("")
+  audioEnhancedNotes String @default("")
+  audioEnhancedNotesStatus String @default("idle")
+  audioEnhancedNotesError String @default("")
+  audioEnhancedNotesUpdatedAt DateTime?
+  audioEnhancedNotesProvider String?
+  audioEnhancedNotesModel String?
   enhanceRecipeId String?
   roundLabel    String   @default("")
   interviewerName String @default("")

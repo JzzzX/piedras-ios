@@ -8,6 +8,9 @@ import {
   normalizeEnhancePromptOptions,
 } from './prompt';
 
+const ENHANCE_TIMEOUT_MS = 12_000;
+const ENHANCE_MAX_TOKENS = 1_200;
+
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/enhance');
   const auth = await requireAuthenticatedRequest(req, context);
@@ -54,13 +57,20 @@ ${buildMeetingMaterialContext({
   userNotes,
   noteAttachmentsContext,
   segmentCommentsContext,
+}, {
+  transcriptMaxChars: 12_000,
+  userNotesMaxChars: 4_000,
+  noteAttachmentsMaxChars: 3_000,
+  segmentCommentsMaxChars: 3_000,
 })}
 
 请根据以上内容生成结构化会议纪要。`,
         },
       ],
       temperature: 0.3,
-      maxTokens: 4096,
+      maxTokens: ENHANCE_MAX_TOKENS,
+      timeoutMs: ENHANCE_TIMEOUT_MS,
+      retries: 0,
       runtimeConfig: llmRuntimeConfig,
     });
 

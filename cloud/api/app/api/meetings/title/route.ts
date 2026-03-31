@@ -10,6 +10,8 @@ import {
   shouldRejectGeneratedTitle,
 } from '@/lib/meeting-title';
 
+const TITLE_TIMEOUT_MS = 8_000;
+
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/meetings/title');
   const auth = await requireAuthenticatedRequest(req, context);
@@ -51,6 +53,8 @@ export async function POST(req: NextRequest) {
       ],
       temperature: 0.2,
       maxTokens: 80,
+      timeoutMs: TITLE_TIMEOUT_MS,
+      retries: 0,
       runtimeConfig: llmRuntimeConfig,
     });
 

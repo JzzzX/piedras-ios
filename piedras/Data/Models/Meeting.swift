@@ -115,6 +115,15 @@ enum AINotesFreshnessState: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum AudioEnhancedNotesStatus: String, Codable, CaseIterable, Identifiable {
+    case idle
+    case processing
+    case ready
+    case failed
+
+    var id: String { rawValue }
+}
+
 @Model
 final class Meeting {
     @Attribute(.unique) var id: String
@@ -125,6 +134,15 @@ final class Meeting {
     var durationSeconds: Int
     var userNotesPlainText: String
     var enhancedNotes: String
+    @Attribute(originalName: "audioEnhancedNotes")
+    private var audioEnhancedNotesValue: String?
+    @Attribute(originalName: "audioEnhancedNotesStatusRawValue")
+    private var audioEnhancedNotesStatusRawValueValue: String?
+    @Attribute(originalName: "audioEnhancedNotesError")
+    private var audioEnhancedNotesErrorValue: String?
+    var audioEnhancedNotesUpdatedAt: Date?
+    var audioEnhancedNotesProvider: String?
+    var audioEnhancedNotesModel: String?
     @Attribute(originalName: "noteAttachmentFileNames")
     private var noteAttachmentFileNamesValue: [String]?
     @Attribute(originalName: "noteAttachmentAssetIdentifiersRaw")
@@ -178,6 +196,12 @@ final class Meeting {
         durationSeconds: Int = 0,
         userNotesPlainText: String = "",
         enhancedNotes: String = "",
+        audioEnhancedNotes: String = "",
+        audioEnhancedNotesStatus: AudioEnhancedNotesStatus = .idle,
+        audioEnhancedNotesError: String = "",
+        audioEnhancedNotesUpdatedAt: Date? = nil,
+        audioEnhancedNotesProvider: String? = nil,
+        audioEnhancedNotesModel: String? = nil,
         noteAttachmentFileNames: [String] = [],
         noteAttachmentAssetIdentifiersByFileName: [String: String] = [:],
         noteAttachmentTextContext: String = "",
@@ -216,6 +240,12 @@ final class Meeting {
         self.durationSeconds = durationSeconds
         self.userNotesPlainText = userNotesPlainText
         self.enhancedNotes = enhancedNotes
+        self.audioEnhancedNotesValue = audioEnhancedNotes
+        self.audioEnhancedNotesStatusRawValueValue = audioEnhancedNotesStatus.rawValue
+        self.audioEnhancedNotesErrorValue = audioEnhancedNotesError
+        self.audioEnhancedNotesUpdatedAt = audioEnhancedNotesUpdatedAt
+        self.audioEnhancedNotesProvider = audioEnhancedNotesProvider
+        self.audioEnhancedNotesModel = audioEnhancedNotesModel
         self.noteAttachmentFileNamesValue = noteAttachmentFileNames
         self.noteAttachmentAssetIdentifiersRawValue = Self.encodeAttachmentAssetIdentifiers(
             noteAttachmentAssetIdentifiersByFileName
@@ -262,6 +292,21 @@ final class Meeting {
     var syncState: MeetingSyncState {
         get { MeetingSyncState(rawValue: syncStateRaw) ?? .pending }
         set { syncStateRaw = newValue.rawValue }
+    }
+
+    var audioEnhancedNotes: String {
+        get { audioEnhancedNotesValue ?? "" }
+        set { audioEnhancedNotesValue = newValue }
+    }
+
+    var audioEnhancedNotesStatus: AudioEnhancedNotesStatus {
+        get { AudioEnhancedNotesStatus(rawValue: audioEnhancedNotesStatusRawValueValue ?? "") ?? .idle }
+        set { audioEnhancedNotesStatusRawValueValue = newValue.rawValue }
+    }
+
+    var audioEnhancedNotesError: String {
+        get { audioEnhancedNotesErrorValue ?? "" }
+        set { audioEnhancedNotesErrorValue = newValue }
     }
 
     var meetingTypeRaw: String {

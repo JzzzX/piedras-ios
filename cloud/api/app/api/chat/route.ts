@@ -8,6 +8,9 @@ import {
 import { buildMeetingMaterialContext } from '@/lib/meeting-ai-context';
 import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
 
+const CHAT_TIMEOUT_MS = 18_000;
+const CHAT_MAX_TOKENS = 1_536;
+
 function createTextStream(text: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream({
@@ -87,7 +90,9 @@ export async function POST(req: NextRequest) {
     const { content, provider } = await generateTextWithFallback({
       messages,
       temperature: 0.5,
-      maxTokens: 4096,
+      maxTokens: CHAT_MAX_TOKENS,
+      timeoutMs: CHAT_TIMEOUT_MS,
+      retries: 0,
       runtimeConfig: llmRuntimeConfig,
     });
 

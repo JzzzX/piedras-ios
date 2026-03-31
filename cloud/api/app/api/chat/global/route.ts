@@ -10,6 +10,9 @@ import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
 import { retrieveGlobalMeetingContext, type GlobalChatFilters } from '@/lib/global-chat';
 import { selectRetrievalResult } from '@/lib/global-chat-selection';
 
+const GLOBAL_CHAT_TIMEOUT_MS = 18_000;
+const GLOBAL_CHAT_MAX_TOKENS = 1_536;
+
 function createTextStream(text: string): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let interval: ReturnType<typeof setInterval> | null = null;
@@ -177,7 +180,9 @@ export async function POST(req: NextRequest) {
     const { content, provider } = await generateTextWithFallback({
       messages,
       temperature: 0.4,
-      maxTokens: 4096,
+      maxTokens: GLOBAL_CHAT_MAX_TOKENS,
+      timeoutMs: GLOBAL_CHAT_TIMEOUT_MS,
+      retries: 0,
       runtimeConfig: llmRuntimeConfig,
     });
 

@@ -95,6 +95,9 @@ export async function POST(
 
     const arrayBuffer = await file.arrayBuffer();
     await saveMeetingAudioFile(id, Buffer.from(arrayBuffer));
+    if (!(await hasMeetingAudioFile(id))) {
+      throw new Error('会议音频落盘校验失败');
+    }
 
     const normalizedDuration = Number.isFinite(duration) && duration > 0 ? Math.round(duration) : null;
     const normalizedMimeType = mimeType || file.type || 'audio/webm';

@@ -23,6 +23,12 @@ struct APIClientDecodingTests {
           "audioUpdatedAt": "2026-03-19T08:47:00.000Z",
           "userNotes": "<p>Notes</p>",
           "enhancedNotes": "summary",
+          "audioEnhancedNotes": "audio summary",
+          "audioEnhancedNotesStatus": "ready",
+          "audioEnhancedNotesError": "",
+          "audioEnhancedNotesUpdatedAt": "2026-03-19T08:48:00.000Z",
+          "audioEnhancedNotesProvider": "openai",
+          "audioEnhancedNotesModel": "gemini-3-flash-preview",
           "createdAt": "2026-03-19T08:40:00.000Z",
           "updatedAt": "2026-03-19T08:47:00.000Z",
           "workspaceId": "workspace-1",
@@ -47,6 +53,9 @@ struct APIClientDecodingTests {
 
         #expect(meeting.chatMessages.count == 1)
         #expect(Int(meeting.chatMessages[0].timestamp.timeIntervalSince1970) == 1_773_901_562)
+        #expect(meeting.audioEnhancedNotes == "audio summary")
+        #expect(meeting.audioEnhancedNotesStatus == "ready")
+        #expect(meeting.audioEnhancedNotesProvider == "openai")
     }
 
     @Test

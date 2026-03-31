@@ -235,6 +235,15 @@ struct AppStringTable {
 
     var noAINotesYet: String { isChinese ? "暂无 AI 笔记。" : "No AI notes yet." }
     var generatingNotesShort: String { isChinese ? "正在生成笔记" : "Generating notes" }
+    var textAINotesVersion: String { isChinese ? "文本版 AI 笔记" : "Transcript AI Notes" }
+    var audioAINotesExperimentTitle: String { isChinese ? "音频版 AI 笔记（实验）" : "Audio AI Notes (Experimental)" }
+    var audioAINotesExperimentBadge: String { isChinese ? "实验" : "Experimental" }
+    var generateAudioAINotes: String { isChinese ? "生成音频版" : "Generate Audio Notes" }
+    var refreshAudioAINotes: String { isChinese ? "刷新音频版" : "Refresh Audio Notes" }
+    var audioAINotesFailed: String { isChinese ? "音频版 AI 笔记生成失败。" : "Audio AI notes failed." }
+    var audioAINotesUnavailable: String { isChinese ? "暂无可用云端音频，可先同步或上传后再试。" : "Cloud audio is unavailable. Sync or upload audio first." }
+    var experimentalAudioAINotesToggle: String { isChinese ? "启用音频版 AI 笔记实验" : "Enable audio AI notes experiment" }
+    var experimentalAudioAINotesHelp: String { isChinese ? "会议详情页会同时保留文本版和原始音频版 AI 笔记，默认仅开发者模式可见。" : "Show transcript and raw-audio AI notes side by side in developer mode only." }
 
     // ── RecordingControlBar ──────────────────────────────────────
 

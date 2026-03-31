@@ -101,6 +101,7 @@ final class MeetingStore {
     var isLoading = false
     var lastErrorMessage: String?
     var enhancingMeetingIDs: Set<String> = []
+    var audioEnhancingMeetingIDs: Set<String> = []
     var generatingTitleMeetingIDs: Set<String> = []
     var streamingChatMeetingIDs: Set<String> = []
     var transcribingMeetingIDs: Set<String> = []
@@ -288,6 +289,7 @@ final class MeetingStore {
         selectedMeetingID = nil
         lastErrorMessage = resetErrorMessage
         enhancingMeetingIDs.removeAll()
+        audioEnhancingMeetingIDs.removeAll()
         generatingTitleMeetingIDs.removeAll()
         streamingChatMeetingIDs.removeAll()
         transcribingMeetingIDs.removeAll()
@@ -1002,6 +1004,44 @@ final class MeetingStore {
         }
     }
 
+    func generateAudioEnhancedNotes(for meetingID: String) async {
+        guard let meeting = meeting(withID: meetingID) else { return }
+        guard !audioEnhancingMeetingIDs.contains(meetingID) else { return }
+        guard await ensureBackendReachable(force: false) else {
+            lastErrorMessage = "\(AppEnvironment.cloudName) 暂时不可用。"
+            return
+        }
+
+        audioEnhancingMeetingIDs.insert(meetingID)
+        meeting.audioEnhancedNotesStatus = .processing
+        meeting.audioEnhancedNotesError = ""
+        try? repository.save()
+        defer { audioEnhancingMeetingIDs.remove(meetingID) }
+
+        do {
+            try await ensureAudioUploadedForAudioNotes(meeting)
+            let response = try await apiClient.enhanceNotesFromAudio(
+                meetingID: meetingID,
+                payload: MeetingPayloadMapper.makeAudioEnhancePayload(from: meeting)
+            )
+            meeting.audioEnhancedNotes = normalizeGeneratedNotes(response.content)
+            meeting.audioEnhancedNotesStatus = .ready
+            meeting.audioEnhancedNotesError = ""
+            meeting.audioEnhancedNotesUpdatedAt = response.updatedAt ?? .now
+            meeting.audioEnhancedNotesProvider = response.provider
+            meeting.audioEnhancedNotesModel = response.model
+            try repository.save()
+            settingsStore.markLLMRequestSucceeded(provider: response.provider)
+            loadMeetings()
+        } catch {
+            meeting.audioEnhancedNotesStatus = .failed
+            meeting.audioEnhancedNotesError = error.localizedDescription
+            try? repository.save()
+            lastErrorMessage = error.localizedDescription
+            settingsStore.markLLMRequestFailed(message: error.localizedDescription)
+        }
+    }
+
     func sendChatMessage(question: String, for meetingID: String) async -> Bool {
         let trimmedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedQuestion.isEmpty else { return false }
@@ -1025,6 +1065,10 @@ final class MeetingStore {
         enhancingMeetingIDs.contains(meetingID)
     }
 
+    func isEnhancingAudio(meetingID: String) -> Bool {
+        audioEnhancingMeetingIDs.contains(meetingID)
+    }
+
     func isGeneratingTitle(meetingID: String) -> Bool {
         generatingTitleMeetingIDs.contains(meetingID)
     }
@@ -1040,6 +1084,53 @@ final class MeetingStore {
         }
 
         return session.orderedMessages.contains(where: { $0.role == "user" })
+    }
+
+    private func ensureAudioUploadedForAudioNotes(_ meeting: Meeting) async throws {
+        guard shouldUploadAudioBeforeGeneratingAudioNotes(for: meeting) else {
+            return
+        }
+
+        guard let audioLocalPath = meeting.audioLocalPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !audioLocalPath.isEmpty else {
+            return
+        }
+
+        guard FileManager.default.fileExists(atPath: audioLocalPath) else {
+            throw APIClientError.requestFailed("本地音频文件不存在，无法生成音频版 AI 笔记。")
+        }
+
+        let fallbackDuration = max(meeting.audioDuration, meeting.durationSeconds)
+        let uploadResponse = try await apiClient.uploadAudio(
+            meetingID: meeting.id,
+            fileURL: URL(fileURLWithPath: audioLocalPath),
+            duration: max(fallbackDuration, 0),
+            mimeType: meeting.audioMimeType ?? "audio/m4a"
+        )
+
+        meeting.audioRemotePath = apiClient.resolveAbsoluteURLString(uploadResponse.audioUrl) ?? meeting.audioRemotePath
+        meeting.audioMimeType = uploadResponse.audioMimeType ?? meeting.audioMimeType
+        meeting.audioDuration = uploadResponse.audioDuration ?? fallbackDuration
+        meeting.audioUpdatedAt = uploadResponse.audioUpdatedAt ?? meeting.audioUpdatedAt ?? .now
+        try repository.save()
+    }
+
+    private func shouldUploadAudioBeforeGeneratingAudioNotes(for meeting: Meeting) -> Bool {
+        guard meeting.status == .ended else {
+            return false
+        }
+
+        guard let audioLocalPath = meeting.audioLocalPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !audioLocalPath.isEmpty,
+              FileManager.default.fileExists(atPath: audioLocalPath) else {
+            return false
+        }
+
+        if meeting.audioRemotePath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+            return true
+        }
+
+        return meeting.syncState != .synced
     }
 
     func prepareChatSessions(for meetingID: String) {

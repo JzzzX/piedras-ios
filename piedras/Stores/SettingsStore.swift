@@ -61,6 +61,7 @@ final class SettingsStore {
     private enum Key {
         static let hiddenWorkspaceID = "piedras.settings.hiddenWorkspaceID"
         static let appLanguage = "piedras.settings.appLanguage"
+        static let experimentalAudioAINotesEnabled = "piedras.settings.experimentalAudioAINotesEnabled"
         static let remoteStatusSnapshot = "piedras.settings.remoteStatusSnapshot"
         static let syncStatusSnapshot = "piedras.settings.syncStatusSnapshot"
 #if DEBUG
@@ -106,6 +107,12 @@ final class SettingsStore {
         }
     }
 
+    var isExperimentalAudioAINotesEnabled: Bool {
+        didSet {
+            defaults.set(isExperimentalAudioAINotesEnabled, forKey: Key.experimentalAudioAINotesEnabled)
+        }
+    }
+
     var apiReachable = false
     var asrReady = false
     var llmReady = false
@@ -136,6 +143,7 @@ final class SettingsStore {
         self.appLanguage = defaults.string(forKey: Key.appLanguage)
             .flatMap { AppLanguage(rawValue: $0) } ?? .chinese
         hiddenWorkspaceID = defaults.string(forKey: Key.hiddenWorkspaceID)
+        isExperimentalAudioAINotesEnabled = defaults.bool(forKey: Key.experimentalAudioAINotesEnabled)
 #if DEBUG
         debugBackendBaseURLString = defaults.string(forKey: Key.debugBackendBaseURLString)
             ?? debugDefaultBackendBaseURLString

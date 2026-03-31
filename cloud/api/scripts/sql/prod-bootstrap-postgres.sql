@@ -53,6 +53,12 @@ ALTER TABLE "Folder"
 
 ALTER TABLE "Meeting"
     ADD COLUMN IF NOT EXISTS "audioDuration" INTEGER,
+    ADD COLUMN IF NOT EXISTS "audioEnhancedNotes" TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS "audioEnhancedNotesError" TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS "audioEnhancedNotesModel" TEXT,
+    ADD COLUMN IF NOT EXISTS "audioEnhancedNotesProvider" TEXT,
+    ADD COLUMN IF NOT EXISTS "audioEnhancedNotesStatus" TEXT NOT NULL DEFAULT 'idle',
+    ADD COLUMN IF NOT EXISTS "audioEnhancedNotesUpdatedAt" TIMESTAMP(3),
     ADD COLUMN IF NOT EXISTS "audioMimeType" TEXT,
     ADD COLUMN IF NOT EXISTS "audioUpdatedAt" TIMESTAMP(3),
     ADD COLUMN IF NOT EXISTS "enhanceRecipeId" TEXT,

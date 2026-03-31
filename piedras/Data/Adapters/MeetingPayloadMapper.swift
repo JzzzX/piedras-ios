@@ -108,6 +108,12 @@ struct RemoteMeetingDetail: Decodable {
     let audioUpdatedAt: Date?
     let userNotes: String?
     let enhancedNotes: String?
+    let audioEnhancedNotes: String?
+    let audioEnhancedNotesStatus: String?
+    let audioEnhancedNotesError: String?
+    let audioEnhancedNotesUpdatedAt: Date?
+    let audioEnhancedNotesProvider: String?
+    let audioEnhancedNotesModel: String?
     let createdAt: Date?
     let updatedAt: Date?
     let workspaceId: String?
@@ -128,6 +134,12 @@ struct RemoteMeetingDetail: Decodable {
         audioUpdatedAt: Date?,
         userNotes: String?,
         enhancedNotes: String?,
+        audioEnhancedNotes: String? = nil,
+        audioEnhancedNotesStatus: String? = nil,
+        audioEnhancedNotesError: String? = nil,
+        audioEnhancedNotesUpdatedAt: Date? = nil,
+        audioEnhancedNotesProvider: String? = nil,
+        audioEnhancedNotesModel: String? = nil,
         createdAt: Date?,
         updatedAt: Date?,
         workspaceId: String?,
@@ -147,6 +159,12 @@ struct RemoteMeetingDetail: Decodable {
         self.audioUpdatedAt = audioUpdatedAt
         self.userNotes = userNotes
         self.enhancedNotes = enhancedNotes
+        self.audioEnhancedNotes = audioEnhancedNotes
+        self.audioEnhancedNotesStatus = audioEnhancedNotesStatus
+        self.audioEnhancedNotesError = audioEnhancedNotesError
+        self.audioEnhancedNotesUpdatedAt = audioEnhancedNotesUpdatedAt
+        self.audioEnhancedNotesProvider = audioEnhancedNotesProvider
+        self.audioEnhancedNotesModel = audioEnhancedNotesModel
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.workspaceId = workspaceId
@@ -169,6 +187,14 @@ struct RemoteAudioUploadResponse: Decodable {
 struct RemoteEnhanceResponse: Decodable {
     let content: String
     let provider: String?
+}
+
+struct RemoteAudioEnhanceResponse: Decodable {
+    let content: String
+    let provider: String?
+    let model: String?
+    let status: String?
+    let updatedAt: Date?
 }
 
 struct RemoteMeetingTitleResponse: Decodable {
@@ -221,6 +247,13 @@ struct EnhanceRequestPayload: Encodable {
     let meetingTitle: String
     let segmentCommentsContext: String
     let noteAttachmentsContext: String
+    let promptOptions: PromptOptions?
+}
+
+struct AudioEnhanceRequestPayload: Encodable {
+    let userNotes: String
+    let noteAttachmentsContext: String
+    let segmentCommentsContext: String
     let promptOptions: PromptOptions?
 }
 
@@ -312,6 +345,19 @@ enum MeetingPayloadMapper {
         )
     }
 
+    static func makeAudioEnhancePayload(from meeting: Meeting) -> AudioEnhanceRequestPayload {
+        AudioEnhanceRequestPayload(
+            userNotes: meeting.userNotesPlainText,
+            noteAttachmentsContext: MeetingCommentContextBuilder.noteAttachmentsContext(for: meeting),
+            segmentCommentsContext: MeetingCommentContextBuilder.segmentCommentsContext(for: meeting),
+            promptOptions: PromptOptions(
+                meetingType: meeting.meetingType,
+                outputStyle: "平衡",
+                includeActionItems: true
+            )
+        )
+    }
+
     static func makeChatPayload(from meeting: Meeting, history: [ChatMessage], question: String) -> ChatRequestPayload {
         ChatRequestPayload(
             transcript: transcriptText(from: meeting),
@@ -352,6 +398,12 @@ enum MeetingPayloadMapper {
             durationSeconds: remote.duration ?? 0,
             userNotesPlainText: PlainTextHTMLAdapter.plainText(from: remote.userNotes ?? ""),
             enhancedNotes: remote.enhancedNotes ?? "",
+            audioEnhancedNotes: remote.audioEnhancedNotes ?? "",
+            audioEnhancedNotesStatus: AudioEnhancedNotesStatus(rawValue: remote.audioEnhancedNotesStatus ?? "") ?? .idle,
+            audioEnhancedNotesError: remote.audioEnhancedNotesError ?? "",
+            audioEnhancedNotesUpdatedAt: remote.audioEnhancedNotesUpdatedAt,
+            audioEnhancedNotesProvider: remote.audioEnhancedNotesProvider,
+            audioEnhancedNotesModel: remote.audioEnhancedNotesModel,
             audioLocalPath: nil,
             audioRemotePath: resolveRemoteAudioURLString(from: remote.audioUrl, baseURL: baseURL),
             audioMimeType: remote.audioMimeType,
@@ -391,6 +443,12 @@ enum MeetingPayloadMapper {
         meeting.durationSeconds = remote.duration ?? meeting.durationSeconds
         meeting.userNotesPlainText = PlainTextHTMLAdapter.plainText(from: remote.userNotes ?? "")
         meeting.enhancedNotes = remote.enhancedNotes ?? ""
+        meeting.audioEnhancedNotes = remote.audioEnhancedNotes ?? ""
+        meeting.audioEnhancedNotesStatus = AudioEnhancedNotesStatus(rawValue: remote.audioEnhancedNotesStatus ?? "") ?? .idle
+        meeting.audioEnhancedNotesError = remote.audioEnhancedNotesError ?? ""
+        meeting.audioEnhancedNotesUpdatedAt = remote.audioEnhancedNotesUpdatedAt
+        meeting.audioEnhancedNotesProvider = remote.audioEnhancedNotesProvider
+        meeting.audioEnhancedNotesModel = remote.audioEnhancedNotesModel
         meeting.audioRemotePath = resolveRemoteAudioURLString(from: remote.audioUrl, baseURL: baseURL)
         meeting.audioMimeType = remote.audioMimeType ?? meeting.audioMimeType
         meeting.audioDuration = remote.audioDuration ?? meeting.audioDuration
