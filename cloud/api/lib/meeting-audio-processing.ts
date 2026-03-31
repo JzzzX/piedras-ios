@@ -26,6 +26,7 @@ interface QueueAudioProcessingOptions {
 interface RuntimeQueueState {
   queue: string[];
   queued: Set<string>;
+  active: Set<string>;
   running: boolean;
   lastRecoveryAt: number;
   recoveryPromise: Promise<void> | null;
@@ -37,15 +38,21 @@ const globalForMeetingAudioProcessing = globalThis as unknown as {
   __piedrasMeetingAudioProcessingQueue?: RuntimeQueueState;
 };
 
+export function createMeetingAudioProcessingRuntimeState(): RuntimeQueueState {
+  return {
+    queue: [],
+    queued: new Set<string>(),
+    active: new Set<string>(),
+    running: false,
+    lastRecoveryAt: 0,
+    recoveryPromise: null,
+  };
+}
+
 function getRuntimeQueueState(): RuntimeQueueState {
   if (!globalForMeetingAudioProcessing.__piedrasMeetingAudioProcessingQueue) {
-    globalForMeetingAudioProcessing.__piedrasMeetingAudioProcessingQueue = {
-      queue: [],
-      queued: new Set<string>(),
-      running: false,
-      lastRecoveryAt: 0,
-      recoveryPromise: null,
-    };
+    globalForMeetingAudioProcessing.__piedrasMeetingAudioProcessingQueue =
+      createMeetingAudioProcessingRuntimeState();
   }
 
   return globalForMeetingAudioProcessing.__piedrasMeetingAudioProcessingQueue;
@@ -88,15 +95,27 @@ export function buildMeetingAudioProcessingStatus(
   };
 }
 
-function enqueueMeeting(meetingId: string) {
-  const runtime = getRuntimeQueueState();
-
-  if (runtime.queued.has(meetingId)) {
-    return;
+export function enqueueMeetingForProcessing(runtime: RuntimeQueueState, meetingId: string) {
+  if (runtime.queued.has(meetingId) || runtime.active.has(meetingId)) {
+    return false;
   }
 
   runtime.queued.add(meetingId);
   runtime.queue.push(meetingId);
+  return true;
+}
+
+export function markMeetingAudioProcessingActive(runtime: RuntimeQueueState, meetingId: string) {
+  runtime.active.add(meetingId);
+}
+
+export function markMeetingAudioProcessingIdle(runtime: RuntimeQueueState, meetingId: string) {
+  runtime.active.delete(meetingId);
+}
+
+function enqueueMeeting(meetingId: string) {
+  const runtime = getRuntimeQueueState();
+  return enqueueMeetingForProcessing(runtime, meetingId);
 }
 
 async function drainMeetingAudioQueue() {
@@ -116,6 +135,7 @@ async function drainMeetingAudioQueue() {
       }
 
       runtime.queued.delete(meetingId);
+      markMeetingAudioProcessingActive(runtime, meetingId);
 
       try {
         await processMeetingAudioFinalization(meetingId);
@@ -129,6 +149,8 @@ async function drainMeetingAudioQueue() {
             timestamp: new Date().toISOString(),
           })
         );
+      } finally {
+        markMeetingAudioProcessingIdle(runtime, meetingId);
       }
     }
   } finally {

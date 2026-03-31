@@ -98,6 +98,35 @@ struct APIClientDecodingTests {
         #expect(meeting.chatMessages[0].timestamp == fractionalFormatter.date(from: "2026-03-19T09:19:00.000Z"))
     }
 
+    @Test
+    func decodesAudioEnhanceStatusPayload() throws {
+        let payload = """
+        {
+          "meetingId": "meeting-3",
+          "hasAudio": true,
+          "audioEnhancedNotes": "音频总结",
+          "audioEnhancedNotesStatus": "processing",
+          "audioEnhancedNotesError": null,
+          "audioEnhancedNotesUpdatedAt": "2026-03-31T09:00:00.000Z",
+          "audioEnhancedNotesProvider": "openai",
+          "audioEnhancedNotesModel": "gpt-4.1",
+          "audioEnhancedNotesAttempts": 1,
+          "audioEnhancedNotesRequestedAt": "2026-03-31T08:59:00.000Z",
+          "audioEnhancedNotesStartedAt": "2026-03-31T08:59:02.000Z"
+        }
+        """
+
+        let status = try APIClient.makeJSONDecoder().decode(
+            RemoteAudioEnhanceStatusResponse.self,
+            from: Data(payload.utf8)
+        )
+
+        #expect(status.meetingId == "meeting-3")
+        #expect(status.audioEnhancedNotesStatus == "processing")
+        #expect(status.audioEnhancedNotesAttempts == 1)
+        #expect(status.audioEnhancedNotesProvider == "openai")
+    }
+
     @MainActor
     @Test
     func buildsStructuredBackendErrorMessageWithRequestID() {

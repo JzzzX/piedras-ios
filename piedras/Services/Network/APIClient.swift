@@ -307,14 +307,24 @@ final class APIClient: AuthNetworking {
         try await sendJSONRequest(path: "/api/enhance", method: "POST", body: payload)
     }
 
-    func enhanceNotesFromAudio(
+    func requestAudioEnhancedNotes(
         meetingID: String,
         payload: AudioEnhanceRequestPayload
-    ) async throws -> RemoteAudioEnhanceResponse {
+    ) async throws -> RemoteAudioEnhanceStatusResponse {
         try await sendJSONRequest(
             path: "/api/meetings/\(meetingID)/ai-notes/audio",
             method: "POST",
             body: payload
+        )
+    }
+
+    func fetchAudioEnhancedNotesStatus(
+        meetingID: String
+    ) async throws -> RemoteAudioEnhanceStatusResponse {
+        try await sendJSONRequest(
+            path: "/api/meetings/\(meetingID)/ai-notes/audio",
+            method: "GET",
+            responseType: RemoteAudioEnhanceStatusResponse.self
         )
     }
 

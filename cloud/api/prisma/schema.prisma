@@ -93,6 +93,10 @@ model Meeting {
   audioEnhancedNotesUpdatedAt DateTime?
   audioEnhancedNotesProvider String?
   audioEnhancedNotesModel String?
+  audioEnhancedNotesAttempts Int @default(0)
+  audioEnhancedNotesRequestedAt DateTime?
+  audioEnhancedNotesStartedAt DateTime?
+  audioEnhancedNotesRequestPayload String?
   enhanceRecipeId         String?
   roundLabel              String   @default("")
   interviewerName String @default("")

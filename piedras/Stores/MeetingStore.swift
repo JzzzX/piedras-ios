@@ -1021,21 +1021,27 @@ final class MeetingStore {
         do {
             try await ensureMeetingSyncedForAudioNotes(meeting)
             try await ensureAudioUploadedForAudioNotes(meeting)
-            let response = try await apiClient.enhanceNotesFromAudio(
+            let response = try await apiClient.requestAudioEnhancedNotes(
                 meetingID: meetingID,
                 payload: MeetingPayloadMapper.makeAudioEnhancePayload(from: meeting)
             )
-            meeting.audioEnhancedNotes = normalizeGeneratedNotes(response.content)
-            meeting.audioEnhancedNotesStatus = .ready
-            meeting.audioEnhancedNotesError = ""
-            meeting.audioEnhancedNotesUpdatedAt = response.updatedAt ?? .now
-            meeting.audioEnhancedNotesProvider = response.provider
-            meeting.audioEnhancedNotesModel = response.model
+            MeetingPayloadMapper.apply(audioEnhanceStatus: response, to: meeting)
             try repository.save()
-            settingsStore.markLLMRequestSucceeded(provider: response.provider)
+
+            if let resolved = try await pollForAudioEnhancedNotes(meetingID: meetingID, meeting: meeting) {
+                MeetingPayloadMapper.apply(audioEnhanceStatus: resolved, to: meeting)
+                try repository.save()
+
+                if meeting.audioEnhancedNotesStatus == .ready {
+                    settingsStore.markLLMRequestSucceeded(provider: resolved.audioEnhancedNotesProvider)
+                }
+            }
+
             loadMeetings()
         } catch {
-            meeting.audioEnhancedNotesStatus = .failed
+            if meeting.audioEnhancedNotesStatus != .processing {
+                meeting.audioEnhancedNotesStatus = .failed
+            }
             meeting.audioEnhancedNotesError = error.localizedDescription
             try? repository.save()
             lastErrorMessage = error.localizedDescription
@@ -1139,6 +1145,32 @@ final class MeetingStore {
         meeting.audioDuration = uploadResponse.audioDuration ?? fallbackDuration
         meeting.audioUpdatedAt = uploadResponse.audioUpdatedAt ?? meeting.audioUpdatedAt ?? .now
         try repository.save()
+    }
+
+    private func pollForAudioEnhancedNotes(
+        meetingID: String,
+        meeting: Meeting
+    ) async throws -> RemoteAudioEnhanceStatusResponse? {
+        for _ in 0 ..< 15 {
+            try await Task.sleep(nanoseconds: 2_000_000_000)
+            let status = try await apiClient.fetchAudioEnhancedNotesStatus(meetingID: meetingID)
+            MeetingPayloadMapper.apply(audioEnhanceStatus: status, to: meeting)
+            try repository.save()
+
+            switch meeting.audioEnhancedNotesStatus {
+            case .ready:
+                meeting.audioEnhancedNotes = normalizeGeneratedNotes(meeting.audioEnhancedNotes)
+                try repository.save()
+                return status
+            case .failed:
+                let message = status.audioEnhancedNotesError?.trimmingCharacters(in: .whitespacesAndNewlines)
+                throw APIClientError.requestFailed(message?.isEmpty == false ? message! : "音频版 AI 笔记生成失败。")
+            case .idle, .processing:
+                continue
+            }
+        }
+
+        return nil
     }
 
     private func shouldUploadAudioBeforeGeneratingAudioNotes(for meeting: Meeting) -> Bool {

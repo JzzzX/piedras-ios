@@ -225,11 +225,25 @@ struct RemoteEnhanceResponse: Decodable {
 }
 
 struct RemoteAudioEnhanceResponse: Decodable {
-    let content: String
+    let content: String?
     let provider: String?
     let model: String?
     let status: String?
     let updatedAt: Date?
+}
+
+struct RemoteAudioEnhanceStatusResponse: Decodable {
+    let meetingId: String
+    let hasAudio: Bool
+    let audioEnhancedNotes: String
+    let audioEnhancedNotesStatus: String
+    let audioEnhancedNotesError: String?
+    let audioEnhancedNotesUpdatedAt: Date?
+    let audioEnhancedNotesProvider: String?
+    let audioEnhancedNotesModel: String?
+    let audioEnhancedNotesAttempts: Int
+    let audioEnhancedNotesRequestedAt: Date?
+    let audioEnhancedNotesStartedAt: Date?
 }
 
 struct RemoteMeetingTitleResponse: Decodable {
@@ -537,6 +551,18 @@ enum MeetingPayloadMapper {
             audioProcessingError: remote.audioProcessingError,
             to: meeting
         )
+    }
+
+    static func apply(
+        audioEnhanceStatus remote: RemoteAudioEnhanceStatusResponse,
+        to meeting: Meeting
+    ) {
+        meeting.audioEnhancedNotes = remote.audioEnhancedNotes
+        meeting.audioEnhancedNotesStatus = AudioEnhancedNotesStatus(rawValue: remote.audioEnhancedNotesStatus) ?? .idle
+        meeting.audioEnhancedNotesError = remote.audioEnhancedNotesError ?? ""
+        meeting.audioEnhancedNotesUpdatedAt = remote.audioEnhancedNotesUpdatedAt
+        meeting.audioEnhancedNotesProvider = remote.audioEnhancedNotesProvider
+        meeting.audioEnhancedNotesModel = remote.audioEnhancedNotesModel
     }
 
     static func transcriptText(from meeting: Meeting) -> String {
