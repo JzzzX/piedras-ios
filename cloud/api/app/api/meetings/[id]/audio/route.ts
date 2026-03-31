@@ -8,7 +8,11 @@ import {
   hasMeetingAudioFile,
   saveMeetingAudioFile,
 } from '@/lib/meeting-audio';
-import { finalizeMeetingTranscriptFromAudio } from '@/lib/meeting-transcript-finalizer';
+import {
+  finalizeMeetingTranscriptFromAudio,
+  isEmptyTranscriptFinalizationFailure,
+} from '@/lib/meeting-transcript-finalizer';
+import type { FinalizedTranscript } from '@/lib/meeting-transcript-finalizer';
 
 export const runtime = 'nodejs';
 
@@ -96,41 +100,54 @@ export async function POST(
     const normalizedMimeType = mimeType || file.type || 'audio/webm';
 
     if (shouldFinalizeTranscript) {
-      const finalizedTranscript = await finalizeMeetingTranscriptFromAudio({
-        audioPath: getMeetingAudioPath(id),
-        mimeType: normalizedMimeType,
-        requestId: context.requestId,
-        userId: `meeting-${id}`,
-      });
+      let finalizedTranscript: FinalizedTranscript | null = null;
+      try {
+        finalizedTranscript = await finalizeMeetingTranscriptFromAudio({
+          audioPath: getMeetingAudioPath(id),
+          mimeType: normalizedMimeType,
+          requestId: context.requestId,
+          userId: `meeting-${id}`,
+        });
+      } catch (error) {
+        if (!isEmptyTranscriptFinalizationFailure(error)) {
+          throw error;
+        }
+      }
 
       const hydratedMeeting = await prisma.$transaction(async (tx: any) => {
+        const meetingData: Record<string, unknown> = {
+          audioMimeType: normalizedMimeType,
+          audioDuration: normalizedDuration,
+          audioUpdatedAt: new Date(),
+        };
+        if (finalizedTranscript) {
+          meetingData.speakers = JSON.stringify(finalizedTranscript.speakers);
+        }
+
         await tx.meeting.update({
           where: { id },
-          data: {
-            audioMimeType: normalizedMimeType,
-            audioDuration: normalizedDuration,
-            audioUpdatedAt: new Date(),
-            speakers: JSON.stringify(finalizedTranscript.speakers),
-          },
+          data: meetingData,
         });
 
-        await tx.transcriptSegment.deleteMany({
-          where: { meetingId: id },
-        });
-
-        if (finalizedTranscript.segments.length > 0) {
-          await tx.transcriptSegment.createMany({
-            data: finalizedTranscript.segments.map((segment, index) => ({
-              id: crypto.randomUUID(),
-              meetingId: id,
-              speaker: segment.speaker,
-              text: segment.text,
-              startTime: segment.startTime,
-              endTime: segment.endTime,
-              isFinal: segment.isFinal,
-              order: index,
-            })),
+        if (finalizedTranscript) {
+          await tx.transcriptSegment.deleteMany({
+            where: { meetingId: id },
           });
+
+          if (finalizedTranscript.segments.length > 0) {
+            await tx.transcriptSegment.createMany({
+              data: finalizedTranscript.segments.map((segment, index) => ({
+                id: crypto.randomUUID(),
+                meetingId: id,
+                speaker: segment.speaker,
+                text: segment.text,
+                startTime: segment.startTime,
+                endTime: segment.endTime,
+                isFinal: segment.isFinal,
+                order: index,
+              })),
+            });
+          }
         }
 
         return tx.meeting.findUnique({

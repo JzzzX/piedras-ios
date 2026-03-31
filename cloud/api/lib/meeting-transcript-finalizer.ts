@@ -50,6 +50,11 @@ const VOLCENGINE_FILE_APP_ID =
 const VOLCENGINE_FILE_ACCESS_TOKEN =
   process.env.VOLCENGINE_FILE_ASR_ACCESS_TOKEN?.trim() || process.env.DOUBAO_ASR_ACCESS_TOKEN?.trim() || '';
 const VOLCENGINE_FILE_SSD_VERSION = process.env.VOLCENGINE_FILE_ASR_SSD_VERSION?.trim() || '200';
+const EMPTY_TRANSCRIPT_FAILURE_MARKERS = [
+  '离线转写未返回可用内容',
+  'normal silence audio',
+  'no valid speech in audio',
+];
 
 export function normalizeDiarizedTranscript(payload: DiarizedPayload): FinalizedTranscript {
   const utterances = payload.result?.utterances ?? [];
@@ -169,6 +174,23 @@ export async function finalizeMeetingTranscriptFromAudio(params: {
   } finally {
     await preparedAudio.cleanup();
   }
+}
+
+export function isEmptyTranscriptFinalizationFailure(error: unknown): boolean {
+  let message = '';
+
+  if (typeof error === 'string') {
+    message = error;
+  } else if (error instanceof Error) {
+    message = error.message;
+  }
+
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return EMPTY_TRANSCRIPT_FAILURE_MARKERS.some((marker) => normalized.includes(marker.toLowerCase()));
 }
 
 function ensureVolcengineFileAsrConfigured() {
