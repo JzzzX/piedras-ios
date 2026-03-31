@@ -1019,6 +1019,7 @@ final class MeetingStore {
         defer { audioEnhancingMeetingIDs.remove(meetingID) }
 
         do {
+            try await ensureMeetingSyncedForAudioNotes(meeting)
             try await ensureAudioUploadedForAudioNotes(meeting)
             let response = try await apiClient.enhanceNotesFromAudio(
                 meetingID: meetingID,
@@ -1084,6 +1085,31 @@ final class MeetingStore {
         }
 
         return session.orderedMessages.contains(where: { $0.role == "user" })
+    }
+
+    private func ensureMeetingSyncedForAudioNotes(_ meeting: Meeting) async throws {
+        let needsMeetingSync = meeting.syncState != .synced
+        let needsRemoteAudioSync = shouldUploadAudioBeforeGeneratingAudioNotes(for: meeting)
+
+        guard needsMeetingSync || needsRemoteAudioSync else {
+            return
+        }
+
+        let workspaceID = meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+        if workspaceID == nil {
+            guard let bootstrappedWorkspaceID = await bootstrapHiddenWorkspace(force: false, surfaceBlockingError: false) else {
+                throw APIClientError.requestFailed("隐藏工作区尚未初始化，暂时无法生成音频版 AI 笔记。")
+            }
+
+            if meeting.hiddenWorkspaceId != bootstrappedWorkspaceID {
+                meeting.hiddenWorkspaceId = bootstrappedWorkspaceID
+                meeting.markPending()
+                try repository.save()
+            }
+        }
+
+        try await meetingSyncService.syncMeeting(id: meeting.id)
+        loadMeetings()
     }
 
     private func ensureAudioUploadedForAudioNotes(_ meeting: Meeting) async throws {

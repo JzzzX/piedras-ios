@@ -868,6 +868,72 @@ struct MeetingRecordingRepairTests {
     }
 
     @MainActor
+    @Test
+    func generateAudioEnhancedNotesSyncsMeetingBeforeUploadingAudio() async throws {
+        MeetingRecordingRepairMockURLProtocol.reset()
+        defer { MeetingRecordingRepairMockURLProtocol.reset() }
+
+        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.status = .ended
+        meeting.title = "音频实验会议"
+        meeting.audioMimeType = "audio/m4a"
+        meeting.audioDuration = 12
+        meeting.syncState = .pending
+
+        let audioURL = try makeTemporaryAudioFile(named: "audio-notes-upload.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+        meeting.audioLocalPath = audioURL.path
+        try fixture.repository.save()
+
+        MeetingRecordingRepairMockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/meetings/\(meeting.id)/audio":
+                #expect(fixture.syncService.syncedMeetingIDs == [meeting.id])
+                let payload: [String: Any] = [
+                    "hasAudio": true,
+                    "audioMimeType": "audio/m4a",
+                    "audioDuration": 12,
+                    "audioUpdatedAt": "2026-03-31T00:00:00.000Z",
+                    "audioUrl": "/api/meetings/\(meeting.id)/audio?t=1",
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            case "/api/meetings/\(meeting.id)/ai-notes/audio":
+                let payload: [String: Any] = [
+                    "content": "## 会议摘要\n- 已根据原始音频生成",
+                    "provider": "test",
+                    "model": "gemini-3-flash-preview",
+                    "status": "ready",
+                    "updatedAt": "2026-03-31T00:00:02.000Z",
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            default:
+                throw URLError(.badURL)
+            }
+        }
+
+        await fixture.meetingStore.generateAudioEnhancedNotes(for: meeting.id)
+
+        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(fixture.syncService.syncedMeetingIDs == [meeting.id])
+        #expect(refreshedMeeting.audioEnhancedNotesStatus == .ready)
+        #expect(refreshedMeeting.audioEnhancedNotes.contains("已根据原始音频生成"))
+        #expect(refreshedMeeting.audioRemotePath?.contains("/api/meetings/\(meeting.id)/audio") == true)
+    }
+
+    @MainActor
     private func makeFixture(
         transcriptionBehavior: StubAudioFileTranscriptionService.Behavior
     ) throws -> (

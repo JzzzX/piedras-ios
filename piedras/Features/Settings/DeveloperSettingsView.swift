@@ -36,32 +36,33 @@ struct DeveloperSettingsView: View {
                         SectionLabel(title: AppStrings.current.ai)
 
                         VStack(alignment: .leading, spacing: 12) {
-                            Button {
-                                settingsStore.isExperimentalAudioAINotesEnabled.toggle()
-                            } label: {
-                                HStack(spacing: 12) {
-                                    RetroIconBadge(systemName: "waveform.badge.magnifyingglass", size: 28, symbolSize: 11)
+                            HStack(spacing: 12) {
+                                RetroIconBadge(systemName: "waveform.badge.magnifyingglass", size: 28, symbolSize: 11)
 
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(AppStrings.current.experimentalAudioAINotesToggle)
-                                            .font(AppTheme.bodyFont(size: 14, weight: .semibold))
-                                            .foregroundStyle(AppTheme.brandInk)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(AppStrings.current.experimentalAudioAINotesToggle)
+                                        .font(AppTheme.bodyFont(size: 14, weight: .semibold))
+                                        .foregroundStyle(AppTheme.brandInk)
 
-                                        Text(AppStrings.current.experimentalAudioAINotesHelp)
-                                            .font(AppTheme.bodyFont(size: 12))
-                                            .foregroundStyle(AppTheme.subtleInk)
-                                            .multilineTextAlignment(.leading)
-                                    }
+                                    Text(AppStrings.current.experimentalAudioAINotesHelp)
+                                        .font(AppTheme.bodyFont(size: 12))
+                                        .foregroundStyle(AppTheme.subtleInk)
+                                        .multilineTextAlignment(.leading)
 
-                                    Spacer()
-
-                                    Text(settingsStore.isExperimentalAudioAINotesEnabled ? "ON" : "OFF")
-                                        .font(AppTheme.dataFont(size: 12))
-                                        .foregroundStyle(settingsStore.isExperimentalAudioAINotesEnabled ? AppTheme.brandInk : AppTheme.subtleInk)
+                                    Text(AppStrings.current.experimentalAudioAINotesFutureNotice)
+                                        .font(AppTheme.bodyFont(size: 11))
+                                        .foregroundStyle(AppTheme.subtleInk)
+                                        .multilineTextAlignment(.leading)
                                 }
-                                .padding(.vertical, 4)
+
+                                Spacer()
+
+                                Text(AppStrings.current.comingSoonShort)
+                                    .font(AppTheme.dataFont(size: 12))
+                                    .foregroundStyle(AppTheme.subtleInk)
                             }
-                            .buttonStyle(.plain)
+                            .padding(.vertical, 4)
+                            .opacity(0.72)
                         }
                         .padding(16)
                         .softCard()

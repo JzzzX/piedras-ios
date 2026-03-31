@@ -30,6 +30,7 @@ function summarizeAuthSchemaStatus(input) {
     userAuthUserIdColumnPresent: Boolean(input.userAuthUserIdColumnPresent),
     userAuthUserIdUniqueIndexPresent: Boolean(input.userAuthUserIdUniqueIndexPresent),
     userPasswordHashNullable: Boolean(input.userPasswordHashNullable),
+    meetingAudioEnhancedColumnsPresent: input.meetingAudioEnhancedColumnsPresent !== false,
   };
 
   if (!status.userTable) {
@@ -59,6 +60,10 @@ function summarizeAuthSchemaStatus(input) {
   if (!status.userPasswordHashNullable) {
     status.ready = false;
     status.missingItems.push('User.passwordHash 可空约束');
+  }
+  if (!status.meetingAudioEnhancedColumnsPresent) {
+    status.ready = false;
+    status.missingItems.push('Meeting 音频 AI 笔记字段');
   }
 
   return status;
@@ -117,6 +122,20 @@ async function getAuthSchemaStatus(prisma) {
       AND tablename = 'User'
       AND indexname = 'User_authUserId_key'
   `);
+  const meetingAudioEnhancedColumns = await prisma.$queryRawUnsafe(`
+    SELECT column_name AS "columnName"
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'Meeting'
+      AND column_name IN (
+        'audioEnhancedNotes',
+        'audioEnhancedNotesStatus',
+        'audioEnhancedNotesError',
+        'audioEnhancedNotesUpdatedAt',
+        'audioEnhancedNotesProvider',
+        'audioEnhancedNotesModel'
+      )
+  `);
   const userAuthUserIdColumn = userAuthColumns.find((item) => item.columnName === 'authUserId');
   const userPasswordHashColumn = userAuthColumns.find((item) => item.columnName === 'passwordHash');
 
@@ -126,6 +145,7 @@ async function getAuthSchemaStatus(prisma) {
     userAuthUserIdColumnPresent: Boolean(userAuthUserIdColumn),
     userAuthUserIdUniqueIndexPresent: userAuthIndexes.length > 0,
     userPasswordHashNullable: userPasswordHashColumn?.isNullable === 'YES',
+    meetingAudioEnhancedColumnsPresent: meetingAudioEnhancedColumns.length === 6,
   });
 }
 
@@ -136,7 +156,7 @@ async function runPrismaDbPush(logger) {
 
   const result = await execFileAsync(
     process.platform === 'win32' ? 'npx.cmd' : 'npx',
-    ['prisma', 'db', 'push', '--skip-generate', '--accept-data-loss'],
+    ['prisma', 'db', 'push', '--accept-data-loss'],
     {
       cwd: path.resolve(__dirname, '..'),
       env: process.env,

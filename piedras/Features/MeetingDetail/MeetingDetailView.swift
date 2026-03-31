@@ -603,148 +603,17 @@ struct MeetingDetailView: View {
                 recordingDocumentPage(meeting: meeting)
             } else {
                 ThinDivider()
-                if settingsStore.isExperimentalAudioAINotesEnabled {
-                    experimentalAINotesStack(meeting: meeting, presentation: presentation)
-                        .padding(.top, 20)
-                } else {
-                    EnhancedNotesView(
-                        text: meeting.enhancedNotes,
-                        meetingID: meeting.id,
-                        forceProcessingState: presentation.showsEnhancedNotesProcessing
-                    )
-                    .padding(.top, 20)
-                }
+                EnhancedNotesView(
+                    text: meeting.enhancedNotes,
+                    meetingID: meeting.id,
+                    forceProcessingState: presentation.showsEnhancedNotesProcessing
+                )
+                .padding(.top, 20)
             }
         }
         .padding(.bottom, 34)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(maxWidth: .infinity, minHeight: minimumPageHeight, alignment: .topLeading)
-    }
-
-    private func experimentalAINotesStack(
-        meeting: Meeting,
-        presentation: MeetingDetailPresentationState
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 22) {
-            aiNotesExperimentCard(
-                title: AppStrings.current.textAINotesVersion,
-                badge: nil,
-                text: meeting.enhancedNotes,
-                isProcessing: presentation.showsEnhancedNotesProcessing,
-                errorMessage: nil,
-                emptyStateMessage: nil,
-                primaryActionTitle: nil,
-                primaryAction: nil,
-                secondaryActionTitle: nil,
-                secondaryAction: nil,
-                meetingID: meeting.id
-            )
-
-            aiNotesExperimentCard(
-                title: AppStrings.current.audioAINotesExperimentTitle,
-                badge: AppStrings.current.audioAINotesExperimentBadge,
-                text: meeting.audioEnhancedNotes,
-                isProcessing: meetingStore.isEnhancingAudio(meetingID: meeting.id),
-                errorMessage: meeting.audioEnhancedNotesStatus == .failed ? meeting.audioEnhancedNotesError : nil,
-                emptyStateMessage: AppStrings.current.audioAINotesUnavailable,
-                primaryActionTitle: meeting.audioEnhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? AppStrings.current.generateAudioAINotes
-                    : AppStrings.current.refreshAudioAINotes,
-                primaryAction: canGenerateAudioSummary(for: meeting) ? {
-                    Task {
-                        await meetingStore.generateAudioEnhancedNotes(for: meeting.id)
-                    }
-                } : nil,
-                secondaryActionTitle: meeting.audioEnhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? nil
-                    : AppStrings.current.copyNotes,
-                secondaryAction: meeting.audioEnhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                    ? nil
-                    : {
-                        UIPasteboard.general.string = MarkdownDocumentFormatter.plainText(from: meeting.audioEnhancedNotes)
-                            .trimmingCharacters(in: .whitespacesAndNewlines)
-                        UINotificationFeedbackGenerator().notificationOccurred(.success)
-                        showToast(AppStrings.current.copiedNotes)
-                    },
-                meetingID: meeting.id
-            )
-        }
-    }
-
-    private func aiNotesExperimentCard(
-        title: String,
-        badge: String?,
-        text: String,
-        isProcessing: Bool,
-        errorMessage: String?,
-        emptyStateMessage: String?,
-        primaryActionTitle: String?,
-        primaryAction: (() -> Void)?,
-        secondaryActionTitle: String?,
-        secondaryAction: (() -> Void)?,
-        meetingID: String
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(spacing: 8) {
-                        Text(title)
-                            .font(AppTheme.bodyFont(size: 15, weight: .semibold))
-                            .foregroundStyle(AppTheme.brandInk)
-
-                        if let badge {
-                            Text(badge)
-                                .font(AppTheme.dataFont(size: 11))
-                                .foregroundStyle(AppTheme.primaryActionForeground)
-                                .padding(.horizontal, 8)
-                                .frame(height: 20)
-                                .background(AppTheme.primaryActionFill)
-                                .overlay(
-                                    Rectangle()
-                                        .stroke(AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
-                                )
-                        }
-                    }
-
-                    if let errorMessage, !errorMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(errorMessage)
-                            .font(AppTheme.bodyFont(size: 12))
-                            .foregroundStyle(.red)
-                            .fixedSize(horizontal: false, vertical: true)
-                    } else if let emptyStateMessage,
-                              primaryAction == nil && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        Text(emptyStateMessage)
-                            .font(AppTheme.bodyFont(size: 12))
-                            .foregroundStyle(AppTheme.subtleInk)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-
-                Spacer(minLength: 12)
-
-                HStack(spacing: 8) {
-                    if let secondaryActionTitle, let secondaryAction {
-                        Button(secondaryActionTitle, action: secondaryAction)
-                            .buttonStyle(.plain)
-                            .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-                            .foregroundStyle(AppTheme.brandInk)
-                    }
-
-                    if let primaryActionTitle, let primaryAction {
-                        Button(primaryActionTitle, action: primaryAction)
-                            .buttonStyle(.plain)
-                            .font(AppTheme.bodyFont(size: 12, weight: .semibold))
-                            .foregroundStyle(AppTheme.brandInk)
-                    }
-                }
-            }
-
-            EnhancedNotesView(
-                text: text,
-                meetingID: meetingID,
-                forceProcessingState: isProcessing
-            )
-        }
     }
 
     private func recordingDocumentPage(meeting: Meeting) -> some View {

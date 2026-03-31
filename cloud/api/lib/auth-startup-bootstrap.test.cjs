@@ -33,6 +33,7 @@ test('summarizeAuthSchemaStatus reports missing user auth schema even when core 
     userAuthUserIdColumnPresent: false,
     userAuthUserIdUniqueIndexPresent: false,
     userPasswordHashNullable: false,
+    meetingAudioEnhancedColumnsPresent: false,
   });
 
   assert.equal(status.ready, false);
@@ -40,7 +41,22 @@ test('summarizeAuthSchemaStatus reports missing user auth schema even when core 
     'User.authUserId 字段',
     'User.authUserId 唯一索引',
     'User.passwordHash 可空约束',
+    'Meeting 音频 AI 笔记字段',
   ]);
+});
+
+test('summarizeAuthSchemaStatus reports missing meeting audio ai columns', () => {
+  const status = summarizeAuthSchemaStatus({
+    tableNames: ['User', 'AuthSession', 'InviteCode'],
+    workspaceOwnerColumnPresent: true,
+    userAuthUserIdColumnPresent: true,
+    userAuthUserIdUniqueIndexPresent: true,
+    userPasswordHashNullable: true,
+    meetingAudioEnhancedColumnsPresent: false,
+  });
+
+  assert.equal(status.ready, false);
+  assert.deepEqual(status.missingItems, ['Meeting 音频 AI 笔记字段']);
 });
 
 test('buildLegacyBootstrapPlans assigns the two largest legacy workspaces to fixed bootstrap accounts', () => {
