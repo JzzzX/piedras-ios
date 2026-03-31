@@ -2441,15 +2441,16 @@ final class MeetingStore {
         }
 
         let transcript = MeetingPayloadMapper.transcriptText(from: meeting)
-        let canRunAIFinalization: Bool
-        if transcript.isEmpty {
-            canRunAIFinalization = false
-        } else {
-            canRunAIFinalization = await ensureBackendReachable(force: false)
-        }
+        let canGenerateTitle = !transcript.isEmpty
+        let canGenerateEnhancedNotes = hasEnhanceableMeetingMaterial(meeting, transcript: transcript)
+        let needsBackendForAIFinalization = canGenerateTitle || canGenerateEnhancedNotes
+        let backendReachable = needsBackendForAIFinalization
+            ? await ensureBackendReachable(force: false)
+            : false
 
         if meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           canRunAIFinalization {
+           canGenerateTitle,
+           backendReachable {
             do {
                 generatingTitleMeetingIDs.insert(meetingID)
                 defer { generatingTitleMeetingIDs.remove(meetingID) }
@@ -2476,7 +2477,8 @@ final class MeetingStore {
         }
 
         if meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-           canRunAIFinalization {
+           canGenerateEnhancedNotes,
+           backendReachable {
             do {
                 let transcriptFingerprint = meeting.transcriptFingerprint
                 enhancingMeetingIDs.insert(meetingID)
@@ -2503,6 +2505,26 @@ final class MeetingStore {
         if meeting.syncState != .synced || meeting.lastSyncedAt == nil {
             await syncMeetingIfPossible(meetingID: meetingID, userVisibleFailurePrefix: "会议同步失败")
         }
+    }
+
+    private func hasEnhanceableMeetingMaterial(_ meeting: Meeting, transcript: String) -> Bool {
+        if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+
+        if !meeting.userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+
+        if !MeetingCommentContextBuilder.noteAttachmentsContext(for: meeting)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty {
+            return true
+        }
+
+        return !MeetingCommentContextBuilder.segmentCommentsContext(for: meeting)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
     }
 
     private func updateTranscriptNotesFreshnessIfNeeded(for meeting: Meeting) {

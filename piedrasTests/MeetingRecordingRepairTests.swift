@@ -5,6 +5,36 @@ import Testing
 @testable import piedras
 
 @MainActor
+private final class MeetingRecordingRepairMockURLProtocol: URLProtocol {
+    static var requestHandler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+
+    static func reset() {
+        requestHandler = nil
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let handler = Self.requestHandler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+
+        do {
+            let (response, data) = try handler(request)
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
+@MainActor
 private final class StubAudioFileTranscriptionService: AudioFileTranscriptionServicing {
     enum Behavior {
         case succeed([ASRFinalResult])
@@ -197,6 +227,74 @@ private final class StubRecordingLiveActivityCoordinator: RecordingLiveActivityC
 
 @Suite(.serialized)
 struct MeetingRecordingRepairTests {
+    @MainActor
+    @Test
+    func stopRecordingWithoutTranscriptStillGeneratesAiNotesFromUserNotes() async throws {
+        MeetingRecordingRepairMockURLProtocol.reset()
+        defer { MeetingRecordingRepairMockURLProtocol.reset() }
+
+        var enhanceCalls = 0
+        MeetingRecordingRepairMockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/enhance":
+                enhanceCalls += 1
+                let body = try requestBodyData(from: request)
+                let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                #expect(json["transcript"] as? String == "")
+                #expect((json["userNotes"] as? String)?.contains("客户反馈") == true)
+
+                let payload: [String: Any] = [
+                    "content": "## 会议摘要\n- 根据用户笔记整理出的结论",
+                    "provider": "test"
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "已有标题"
+        meeting.userNotesPlainText = "先整理这周的客户反馈，再补一版路线图。"
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+
+        let audioURL = try makeTemporaryAudioFile(named: "stop-without-transcript-generates-notes.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        await fixture.meetingStore.finishStoppedRecording(
+            meetingID: meeting.id,
+            artifact: LocalAudioArtifact(
+                fileURL: audioURL,
+                durationSeconds: 11,
+                mimeType: "audio/m4a"
+            )
+        )
+
+        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.status == .ended)
+        #expect(refreshedMeeting.transcriptPipelineState == .ready)
+        #expect(enhanceCalls == 1)
+        #expect(refreshedMeeting.enhancedNotes.contains("根据用户笔记整理出的结论"))
+    }
+
     @MainActor
     @Test
     func createMeetingForHomeRecordingPrimesRecordingStateBeforeNavigation() throws {
@@ -792,7 +890,7 @@ struct MeetingRecordingRepairTests {
         settingsStore.workspaceBootstrapState = .success
         settingsStore.markBackendReachable()
         let recordingSessionStore = RecordingSessionStore()
-        let apiClient = APIClient(settingsStore: settingsStore)
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
         let recorder = StubAudioRecorderService()
         let transcriber = StubAudioFileTranscriptionService(behavior: transcriptionBehavior)
         let syncService = StubMeetingSyncService(repository: repository)
@@ -840,6 +938,16 @@ struct MeetingRecordingRepairTests {
         )
     }
 
+    @MainActor
+    private func makeAPIClient(settingsStore: SettingsStore) -> APIClient {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [MeetingRecordingRepairMockURLProtocol.self]
+        return APIClient(
+            settingsStore: settingsStore,
+            session: URLSession(configuration: configuration)
+        )
+    }
+
     private func makeTemporaryAudioFile(named name: String) throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
@@ -856,6 +964,38 @@ struct MeetingRecordingRepairTests {
         let bytesPerMillisecond = (Double(Int(PCMConverter.targetSampleRate)) * 2) / 1000
         let byteCount = Int((Double(durationMS) * bytesPerMillisecond).rounded())
         return Data(repeating: 0, count: max(byteCount, 0))
+    }
+
+    private func requestBodyData(from request: URLRequest) throws -> Data {
+        if let body = request.httpBody {
+            return body
+        }
+
+        guard let stream = request.httpBodyStream else {
+            throw URLError(.badServerResponse)
+        }
+
+        stream.open()
+        defer { stream.close() }
+
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+
+        while stream.hasBytesAvailable {
+            let bytesRead = stream.read(&buffer, maxLength: buffer.count)
+
+            if bytesRead < 0 {
+                throw stream.streamError ?? URLError(.cannotParseResponse)
+            }
+
+            if bytesRead == 0 {
+                break
+            }
+
+            data.append(contentsOf: buffer.prefix(bytesRead))
+        }
+
+        return data
     }
 
     @MainActor

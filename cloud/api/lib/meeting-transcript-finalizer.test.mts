@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { normalizeDiarizedTranscript } from './meeting-transcript-finalizer.ts';
+import {
+  isEmptyTranscriptFinalizationFailure,
+  normalizeDiarizedTranscript,
+} from './meeting-transcript-finalizer.ts';
 
 test('normalizeDiarizedTranscript maps provider speaker ids to stable keys', () => {
   const normalized = normalizeDiarizedTranscript({
@@ -45,4 +48,15 @@ test('normalizeDiarizedTranscript maps provider speaker ids to stable keys', () 
       { speaker: 'spk_1', text: '那你做过哪些性能优化？', order: 2 },
     ]
   );
+});
+
+test('isEmptyTranscriptFinalizationFailure recognizes benign no-speech finalization failures', () => {
+  assert.equal(isEmptyTranscriptFinalizationFailure(new Error('离线转写未返回可用内容。')), true);
+  assert.equal(
+    isEmptyTranscriptFinalizationFailure(
+      new Error('离线转写失败：[Normal silence audio] no valid speech in audio')
+    ),
+    true
+  );
+  assert.equal(isEmptyTranscriptFinalizationFailure(new Error('音频转码失败：ffmpeg missing')), false);
 });
