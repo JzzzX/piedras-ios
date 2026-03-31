@@ -7,6 +7,7 @@ import {
   enqueueMeetingAudioEnhance,
   markMeetingAudioEnhanceActive,
   markMeetingAudioEnhanceIdle,
+  resolveMeetingAudioEnhanceInputStrategy,
 } from './meeting-audio-enhance-processing.ts';
 
 test('buildMeetingAudioEnhanceStatus normalizes persisted audio AI notes state for API payloads', () => {
@@ -57,4 +58,24 @@ test('meeting can be enqueued again after audio AI note generation completes', (
 
   assert.equal(enqueueMeetingAudioEnhance(runtime, 'meeting-1'), true);
   assert.deepEqual(runtime.queue, ['meeting-1']);
+});
+
+test('audio AI notes transcode unsupported mime types to inline mp3 when gemini is unavailable', () => {
+  const strategy = resolveMeetingAudioEnhanceInputStrategy({
+    mimeType: 'audio/m4a',
+    byteLength: 4 * 1024 * 1024,
+    geminiConfigured: false,
+  });
+
+  assert.equal(strategy, 'inline_mp3');
+});
+
+test('audio AI notes keep large inputs as file uploads when gemini is available', () => {
+  const strategy = resolveMeetingAudioEnhanceInputStrategy({
+    mimeType: 'audio/m4a',
+    byteLength: 24 * 1024 * 1024,
+    geminiConfigured: true,
+  });
+
+  assert.equal(strategy, 'file_upload');
 });

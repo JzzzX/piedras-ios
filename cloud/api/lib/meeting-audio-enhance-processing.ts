@@ -1,4 +1,9 @@
 import { readFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
 import type { Meeting } from '@prisma/client';
 import { prisma } from './db.ts';
 import { generateTextWithFallback, hasAvailableLlm } from './llm-provider.ts';
@@ -14,6 +19,7 @@ const AUDIO_ENHANCE_TIMEOUT_MS = 25_000;
 const AUDIO_ENHANCE_MAX_TOKENS = 1_400;
 const INLINE_AUDIO_MAX_BYTES = 18 * 1024 * 1024;
 const RECOVERY_INTERVAL_MS = 30_000;
+const execFileAsync = promisify(execFile);
 
 export type MeetingAudioEnhanceState = 'idle' | 'processing' | 'ready' | 'failed';
 
@@ -34,6 +40,14 @@ export interface MeetingAudioEnhanceStatus {
   audioEnhancedNotesAttempts: number;
   audioEnhancedNotesRequestedAt: string | null;
   audioEnhancedNotesStartedAt: string | null;
+}
+
+type MeetingAudioEnhanceInputStrategy = 'inline_mp3' | 'file_upload';
+
+interface MeetingAudioEnhanceInputStrategyOptions {
+  mimeType: string;
+  byteLength: number;
+  geminiConfigured: boolean;
 }
 
 interface QueueMeetingAudioEnhanceOptions {
@@ -114,6 +128,16 @@ export function buildMeetingAudioEnhanceStatus(
     audioEnhancedNotesRequestedAt: toISOStringOrNull(meeting.audioEnhancedNotesRequestedAt),
     audioEnhancedNotesStartedAt: toISOStringOrNull(meeting.audioEnhancedNotesStartedAt),
   };
+}
+
+export function resolveMeetingAudioEnhanceInputStrategy(
+  options: MeetingAudioEnhanceInputStrategyOptions
+): MeetingAudioEnhanceInputStrategy {
+  if (options.geminiConfigured && options.byteLength > INLINE_AUDIO_MAX_BYTES) {
+    return 'file_upload';
+  }
+
+  return 'inline_mp3';
 }
 
 export function enqueueMeetingAudioEnhance(runtime: RuntimeQueueState, meetingId: string) {
@@ -408,31 +432,73 @@ async function buildAudioContentPart({
   mimeType: string;
   requestId: string;
 }) {
-  const audioBuffer = await readFile(getMeetingAudioPath(meetingId));
-
-  if (audioBuffer.byteLength <= INLINE_AUDIO_MAX_BYTES) {
-    return {
-      type: 'audio' as const,
+  const preparedAudio = await prepareAudioForMeetingEnhance(getMeetingAudioPath(meetingId));
+  try {
+    const strategy = resolveMeetingAudioEnhanceInputStrategy({
       mimeType,
-      data: audioBuffer.toString('base64'),
+      byteLength: preparedAudio.byteLength,
+      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
+    });
+
+    if (strategy === 'inline_mp3') {
+      return {
+        type: 'audio' as const,
+        mimeType: 'audio/mpeg',
+        data: (await readFile(preparedAudio.outputPath)).toString('base64'),
+      };
+    }
+
+    const uploadMimeType = 'audio/mpeg';
+    const fileUri = await uploadGeminiAudioFile({
+      buffer: await readFile(preparedAudio.outputPath),
+      mimeType: uploadMimeType,
+      displayName: `meeting-${meetingId}-${requestId}`,
+    });
+
+    return {
+      type: 'file_audio' as const,
+      mimeType: uploadMimeType,
+      fileUri,
     };
+  } finally {
+    await preparedAudio.cleanup();
   }
+}
 
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error('会议音频超过 18 MB，当前未配置直连 Gemini，无法稳定处理该音频。');
+async function prepareAudioForMeetingEnhance(inputPath: string) {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'piedras-audio-enhance-'));
+  const outputPath = path.join(tempDir, 'meeting-upload.mp3');
+
+  try {
+    await execFileAsync('ffmpeg', [
+      '-y',
+      '-i',
+      inputPath,
+      '-vn',
+      '-ac',
+      '1',
+      '-ar',
+      '16000',
+      '-c:a',
+      'libmp3lame',
+      '-b:a',
+      '64k',
+      outputPath,
+    ]);
+
+    const outputBuffer = await readFile(outputPath);
+    return {
+      outputPath,
+      byteLength: outputBuffer.byteLength,
+      cleanup: async () => {
+        await rm(tempDir, { recursive: true, force: true });
+      },
+    };
+  } catch (error) {
+    await rm(tempDir, { recursive: true, force: true });
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`音频 AI 笔记转码失败：${detail}`);
   }
-
-  const fileUri = await uploadGeminiAudioFile({
-    buffer: audioBuffer,
-    mimeType,
-    displayName: `meeting-${meetingId}-${requestId}`,
-  });
-
-  return {
-    type: 'file_audio' as const,
-    mimeType,
-    fileUri,
-  };
 }
 
 async function uploadGeminiAudioFile({
