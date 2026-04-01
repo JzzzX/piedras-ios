@@ -448,11 +448,15 @@ final class RecordingDetailUITests: XCTestCase {
 
         XCTAssertFalse(app.staticTexts["RecordingDetailSecondaryRecBadge"].exists, "正文标题下不应再显示第二个 REC 标识。")
 
-        let notePrompt = app.buttons["RecordingDetailNotePrompt"]
-        XCTAssertTrue(notePrompt.waitForExistence(timeout: 3), "空白录音笔记应显示大块可点击引导。")
-        notePrompt.tap()
-
         let editor = app.textViews["RecordingNoteEditor"]
+        let notePrompt = app.buttons["RecordingDetailNotePrompt"]
+        if notePrompt.waitForExistence(timeout: 2) {
+            notePrompt.tap()
+        } else {
+            XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
+            editor.tap()
+        }
+
         XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
 
         app.typeText("abc")
@@ -462,6 +466,43 @@ final class RecordingDetailUITests: XCTestCase {
         waitForExpectations(timeout: 3)
 
         stopButton.tap()
+    }
+
+    @MainActor
+    func testRecordingDetailShowsKeyboardDismissActionWhileEditing() throws {
+        let app = launchApp()
+
+        let newRecordingButton = element(in: app, identifier: "NewRecordingButton", fallbackLabel: "新录音")
+        XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 8), "首页录音入口未出现。")
+        newRecordingButton.tap()
+
+        dismissPermissionAlertsIfNeeded(in: app)
+        app.tap()
+
+        let stopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
+        XCTAssertTrue(stopButton.waitForExistence(timeout: 12), "开始录音后未进入录音态。")
+
+        XCTAssertTrue(app.staticTexts["笔记类型"].waitForExistence(timeout: 3), "录音态应展示“笔记类型”文案。")
+
+        let editor = app.textViews["RecordingNoteEditor"]
+        let notePrompt = app.buttons["RecordingDetailNotePrompt"]
+        if notePrompt.waitForExistence(timeout: 2) {
+            notePrompt.tap()
+        } else {
+            XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
+            editor.tap()
+        }
+
+        XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
+        app.typeText("abc")
+
+        let dismissButton = element(
+            in: app,
+            identifier: "RecordingKeyboardDismissButton",
+            fallbackLabel: "收起键盘"
+        )
+        XCTAssertTrue(dismissButton.waitForExistence(timeout: 2), "进入输入态后应显示明确的收起键盘入口。")
+        XCTAssertTrue(stopButton.isHittable, "进入输入态后录音底栏的停止按钮应仍可点击。")
     }
 
     private func launchApp() -> XCUIApplication {

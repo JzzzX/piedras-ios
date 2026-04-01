@@ -65,8 +65,9 @@ struct AppStringTable {
     var recordingNotePromptTitle: String { isChinese ? "在此书写" : "Write here" }
     var recordingNotePromptHint: String { isChinese ? "点击开始记录笔记" : "Tap to start taking notes" }
     var renameTitlePrompt: String { isChinese ? "输入新的笔记标题" : "Enter a new title for the note" }
-    var meetingTypeLabel: String { isChinese ? "会议类型" : "Meeting type" }
+    var meetingTypeLabel: String { isChinese ? "笔记类型" : "Note type" }
     var meetingTypeHint: String { isChinese ? "影响 AI 笔记结构与重点" : "Shapes AI note structure and emphasis" }
+    var dismissKeyboard: String { isChinese ? "收起键盘" : "Hide keyboard" }
     var notesTeaserEmpty: String { isChinese ? "记下想法，会并入 AI 笔记" : "Capture thoughts to blend into AI notes" }
     var notesTeaserContinue: String { isChinese ? "继续记录你的想法" : "Keep writing your thoughts" }
     var notesMergeHint: String { isChinese ? "这些随手笔记会在下次生成或刷新 AI 笔记时并入。" : "These notes will be blended into AI Notes the next time you generate or refresh them." }

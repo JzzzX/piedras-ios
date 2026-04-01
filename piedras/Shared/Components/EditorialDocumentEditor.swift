@@ -11,9 +11,14 @@ struct EditorialDocumentEditor: View {
 
     var placeholder: String
     var minHeight: CGFloat = 320
+    var fixedHeight: CGFloat? = nil
     var fontSize: CGFloat = 17
     var lineSpacing: CGFloat = AppTheme.editorialBodyLineSpacing
     var style: EditorialDocumentEditorStyle = .editorial
+    var allowsInternalScrolling = false
+    var dismissKeyboardAccessoryLabel: String? = nil
+    var hidesAccessibility = false
+    var allowsDirectEditing = true
     var autocapitalization: UITextAutocapitalizationType = .sentences
     var usesSmartDashes = true
     var usesSmartQuotes = true
@@ -37,6 +42,11 @@ struct EditorialDocumentEditor: View {
                 textColor: UIColor(AppTheme.ink),
                 tintColor: UIColor(AppTheme.accent),
                 lineSpacing: lineSpacing,
+                allowsInternalScrolling: allowsInternalScrolling,
+                layoutHeightFallback: fixedHeight ?? minHeight,
+                dismissKeyboardAccessoryLabel: dismissKeyboardAccessoryLabel,
+                hidesAccessibility: hidesAccessibility,
+                allowsDirectEditing: allowsDirectEditing,
                 autocapitalization: autocapitalization,
                 usesSmartDashes: usesSmartDashes,
                 usesSmartQuotes: usesSmartQuotes,
@@ -45,7 +55,12 @@ struct EditorialDocumentEditor: View {
                 accessibilityIdentifier: accessibilityIdentifier
             )
         }
-        .frame(minHeight: minHeight, alignment: .topLeading)
+        .frame(
+            minHeight: fixedHeight == nil ? minHeight : nil,
+            maxHeight: fixedHeight,
+            alignment: .topLeading
+        )
+        .frame(height: fixedHeight, alignment: .topLeading)
     }
 
     private var swiftUIFont: Font {
@@ -74,6 +89,11 @@ private struct EditorialTextView: UIViewRepresentable {
     let textColor: UIColor
     let tintColor: UIColor
     let lineSpacing: CGFloat
+    let allowsInternalScrolling: Bool
+    let layoutHeightFallback: CGFloat
+    let dismissKeyboardAccessoryLabel: String?
+    let hidesAccessibility: Bool
+    let allowsDirectEditing: Bool
     let autocapitalization: UITextAutocapitalizationType
     let usesSmartDashes: Bool
     let usesSmartQuotes: Bool
@@ -92,19 +112,28 @@ private struct EditorialTextView: UIViewRepresentable {
     func makeUIView(context: Context) -> UITextView {
         let textView = UITextView()
         textView.delegate = context.coordinator
+        context.coordinator.textView = textView
         textView.backgroundColor = .clear
-        textView.isScrollEnabled = false
-        textView.showsVerticalScrollIndicator = false
+        textView.isScrollEnabled = allowsInternalScrolling
+        textView.showsVerticalScrollIndicator = allowsInternalScrolling
         textView.showsHorizontalScrollIndicator = false
         textView.textContainerInset = .zero
         textView.textContainer.lineFragmentPadding = 0
         textView.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         textView.keyboardDismissMode = .interactive
         textView.adjustsFontForContentSizeCategory = false
+        textView.isEditable = allowsDirectEditing
+        textView.isSelectable = allowsDirectEditing
         textView.autocapitalizationType = autocapitalization
         textView.smartDashesType = usesSmartDashes ? .yes : .no
         textView.smartQuotesType = usesSmartQuotes ? .yes : .no
         textView.tintColor = tintColor
+        textView.inputAccessoryView = context.coordinator.makeInputAccessoryView(
+            label: dismissKeyboardAccessoryLabel,
+            tintColor: tintColor
+        )
+        textView.isAccessibilityElement = !hidesAccessibility
+        textView.accessibilityElementsHidden = hidesAccessibility
         textView.accessibilityIdentifier = accessibilityIdentifier
         textView.accessibilityValue = text
         applyStyle(to: textView, text: text)
@@ -113,9 +142,20 @@ private struct EditorialTextView: UIViewRepresentable {
 
     func updateUIView(_ textView: UITextView, context: Context) {
         textView.tintColor = tintColor
+        context.coordinator.textView = textView
+        textView.isScrollEnabled = allowsInternalScrolling
+        textView.showsVerticalScrollIndicator = allowsInternalScrolling
+        textView.isEditable = allowsDirectEditing
+        textView.isSelectable = allowsDirectEditing
         textView.autocapitalizationType = autocapitalization
         textView.smartDashesType = usesSmartDashes ? .yes : .no
         textView.smartQuotesType = usesSmartQuotes ? .yes : .no
+        textView.inputAccessoryView = context.coordinator.makeInputAccessoryView(
+            label: dismissKeyboardAccessoryLabel,
+            tintColor: tintColor
+        )
+        textView.isAccessibilityElement = !hidesAccessibility
+        textView.accessibilityElementsHidden = hidesAccessibility
         textView.accessibilityIdentifier = accessibilityIdentifier
         textView.accessibilityValue = text
         context.coordinator.isFocused = isFocused
@@ -142,6 +182,11 @@ private struct EditorialTextView: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
         let width = max(proposal.width ?? 0, 1)
+        if allowsInternalScrolling {
+            let height = max(proposal.height ?? layoutHeightFallback, 1)
+            return CGSize(width: width, height: height)
+        }
+
         let targetSize = CGSize(width: width, height: .greatestFiniteMagnitude)
         let fittedSize = uiView.sizeThatFits(targetSize)
         return CGSize(width: width, height: max(fittedSize.height, 1))
@@ -172,6 +217,7 @@ private struct EditorialTextView: UIViewRepresentable {
         @Binding private var text: String
         var isFocused: Binding<Bool>?
         var lastFocusRequestToken: Int
+        weak var textView: UITextView?
 
         init(
             text: Binding<String>,
@@ -193,6 +239,35 @@ private struct EditorialTextView: UIViewRepresentable {
 
         func textViewDidEndEditing(_ textView: UITextView) {
             isFocused?.wrappedValue = false
+        }
+
+        @objc
+        func dismissKeyboard() {
+            isFocused?.wrappedValue = false
+            textView?.resignFirstResponder()
+        }
+
+        func makeInputAccessoryView(label: String?, tintColor: UIColor) -> UIView? {
+            guard let label else { return nil }
+
+            let toolbar = UIToolbar()
+            toolbar.translatesAutoresizingMaskIntoConstraints = false
+            toolbar.items = [
+                UIBarButtonItem.flexibleSpace(),
+                {
+                    let item = UIBarButtonItem(
+                        title: label,
+                        style: .done,
+                        target: self,
+                        action: #selector(dismissKeyboard)
+                    )
+                    item.tintColor = tintColor
+                    item.accessibilityIdentifier = "RecordingKeyboardDismissButton"
+                    return item
+                }()
+            ]
+            toolbar.sizeToFit()
+            return toolbar
         }
     }
 }

@@ -172,4 +172,24 @@ struct MeetingDetailChromeTests {
         #expect(overflow.visibleRowCount == 2)
         #expect(overflow.showsInternalScroll)
     }
+
+    @Test
+    func recordingAttachmentPreviewModeCompressesWhileEditing() {
+        let hidden = RecordingAttachmentPreviewMode.forAttachmentCount(0, isEditorFocused: true)
+        let defaultMode = RecordingAttachmentPreviewMode.forAttachmentCount(3, isEditorFocused: false)
+        let compactMode = RecordingAttachmentPreviewMode.forAttachmentCount(3, isEditorFocused: true)
+
+        #expect(hidden == .hidden)
+        #expect(defaultMode == .grid(RecordingAttachmentDockMetrics.forAttachmentCount(3)))
+        #expect(compactMode == .compactStrip)
+    }
+
+    @Test
+    func meetingTypeLabelUsesNoteCopy() {
+        let chinese = AppStringTable(language: .chinese)
+        let english = AppStringTable(language: .english)
+
+        #expect(chinese.meetingTypeLabel == "笔记类型")
+        #expect(english.meetingTypeLabel == "Note type")
+    }
 }

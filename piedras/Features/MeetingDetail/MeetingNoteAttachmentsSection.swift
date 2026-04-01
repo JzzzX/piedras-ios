@@ -6,6 +6,20 @@ private struct MeetingNoteAttachmentViewerImage: Identifiable {
     let image: UIImage
 }
 
+enum RecordingAttachmentPreviewMode: Equatable {
+    case hidden
+    case grid(RecordingAttachmentDockMetrics)
+    case compactStrip
+
+    static func forAttachmentCount(_ count: Int, isEditorFocused: Bool) -> Self {
+        guard count > 0 else { return .hidden }
+        if isEditorFocused {
+            return .compactStrip
+        }
+        return .grid(RecordingAttachmentDockMetrics.forAttachmentCount(count))
+    }
+}
+
 struct RecordingAttachmentDockMetrics: Equatable {
     static let itemsPerRow = 4
     static let maxVisibleRows = 2
@@ -257,22 +271,26 @@ struct MeetingNoteAttachmentsSection: View {
 struct RecordingMeetingNoteAttachmentsDock: View {
     let meeting: Meeting
     let showsRefreshHint: Bool
+    let previewMode: RecordingAttachmentPreviewMode
     let onDelete: (String) -> Void
 
     @State private var viewingImage: MeetingNoteAttachmentViewerImage?
 
-    private let metrics: RecordingAttachmentDockMetrics
     private let columns: [GridItem]
 
     init(
         meeting: Meeting,
         showsRefreshHint: Bool,
+        isEditorFocused: Bool,
         onDelete: @escaping (String) -> Void
     ) {
         self.meeting = meeting
         self.showsRefreshHint = showsRefreshHint
         self.onDelete = onDelete
-        self.metrics = RecordingAttachmentDockMetrics.forAttachmentCount(meeting.noteAttachmentFileNames.count)
+        self.previewMode = RecordingAttachmentPreviewMode.forAttachmentCount(
+            meeting.noteAttachmentFileNames.count,
+            isEditorFocused: isEditorFocused
+        )
         self.columns = Array(
             repeating: GridItem(.fixed(RecordingAttachmentDockMetrics.itemSide), spacing: RecordingAttachmentDockMetrics.itemSpacing),
             count: RecordingAttachmentDockMetrics.itemsPerRow
@@ -280,60 +298,131 @@ struct RecordingMeetingNoteAttachmentsDock: View {
     }
 
     var body: some View {
-        if metrics.isVisible {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(AppStrings.current.noteAttachmentsTitle)
-                            .font(AppTheme.bodyFont(size: 15, weight: .semibold))
-                            .foregroundStyle(AppTheme.brandInk)
+        Group {
+            switch previewMode {
+            case .hidden:
+                EmptyView()
+            case let .grid(metrics):
+                gridDock(metrics: metrics)
+            case .compactStrip:
+                compactStrip
+            }
+        }
+        .fullScreenCover(item: $viewingImage) { item in
+            AnnotationImageViewer(image: item.image)
+        }
+    }
 
-                        Text("\(meeting.noteAttachmentFileNames.count) / 10")
-                            .font(AppTheme.dataFont(size: 11))
-                            .foregroundStyle(AppTheme.subtleInk)
-                    }
+    private func gridDock(metrics: RecordingAttachmentDockMetrics) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(AppStrings.current.noteAttachmentsTitle)
+                        .font(AppTheme.bodyFont(size: 15, weight: .semibold))
+                        .foregroundStyle(AppTheme.brandInk)
 
-                    Spacer(minLength: 0)
-                }
-
-                ScrollView(.vertical, showsIndicators: metrics.showsInternalScroll) {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: RecordingAttachmentDockMetrics.itemSpacing) {
-                        ForEach(meeting.noteAttachmentFileNames, id: \.self) { fileName in
-                            RecordingMeetingNoteAttachmentTile(
-                                meetingID: meeting.id,
-                                fileName: fileName,
-                                sideLength: RecordingAttachmentDockMetrics.itemSide,
-                                onTap: { image in
-                                    viewingImage = MeetingNoteAttachmentViewerImage(image: image)
-                                },
-                                onDelete: {
-                                    onDelete(fileName)
-                                }
-                            )
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(maxHeight: metrics.gridHeight)
-
-                if showsRefreshHint {
-                    Text(AppStrings.current.imageTextRefreshHint)
-                        .font(AppTheme.bodyFont(size: 11))
+                    Text("\(meeting.noteAttachmentFileNames.count) / 10")
+                        .font(AppTheme.dataFont(size: 11))
                         .foregroundStyle(AppTheme.subtleInk)
-                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            ScrollView(.vertical, showsIndicators: metrics.showsInternalScroll) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: RecordingAttachmentDockMetrics.itemSpacing) {
+                    ForEach(meeting.noteAttachmentFileNames, id: \.self) { fileName in
+                        RecordingMeetingNoteAttachmentTile(
+                            meetingID: meeting.id,
+                            fileName: fileName,
+                            sideLength: RecordingAttachmentDockMetrics.itemSide,
+                            onTap: { image in
+                                viewingImage = MeetingNoteAttachmentViewerImage(image: image)
+                            },
+                            onDelete: {
+                                onDelete(fileName)
+                            }
+                        )
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: metrics.gridHeight)
+
+            if showsRefreshHint {
+                Text(AppStrings.current.imageTextRefreshHint)
+                    .font(AppTheme.bodyFont(size: 11))
+                    .foregroundStyle(AppTheme.subtleInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .background(AppTheme.surface.opacity(0.96))
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+        )
+        .accessibilityIdentifier("RecordingAttachmentDockGrid")
+    }
+
+    private var compactStrip: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(AppStrings.current.noteAttachmentsTitle)
+                    .font(AppTheme.bodyFont(size: 13, weight: .semibold))
+                    .foregroundStyle(AppTheme.brandInk)
+
+                Text("\(meeting.noteAttachmentFileNames.count) / 10")
+                    .font(AppTheme.dataFont(size: 10))
+                    .foregroundStyle(AppTheme.subtleInk)
+            }
+            .frame(width: 58, alignment: .leading)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(meeting.noteAttachmentFileNames, id: \.self) { fileName in
+                        compactAttachmentPreviewTile(fileName: fileName)
+                    }
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
-            .background(AppTheme.surface.opacity(0.96))
-            .overlay(
-                Rectangle()
-                    .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
-            )
-            .fullScreenCover(item: $viewingImage) { item in
-                AnnotationImageViewer(image: item.image)
-            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(AppTheme.surface.opacity(0.96))
+        .overlay(
+            Rectangle()
+                .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+        )
+        .accessibilityIdentifier("RecordingAttachmentCompactStrip")
+    }
+
+    @ViewBuilder
+    private func compactAttachmentPreviewTile(fileName: String) -> some View {
+        if let image = MeetingNoteAttachmentStorage.loadImage(meetingID: meeting.id, fileName: fileName) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 48, height: 48)
+                .clipped()
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                )
+        } else {
+            Rectangle()
+                .fill(AppTheme.backgroundSecondary)
+                .frame(width: 48, height: 48)
+                .overlay {
+                    Image(systemName: "photo")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(AppTheme.subtleInk)
+                }
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
+                )
         }
     }
 }

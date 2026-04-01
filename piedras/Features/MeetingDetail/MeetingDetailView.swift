@@ -301,7 +301,12 @@ struct MeetingDetailView: View {
     }
 
     private func recordingWorkspace(meeting: Meeting) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let showsPrompt = MeetingDetailChrome.showsRecordingNotePrompt(
+            notes: currentNotesText(for: meeting),
+            isEditorFocused: isRecordingNoteEditorFocused
+        )
+
+        return VStack(alignment: .leading, spacing: 0) {
             if let transcriptionStatus = meetingStore.fileTranscriptionStatus(meetingID: meeting.id) {
                 fileTranscriptionStatusView(transcriptionStatus, meetingID: meeting.id)
                     .padding(.bottom, 12)
@@ -319,26 +324,29 @@ struct MeetingDetailView: View {
                         text: noteEditorBinding(for: meeting),
                         showsHeader: false,
                         title: AppStrings.current.notes,
-                        placeholder: MeetingDetailChrome.recordingNoteEditorPlaceholder(
-                            notes: currentNotesText(for: meeting),
-                            isEditorFocused: isRecordingNoteEditorFocused
-                        ),
-                        minHeight: recordingNoteEditorMinHeight,
-                        usesBodyStyle: true,
-                        focusRequestToken: recordingNoteFocusRequest,
-                        isFocused: $isRecordingNoteEditorFocused,
-                        accessibilityIdentifier: "RecordingNoteEditor"
-                    )
-
-                    if MeetingDetailChrome.showsRecordingNotePrompt(
+                    placeholder: MeetingDetailChrome.recordingNoteEditorPlaceholder(
                         notes: currentNotesText(for: meeting),
                         isEditorFocused: isRecordingNoteEditorFocused
-                    ) {
+                    ),
+                    minHeight: recordingNoteEditorMinHeight,
+                    fixedHeight: isRecordingNoteEditorFocused ? recordingKeyboardEditorHeight : nil,
+                    usesBodyStyle: true,
+                    allowsInternalScrolling: isRecordingNoteEditorFocused,
+                    dismissKeyboardAccessoryLabel: AppStrings.current.dismissKeyboard,
+                    hidesAccessibility: showsPrompt,
+                    allowsDirectEditing: !showsPrompt,
+                    focusRequestToken: recordingNoteFocusRequest,
+                    isFocused: $isRecordingNoteEditorFocused,
+                    accessibilityIdentifier: "RecordingNoteEditor"
+                )
+
+                    if showsPrompt {
                         recordingNotePrompt(chrome: MeetingDetailChrome.recordingDocument)
                     }
                 }
                 .padding(.bottom, 24)
             }
+            .scrollDisabled(isRecordingNoteEditorFocused)
             .scrollDismissesKeyboard(.interactively)
         }
         .padding(.horizontal, 24)
@@ -618,6 +626,10 @@ struct MeetingDetailView: View {
 
     private func recordingDocumentPage(meeting: Meeting) -> some View {
         let chrome = MeetingDetailChrome.recordingDocument
+        let showsPrompt = MeetingDetailChrome.showsRecordingNotePrompt(
+            notes: currentNotesText(for: meeting),
+            isEditorFocused: isRecordingNoteEditorFocused
+        )
 
         return VStack(alignment: .leading, spacing: 0) {
             recordingTitleBlock(meeting: meeting, chrome: chrome)
@@ -636,16 +648,18 @@ struct MeetingDetailView: View {
                         isEditorFocused: isRecordingNoteEditorFocused
                     ),
                     minHeight: 400,
+                    fixedHeight: isRecordingNoteEditorFocused ? recordingKeyboardEditorHeight : nil,
                     usesBodyStyle: true,
+                    allowsInternalScrolling: isRecordingNoteEditorFocused,
+                    dismissKeyboardAccessoryLabel: AppStrings.current.dismissKeyboard,
+                    hidesAccessibility: showsPrompt,
+                    allowsDirectEditing: !showsPrompt,
                     focusRequestToken: recordingNoteFocusRequest,
                     isFocused: $isRecordingNoteEditorFocused,
                     accessibilityIdentifier: "RecordingNoteEditor"
                 )
 
-                if MeetingDetailChrome.showsRecordingNotePrompt(
-                    notes: currentNotesText(for: meeting),
-                    isEditorFocused: isRecordingNoteEditorFocused
-                ) {
+                if showsPrompt {
                     recordingNotePrompt(chrome: chrome)
                 }
             }
@@ -1057,6 +1071,10 @@ struct MeetingDetailView: View {
         max(360, UIScreen.main.bounds.height * 0.42)
     }
 
+    private var recordingKeyboardEditorHeight: CGFloat {
+        max(220, UIScreen.main.bounds.height * 0.28)
+    }
+
     private var isRecordingThisMeeting: Bool {
         guard recordingSessionStore.meetingID == meetingID else { return false }
 
@@ -1085,6 +1103,7 @@ struct MeetingDetailView: View {
                 RecordingMeetingNoteAttachmentsDock(
                     meeting: meeting,
                     showsRefreshHint: meeting.hasAttachmentNotesRefreshHint,
+                    isEditorFocused: isRecordingNoteEditorFocused,
                     onDelete: { fileName in
                         meetingStore.removeNoteAttachment(fileName: fileName, from: meeting)
                     }
