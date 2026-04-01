@@ -211,6 +211,35 @@ struct DeveloperSettingsView: View {
                         .padding(16)
                         .softCard()
                     }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        SectionLabel(title: "媒体")
+
+                        NavigationLink(destination: CloudAudioCopiesView()) {
+                            HStack(spacing: 12) {
+                                RetroIconBadge(systemName: "waveform", size: 28, symbolSize: 11)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("云端音频副本")
+                                        .font(AppTheme.bodyFont(size: 14, weight: .semibold))
+                                        .foregroundStyle(AppTheme.ink)
+
+                                    Text("集中管理已同步到云端的会议音频")
+                                        .font(AppTheme.bodyFont(size: 12))
+                                        .foregroundStyle(AppTheme.subtleInk)
+                                }
+
+                                Spacer()
+
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(AppTheme.subtleInk)
+                            }
+                            .padding(16)
+                            .softCard()
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 16)

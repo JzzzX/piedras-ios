@@ -258,6 +258,17 @@ final class APIClient: AuthNetworking {
         try await sendJSONRequest(path: "/api/meetings/\(id)", method: "GET", responseType: RemoteMeetingDetail.self)
     }
 
+    func updateMeetingAudioCloudSyncEnabled(
+        meetingID: String,
+        enabled: Bool
+    ) async throws -> RemoteMeetingDetail {
+        try await sendJSONRequest(
+            path: "/api/meetings/\(meetingID)",
+            method: "PUT",
+            body: ["audioCloudSyncEnabled": enabled]
+        )
+    }
+
     func upsertMeeting(_ payload: MeetingUpsertPayload) async throws -> RemoteMeetingDetail {
         try await sendJSONRequest(path: "/api/meetings", method: "POST", body: payload)
     }
@@ -293,6 +304,69 @@ final class APIClient: AuthNetworking {
         let (data, response) = try await session.upload(for: request, fromFile: fileURL)
         try validate(response: response, data: data)
         return try decoder.decode(RemoteAudioUploadResponse.self, from: data)
+    }
+
+    func deleteRemoteAudio(meetingID: String) async throws {
+        let request = try makeRequest(path: "/api/meetings/\(meetingID)/audio", method: "DELETE")
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data, fallback: "删除云端音频失败。")
+    }
+
+    func uploadNoteAttachment(
+        meetingID: String,
+        fileURL: URL,
+        mimeType: String,
+        extractedText: String
+    ) async throws -> RemoteNoteAttachmentUploadResponse {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw APIClientError.unreadableFile
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        var request = try makeRequest(path: "/api/meetings/\(meetingID)/attachments", method: "POST")
+        request.timeoutInterval = 5 * 60
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        let fileData = try Data(contentsOf: fileURL)
+        let body = try Self.makeMultipartBody(
+            boundary: boundary,
+            fileFieldName: "file",
+            fileName: fileURL.lastPathComponent,
+            mimeType: mimeType,
+            fileData: fileData,
+            textFields: [
+                "extractedText": extractedText,
+            ]
+        )
+
+        let (data, response) = try await session.upload(for: request, from: body)
+        try validate(response: response, data: data)
+        return try decoder.decode(RemoteNoteAttachmentUploadResponse.self, from: data)
+    }
+
+    func deleteNoteAttachment(meetingID: String, attachmentID: String) async throws {
+        let request = try makeRequest(
+            path: "/api/meetings/\(meetingID)/attachments/\(attachmentID)",
+            method: "DELETE"
+        )
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data, fallback: "删除资料区图片失败。")
+    }
+
+    func downloadAuthenticatedData(fromAbsoluteURLString urlString: String) async throws -> Data {
+        guard let url = URL(string: urlString) else {
+            throw APIClientError.invalidResponse
+        }
+
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 60
+        if let sessionToken = authTokenStore.sessionToken?.nilIfBlank {
+            request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data, fallback: "下载文件失败。")
+        return data
     }
 
     func fetchMeetingProcessingStatus(meetingID: String) async throws -> RemoteMeetingProcessingStatus {
@@ -595,6 +669,36 @@ final class APIClient: AuthNetworking {
             )
         }
         return decoder
+    }
+
+    private static func makeMultipartBody(
+        boundary: String,
+        fileFieldName: String,
+        fileName: String,
+        mimeType: String,
+        fileData: Data,
+        textFields: [String: String]
+    ) throws -> Data {
+        var body = Data()
+        let boundaryPrefix = "--\(boundary)\r\n"
+
+        for (name, value) in textFields {
+            body.append(Data(boundaryPrefix.utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".utf8))
+            body.append(Data(value.utf8))
+            body.append(Data("\r\n".utf8))
+        }
+
+        body.append(Data(boundaryPrefix.utf8))
+        body.append(
+            Data(
+                "Content-Disposition: form-data; name=\"\(fileFieldName)\"; filename=\"\(fileName)\"\r\n".utf8
+            )
+        )
+        body.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
+        body.append(fileData)
+        body.append(Data("\r\n--\(boundary)--\r\n".utf8))
+        return body
     }
 }
 

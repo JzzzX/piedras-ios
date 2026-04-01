@@ -147,11 +147,18 @@ final class Meeting {
     private var noteAttachmentFileNamesValue: [String]?
     @Attribute(originalName: "noteAttachmentAssetIdentifiersRaw")
     private var noteAttachmentAssetIdentifiersRawValue: String?
+    @Attribute(originalName: "noteAttachmentRemoteIDsRaw")
+    private var noteAttachmentRemoteIDsRawValue: String?
+    @Attribute(originalName: "noteAttachmentExtractedTextsRaw")
+    private var noteAttachmentExtractedTextsRawValue: String?
+    @Attribute(originalName: "noteAttachmentPendingDeleteIDsRaw")
+    private var noteAttachmentPendingDeleteIDsRawValue: String?
     @Attribute(originalName: "noteAttachmentTextContext")
     private var noteAttachmentTextContextValue: String?
     @Attribute(originalName: "noteAttachmentTextStatusRaw")
     private var noteAttachmentTextStatusRawValue: String?
     var noteAttachmentTextUpdatedAt: Date?
+    private var audioCloudSyncEnabledValue: Bool?
     var audioLocalPath: String?
     var audioRemotePath: String?
     var audioMimeType: String?
@@ -204,9 +211,13 @@ final class Meeting {
         audioEnhancedNotesModel: String? = nil,
         noteAttachmentFileNames: [String] = [],
         noteAttachmentAssetIdentifiersByFileName: [String: String] = [:],
+        noteAttachmentRemoteIDsByFileName: [String: String] = [:],
+        noteAttachmentExtractedTextByFileName: [String: String] = [:],
+        noteAttachmentPendingDeleteIDs: [String] = [],
         noteAttachmentTextContext: String = "",
         noteAttachmentTextStatus: AnnotationImageTextStatus = .idle,
         noteAttachmentTextUpdatedAt: Date? = nil,
+        audioCloudSyncEnabled: Bool = true,
         audioLocalPath: String? = nil,
         audioRemotePath: String? = nil,
         audioMimeType: String? = nil,
@@ -250,9 +261,17 @@ final class Meeting {
         self.noteAttachmentAssetIdentifiersRawValue = Self.encodeAttachmentAssetIdentifiers(
             noteAttachmentAssetIdentifiersByFileName
         )
+        self.noteAttachmentRemoteIDsRawValue = Self.encodeAttachmentAssetIdentifiers(
+            noteAttachmentRemoteIDsByFileName
+        )
+        self.noteAttachmentExtractedTextsRawValue = Self.encodeAttachmentAssetIdentifiers(
+            noteAttachmentExtractedTextByFileName
+        )
+        self.noteAttachmentPendingDeleteIDsRawValue = Self.encodeStringArray(noteAttachmentPendingDeleteIDs)
         self.noteAttachmentTextContextValue = noteAttachmentTextContext
         self.noteAttachmentTextStatusRawValue = noteAttachmentTextStatus.rawValue
         self.noteAttachmentTextUpdatedAt = noteAttachmentTextUpdatedAt
+        self.audioCloudSyncEnabledValue = audioCloudSyncEnabled
         self.audioLocalPath = audioLocalPath
         self.audioRemotePath = audioRemotePath
         self.audioMimeType = audioMimeType
@@ -333,6 +352,31 @@ final class Meeting {
         set { noteAttachmentAssetIdentifiersRawValue = Self.encodeAttachmentAssetIdentifiers(newValue) }
     }
 
+    var noteAttachmentRemoteIDsByFileName: [String: String] {
+        get {
+            Self.decodeAttachmentAssetIdentifiers(
+                noteAttachmentRemoteIDsRawValue ?? Self.encodeAttachmentAssetIdentifiers([:])
+            )
+        }
+        set { noteAttachmentRemoteIDsRawValue = Self.encodeAttachmentAssetIdentifiers(newValue) }
+    }
+
+    var noteAttachmentExtractedTextByFileName: [String: String] {
+        get {
+            Self.decodeAttachmentAssetIdentifiers(
+                noteAttachmentExtractedTextsRawValue ?? Self.encodeAttachmentAssetIdentifiers([:])
+            )
+        }
+        set { noteAttachmentExtractedTextsRawValue = Self.encodeAttachmentAssetIdentifiers(newValue) }
+    }
+
+    var noteAttachmentPendingDeleteIDs: [String] {
+        get {
+            Self.decodeStringArray(noteAttachmentPendingDeleteIDsRawValue ?? Self.encodeStringArray([]))
+        }
+        set { noteAttachmentPendingDeleteIDsRawValue = Self.encodeStringArray(newValue) }
+    }
+
     var noteAttachmentTextContext: String {
         get { noteAttachmentTextContextValue ?? "" }
         set { noteAttachmentTextContextValue = newValue }
@@ -341,6 +385,11 @@ final class Meeting {
     var noteAttachmentTextStatus: AnnotationImageTextStatus {
         get { AnnotationImageTextStatus(rawValue: noteAttachmentTextStatusRawValue ?? "") ?? .idle }
         set { noteAttachmentTextStatusRawValue = newValue.rawValue }
+    }
+
+    var audioCloudSyncEnabled: Bool {
+        get { audioCloudSyncEnabledValue ?? true }
+        set { audioCloudSyncEnabledValue = newValue }
     }
 
     var speakers: [String: String] {
@@ -535,6 +584,26 @@ final class Meeting {
         }
 
         return mapping
+    }
+
+    private static func encodeStringArray(_ values: [String]) -> String {
+        guard JSONSerialization.isValidJSONObject(values),
+              let data = try? JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]),
+              let value = String(data: data, encoding: .utf8) else {
+            return "[]"
+        }
+
+        return value
+    }
+
+    private static func decodeStringArray(_ rawValue: String) -> [String] {
+        guard let data = rawValue.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data),
+              let values = object as? [String] else {
+            return []
+        }
+
+        return values
     }
 
     private static func generatedSpeakerIndex(from speaker: String) -> Int? {

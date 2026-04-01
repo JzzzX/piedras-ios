@@ -82,6 +82,7 @@ final class MeetingSyncService: MeetingSyncServicing {
                 MeetingPayloadMapper.makeMeetingUpsertPayload(from: meeting, workspaceID: workspaceID)
             )
             MeetingPayloadMapper.apply(remote: remoteMeeting, to: meeting, repository: repository, baseURL: apiClient.baseURL)
+            try await syncRemoteNoteAttachments(for: meeting, remote: remoteMeeting)
             reconcileTranscriptState(for: meeting)
             if let finalizedMeeting = try await uploadLocalAudioIfNeeded(for: meeting) {
                 MeetingPayloadMapper.apply(
@@ -90,6 +91,18 @@ final class MeetingSyncService: MeetingSyncServicing {
                     repository: repository,
                     baseURL: apiClient.baseURL
                 )
+                try await syncRemoteNoteAttachments(for: meeting, remote: finalizedMeeting)
+                reconcileTranscriptState(for: meeting)
+            }
+
+            if let refreshedMeeting = try await syncNoteAttachmentsIfNeeded(for: meeting) {
+                MeetingPayloadMapper.apply(
+                    remote: refreshedMeeting,
+                    to: meeting,
+                    repository: repository,
+                    baseURL: apiClient.baseURL
+                )
+                try await syncRemoteNoteAttachments(for: meeting, remote: refreshedMeeting)
                 reconcileTranscriptState(for: meeting)
             }
 
@@ -111,6 +124,11 @@ final class MeetingSyncService: MeetingSyncServicing {
     }
 
     private func uploadLocalAudioIfNeeded(for meeting: Meeting) async throws -> RemoteMeetingDetail? {
+        guard meeting.audioCloudSyncEnabled else {
+            meeting.audioRemotePath = nil
+            return nil
+        }
+
         guard meeting.status == .ended else {
             return nil
         }
@@ -149,6 +167,135 @@ final class MeetingSyncService: MeetingSyncServicing {
         apply(uploadResponse: uploadResponse, to: meeting, fallbackDuration: fallbackDuration)
         try repository.save()
         return nil
+    }
+
+    private func syncNoteAttachmentsIfNeeded(for meeting: Meeting) async throws -> RemoteMeetingDetail? {
+        try await deletePendingRemoteNoteAttachments(for: meeting)
+
+        let pendingUploads = meeting.noteAttachmentFileNames.filter {
+            meeting.noteAttachmentRemoteIDsByFileName[$0]?.isEmpty ?? true
+        }
+
+        guard !pendingUploads.isEmpty else {
+            return meeting.noteAttachmentPendingDeleteIDs.isEmpty ? nil : try await apiClient.getMeeting(id: meeting.id)
+        }
+
+        for fileName in pendingUploads {
+            let fileURL = MeetingNoteAttachmentStorage.imageURL(meetingID: meeting.id, fileName: fileName)
+            guard FileManager.default.fileExists(atPath: fileURL.path) else { continue }
+
+            let response = try await apiClient.uploadNoteAttachment(
+                meetingID: meeting.id,
+                fileURL: fileURL,
+                mimeType: mimeType(forAttachmentFileName: fileName),
+                extractedText: meeting.noteAttachmentExtractedTextByFileName[fileName] ?? ""
+            )
+
+            var remoteIDs = meeting.noteAttachmentRemoteIDsByFileName
+            remoteIDs[fileName] = response.id
+            meeting.noteAttachmentRemoteIDsByFileName = remoteIDs
+
+            if let extractedText = response.extractedText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !extractedText.isEmpty {
+                var extractedTexts = meeting.noteAttachmentExtractedTextByFileName
+                extractedTexts[fileName] = extractedText
+                meeting.noteAttachmentExtractedTextByFileName = extractedTexts
+            }
+            try repository.save()
+        }
+
+        return try await apiClient.getMeeting(id: meeting.id)
+    }
+
+    private func deletePendingRemoteNoteAttachments(for meeting: Meeting) async throws {
+        let pendingDeleteIDs = meeting.noteAttachmentPendingDeleteIDs
+        guard !pendingDeleteIDs.isEmpty else { return }
+
+        var remainingDeleteIDs: [String] = []
+        for attachmentID in pendingDeleteIDs {
+            do {
+                try await apiClient.deleteNoteAttachment(meetingID: meeting.id, attachmentID: attachmentID)
+            } catch {
+                remainingDeleteIDs.append(attachmentID)
+            }
+        }
+
+        meeting.noteAttachmentPendingDeleteIDs = remainingDeleteIDs
+        try repository.save()
+    }
+
+    private func syncRemoteNoteAttachments(
+        for meeting: Meeting,
+        remote: RemoteMeetingDetail
+    ) async throws {
+        let remoteAttachments = remote.noteAttachments ?? []
+        let remoteIDs = Set(remoteAttachments.map(\.id))
+        var fileNames = meeting.noteAttachmentFileNames
+        var remoteIDByFileName = meeting.noteAttachmentRemoteIDsByFileName
+        var extractedTextByFileName = meeting.noteAttachmentExtractedTextByFileName
+
+        let obsoleteFileNames = fileNames.filter {
+            guard let remoteID = remoteIDByFileName[$0] else { return false }
+            return !remoteIDs.contains(remoteID)
+        }
+
+        for fileName in obsoleteFileNames {
+            MeetingNoteAttachmentStorage.deleteImage(meetingID: meeting.id, fileName: fileName)
+            remoteIDByFileName.removeValue(forKey: fileName)
+            extractedTextByFileName.removeValue(forKey: fileName)
+        }
+
+        fileNames.removeAll { obsoleteFileNames.contains($0) }
+
+        for attachment in remoteAttachments {
+            if let existingFileName = remoteIDByFileName.first(where: { $0.value == attachment.id })?.key,
+               FileManager.default.fileExists(atPath: MeetingNoteAttachmentStorage.imageURL(meetingID: meeting.id, fileName: existingFileName).path) {
+                if let extractedText = attachment.extractedText?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !extractedText.isEmpty {
+                    extractedTextByFileName[existingFileName] = extractedText
+                }
+                continue
+            }
+
+            let data = try await apiClient.downloadAuthenticatedData(fromAbsoluteURLString: attachment.url)
+            let cachedFileName = MeetingNoteAttachmentStorage.cachedFileName(
+                remoteAttachmentID: attachment.id,
+                mimeType: attachment.mimeType,
+                originalName: attachment.originalName
+            )
+            let localFileName = try MeetingNoteAttachmentStorage.saveData(
+                data,
+                meetingID: meeting.id,
+                preferredFileName: cachedFileName
+            )
+
+            if !fileNames.contains(localFileName) {
+                fileNames.append(localFileName)
+            }
+            remoteIDByFileName[localFileName] = attachment.id
+            if let extractedText = attachment.extractedText?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !extractedText.isEmpty {
+                extractedTextByFileName[localFileName] = extractedText
+            }
+        }
+
+        meeting.noteAttachmentFileNames = fileNames
+        meeting.noteAttachmentRemoteIDsByFileName = remoteIDByFileName
+        meeting.noteAttachmentExtractedTextByFileName = extractedTextByFileName
+        let combinedText = fileNames
+            .compactMap { extractedTextByFileName[$0]?.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
+        if !combinedText.isEmpty || remote.noteAttachmentsTextContext?.isEmpty == false {
+            meeting.noteAttachmentTextContext = combinedText.isEmpty ? (remote.noteAttachmentsTextContext ?? "") : combinedText
+            meeting.noteAttachmentTextStatus = .ready
+            meeting.noteAttachmentTextUpdatedAt = .now
+        } else {
+            meeting.noteAttachmentTextContext = ""
+            meeting.noteAttachmentTextStatus = .idle
+            meeting.noteAttachmentTextUpdatedAt = nil
+        }
+        try repository.save()
     }
 
     private func pollForFinalizedMeetingIfNeeded(
@@ -266,6 +413,18 @@ final class MeetingSyncService: MeetingSyncServicing {
         }
 
         updateTranscriptNotesFreshnessIfNeeded(for: meeting)
+    }
+
+    private func mimeType(forAttachmentFileName fileName: String) -> String {
+        let ext = URL(fileURLWithPath: fileName).pathExtension.lowercased()
+        switch ext {
+        case "png":
+            return "image/png"
+        case "heic", "heif":
+            return "image/heic"
+        default:
+            return "image/jpeg"
+        }
     }
 
     private func updateTranscriptNotesFreshnessIfNeeded(for meeting: Meeting) {

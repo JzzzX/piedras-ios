@@ -202,11 +202,22 @@ export interface Meeting {
   speakers: Record<string, string>;
   chatMessages: ChatMessage[];
   duration: number;
+  audioCloudSyncEnabled?: boolean;
   audioMimeType?: string | null;
   audioDuration?: number | null;
   audioUpdatedAt?: string | null;
   audioUrl?: string | null;
   hasAudio?: boolean;
+  noteAttachments?: Array<{
+    id: string;
+    mimeType: string;
+    url: string;
+    originalName?: string;
+    extractedText?: string;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  noteAttachmentsTextContext?: string;
   audioProcessingState?: 'idle' | 'queued' | 'processing' | 'completed' | 'failed';
   audioProcessingError?: string | null;
   audioProcessingAttempts?: number;

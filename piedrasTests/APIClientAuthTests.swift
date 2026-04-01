@@ -240,4 +240,53 @@ struct APIClientAuthTests {
                 == "Bearer session-token"
         )
     }
+
+    @MainActor
+    @Test
+    func downloadAuthenticatedDataUsesBearerTokenHeader() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let suiteName = "piedras.tests.auth.download.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: defaults,
+            debugDefaultBackendBaseURLString: "https://example.com"
+        )
+        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        tokenStore.sessionToken = "session-token"
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
+        let client = APIClient(
+            settingsStore: settingsStore,
+            authTokenStore: tokenStore,
+            session: URLSession(configuration: configuration)
+        )
+
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            let response = try #require(
+                HTTPURLResponse(
+                    url: request.url ?? URL(string: "https://example.com")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "audio/m4a"]
+                )
+            )
+            return (response, Data("audio-data".utf8))
+        }
+
+        let data = try await client.downloadAuthenticatedData(
+            fromAbsoluteURLString: "https://example.com/api/meetings/meeting-1/audio"
+        )
+
+        #expect(String(decoding: data, as: UTF8.self) == "audio-data")
+        #expect(APIClientAuthMockURLProtocol.requests.count == 1)
+        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/meetings/meeting-1/audio")
+        #expect(
+            APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
+                == "Bearer session-token"
+        )
+    }
 }

@@ -4,6 +4,7 @@ import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-err
 import { prisma } from '@/lib/db';
 import {
   buildMeetingAudioResponse,
+  deleteMeetingAudioFile,
   hasMeetingAudioFile,
   saveMeetingAudioFile,
   saveMeetingAudioStream,
@@ -157,6 +158,37 @@ export async function PUT(
   }
 }
 
+export async function DELETE(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const context = createRequestContext(req, '/api/meetings/[id]/audio');
+  const auth = await requireAuthenticatedRequest(req, context);
+
+  if (auth instanceof Response) {
+    return auth;
+  }
+
+  try {
+    const { id } = await params;
+    await requireMeetingOwnership(id, auth.workspace.id);
+    await saveAudioCloudSyncState(id, false);
+
+    return jsonResponse(context, {
+      hasAudio: false,
+      audioUrl: null,
+      audioCloudSyncEnabled: false,
+    });
+  } catch (error) {
+    return errorResponse(
+      context,
+      500,
+      error instanceof Error ? `删除云端会议音频失败：${error.message}` : '删除云端会议音频失败，请稍后重试。',
+      error
+    );
+  }
+}
+
 async function requireMeetingOwnership(meetingId: string, workspaceId: string) {
   const meeting = await prisma.meeting.findFirst({
     where: {
@@ -180,6 +212,7 @@ async function persistAudioUpload(options: PersistAudioUploadOptions) {
   const updated = await prisma.meeting.update({
     where: { id: options.meetingId },
     data: {
+      audioCloudSyncEnabled: true,
       audioMimeType: options.mimeType,
       audioDuration: options.duration,
       audioUpdatedAt: new Date(),
@@ -216,8 +249,22 @@ async function persistAudioUpload(options: PersistAudioUploadOptions) {
     audioDuration: updated.audioDuration,
     audioUpdatedAt: updated.audioUpdatedAt?.toISOString() || null,
     audioUrl: `/api/meetings/${options.meetingId}/audio?t=${updated.audioUpdatedAt?.getTime() || Date.now()}`,
+    audioCloudSyncEnabled: true,
     ...buildMeetingAudioProcessingStatus(updated),
   };
+}
+
+async function saveAudioCloudSyncState(meetingId: string, enabled: boolean) {
+  if (!enabled) {
+    await deleteMeetingAudioFile(meetingId);
+  }
+
+  await prisma.meeting.update({
+    where: { id: meetingId },
+    data: {
+      audioCloudSyncEnabled: enabled,
+    },
+  });
 }
 
 function normalizeDuration(value: FormDataEntryValue | string | null) {

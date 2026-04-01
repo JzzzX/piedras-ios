@@ -32,6 +32,19 @@ struct APIClientDecodingTests {
           "createdAt": "2026-03-19T08:40:00.000Z",
           "updatedAt": "2026-03-19T08:47:00.000Z",
           "workspaceId": "workspace-1",
+          "audioCloudSyncEnabled": false,
+          "noteAttachments": [
+            {
+              "id": "attachment-1",
+              "mimeType": "image/jpeg",
+              "url": "/api/meetings/meeting-1/attachments/attachment-1",
+              "originalName": "whiteboard.jpg",
+              "extractedText": "白板重点",
+              "createdAt": "2026-03-19T08:46:00.000Z",
+              "updatedAt": "2026-03-19T08:46:30.000Z"
+            }
+          ],
+          "noteAttachmentsTextContext": "白板重点",
           "segments": [],
           "chatMessages": [
             {
@@ -56,6 +69,9 @@ struct APIClientDecodingTests {
         #expect(meeting.audioEnhancedNotes == "audio summary")
         #expect(meeting.audioEnhancedNotesStatus == "ready")
         #expect(meeting.audioEnhancedNotesProvider == "openai")
+        #expect(meeting.audioCloudSyncEnabled == false)
+        #expect(meeting.noteAttachments?.count == 1)
+        #expect(meeting.noteAttachmentsTextContext == "白板重点")
     }
 
     @Test

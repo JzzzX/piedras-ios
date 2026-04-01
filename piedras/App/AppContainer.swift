@@ -4,6 +4,7 @@ import SwiftData
 @MainActor
 final class AppContainer {
     private static let isXCTestRuntime = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    private(set) static weak var currentInstance: AppContainer?
     private(set) static weak var currentXCTestInstance: AppContainer?
 
     let modelContainer: ModelContainer
@@ -135,6 +136,7 @@ final class AppContainer {
         if Self.isXCTestRuntime {
             Self.currentXCTestInstance = self
         }
+        Self.currentInstance = self
 
         AppStrings.syncLanguage(settingsStore.appLanguage)
 

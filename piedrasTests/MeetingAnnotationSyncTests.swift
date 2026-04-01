@@ -47,9 +47,28 @@ struct MeetingAnnotationSyncTests {
             audioUpdatedAt: nil,
             userNotes: meeting.userNotesPlainText,
             enhancedNotes: "新的 AI 笔记",
+            audioEnhancedNotes: nil,
+            audioEnhancedNotesStatus: nil,
+            audioEnhancedNotesError: nil,
+            audioEnhancedNotesUpdatedAt: nil,
+            audioEnhancedNotesProvider: nil,
+            audioEnhancedNotesModel: nil,
+            noteAttachments: [
+                RemoteMeetingAttachment(
+                    id: "attachment-1",
+                    mimeType: "image/jpeg",
+                    url: "/api/meetings/\(meeting.id)/attachments/attachment-1",
+                    originalName: "whiteboard.jpg",
+                    extractedText: "白板重点",
+                    createdAt: meeting.createdAt,
+                    updatedAt: meeting.updatedAt
+                )
+            ],
+            noteAttachmentsTextContext: "白板重点",
             createdAt: meeting.createdAt,
             updatedAt: meeting.updatedAt.addingTimeInterval(10),
             workspaceId: meeting.hiddenWorkspaceId,
+            speakers: nil,
             segments: [
                 RemoteTranscriptSegment(
                     id: "segment-1",
@@ -62,8 +81,15 @@ struct MeetingAnnotationSyncTests {
                 )
             ],
             chatMessages: [],
+            audioCloudSyncEnabled: false,
             hasAudio: false,
-            audioUrl: nil
+            audioUrl: nil,
+            audioProcessingState: nil,
+            audioProcessingError: nil,
+            audioProcessingAttempts: nil,
+            audioProcessingRequestedAt: nil,
+            audioProcessingStartedAt: nil,
+            audioProcessingCompletedAt: nil
         )
 
         MeetingPayloadMapper.apply(
@@ -78,6 +104,8 @@ struct MeetingAnnotationSyncTests {
         let refreshedAnnotation = try #require(refreshedSegment.annotation)
 
         #expect(refreshedMeeting.enhancedNotes == "新的 AI 笔记")
+        #expect(refreshedMeeting.audioCloudSyncEnabled == false)
+        #expect(refreshedMeeting.noteAttachmentTextContext == "白板重点")
         #expect(refreshedAnnotation.comment == "这是一条本地评论")
         #expect(refreshedAnnotation.imageFileNames == ["photo-1.jpg"])
         #expect(refreshedAnnotation.imageTextContext == "白板上写着发布时间")

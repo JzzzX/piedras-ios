@@ -4,6 +4,7 @@ import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
 import { deleteMeetingAudioFile, hasMeetingAudioFile } from '@/lib/meeting-audio';
+import { deleteMeetingAttachmentsDir } from '@/lib/meeting-attachment';
 import { recoverPendingMeetingAudioProcessing } from '@/lib/meeting-audio-processing';
 import { serializeMeetingDetail } from '@/lib/meeting-response';
 
@@ -32,6 +33,7 @@ export async function GET(
         collection: true,
         segments: { orderBy: { order: 'asc' } },
         chatMessages: { orderBy: { timestamp: 'asc' } },
+        noteAttachments: { orderBy: { createdAt: 'asc' } },
       },
     });
 
@@ -83,6 +85,7 @@ export async function PUT(
       speakers,
       segments,
       chatMessages,
+      audioCloudSyncEnabled,
     } = body;
     const existingMeeting = await prisma.meeting.findFirst({
       where: {
@@ -110,6 +113,7 @@ export async function PUT(
     if (recommendation !== undefined) updateData.recommendation = recommendation;
     if (handoffNote !== undefined) updateData.handoffNote = handoffNote;
     if (speakers !== undefined) updateData.speakers = JSON.stringify(speakers);
+    if (audioCloudSyncEnabled !== undefined) updateData.audioCloudSyncEnabled = Boolean(audioCloudSyncEnabled);
 
     const meeting = await prisma.meeting.update({
       where: { id },
@@ -161,6 +165,7 @@ export async function PUT(
         collection: true,
         segments: { orderBy: { order: 'asc' } },
         chatMessages: { orderBy: { timestamp: 'asc' } },
+        noteAttachments: { orderBy: { createdAt: 'asc' } },
       },
     });
 
@@ -214,6 +219,7 @@ export async function DELETE(
     }
 
     await deleteMeetingAudioFile(id);
+    await deleteMeetingAttachmentsDir(id);
     await prisma.meeting.delete({ where: { id } });
 
     return jsonResponse(context, { success: true });

@@ -15,6 +15,31 @@ enum MeetingNoteAttachmentStorage {
             .appendingPathComponent(fileName)
     }
 
+    static func cachedFileName(
+        remoteAttachmentID: String,
+        mimeType: String?,
+        originalName: String?
+    ) -> String {
+        if let originalName {
+            let ext = URL(fileURLWithPath: originalName).pathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !ext.isEmpty {
+                return "\(remoteAttachmentID).\(ext)"
+            }
+        }
+
+        if let mimeType {
+            let normalized = mimeType.lowercased()
+            if normalized.contains("png") {
+                return "\(remoteAttachmentID).png"
+            }
+            if normalized.contains("heic") {
+                return "\(remoteAttachmentID).heic"
+            }
+        }
+
+        return "\(remoteAttachmentID).jpg"
+    }
+
     @discardableResult
     static func saveImage(
         _ image: UIImage,
@@ -38,6 +63,22 @@ enum MeetingNoteAttachmentStorage {
         let url = imageURL(meetingID: meetingID, fileName: fileName)
         guard let data = try? Data(contentsOf: url) else { return nil }
         return UIImage(data: data)
+    }
+
+    @discardableResult
+    static func saveData(
+        _ data: Data,
+        meetingID: String,
+        preferredFileName: String
+    ) throws -> String {
+        let directory = directoryURL(meetingID: meetingID)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let fileName = preferredFileName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedFileName = fileName.isEmpty ? UUID().uuidString.lowercased() : fileName
+        let fileURL = directory.appendingPathComponent(normalizedFileName)
+        try data.write(to: fileURL, options: .atomic)
+        return normalizedFileName
     }
 
     static func deleteImage(meetingID: String, fileName: String) {

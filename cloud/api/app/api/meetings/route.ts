@@ -153,6 +153,7 @@ export async function POST(req: NextRequest) {
       speakers,
       segments,
       chatMessages,
+      audioCloudSyncEnabled,
     } = body;
 
     const normalizedDate = date ? new Date(date) : new Date();
@@ -185,6 +186,8 @@ export async function POST(req: NextRequest) {
         recommendation: recommendation || 'pending',
         handoffNote: handoffNote || '',
         speakers: JSON.stringify(speakers || {}),
+        audioCloudSyncEnabled:
+          audioCloudSyncEnabled === undefined ? true : Boolean(audioCloudSyncEnabled),
       };
 
       const upsertedMeeting = existingMeeting
@@ -241,6 +244,7 @@ export async function POST(req: NextRequest) {
           collection: true,
           segments: { orderBy: { order: 'asc' } },
           chatMessages: { orderBy: { timestamp: 'asc' } },
+          noteAttachments: { orderBy: { createdAt: 'asc' } },
         },
       });
     });

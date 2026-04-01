@@ -15,6 +15,8 @@ enum AudioFileResolverError: LocalizedError {
 }
 
 enum AudioFileResolver {
+    typealias RemoteAudioDataLoader = @Sendable (URL) async throws -> Data
+
     static func resolveFileURL(for meeting: Meeting) async throws -> URL {
         try await resolveFileURL(
             localPath: meeting.audioLocalPath,
@@ -22,7 +24,11 @@ enum AudioFileResolver {
         )
     }
 
-    static func resolveFileURL(localPath: String?, remoteURLString: String?) async throws -> URL {
+    static func resolveFileURL(
+        localPath: String?,
+        remoteURLString: String?,
+        remoteDataLoader: RemoteAudioDataLoader? = nil
+    ) async throws -> URL {
         if let localPath,
            FileManager.default.fileExists(atPath: localPath) {
             return URL(fileURLWithPath: localPath)
@@ -36,12 +42,13 @@ enum AudioFileResolver {
             throw AudioFileResolverError.invalidRemoteURL
         }
 
-        return try await downloadRemoteAudio(from: remoteURL)
+        return try await downloadRemoteAudio(from: remoteURL, remoteDataLoader: remoteDataLoader)
     }
 
-    private static func downloadRemoteAudio(from remoteURL: URL) async throws -> URL {
-        let (temporaryURL, _) = try await URLSession.shared.download(from: remoteURL)
-
+    private static func downloadRemoteAudio(
+        from remoteURL: URL,
+        remoteDataLoader: RemoteAudioDataLoader?
+    ) async throws -> URL {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("piedras-audio-cache", isDirectory: true)
         try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
@@ -53,6 +60,22 @@ enum AudioFileResolver {
             try FileManager.default.removeItem(at: destinationURL)
         }
 
+        if let remoteDataLoader {
+            let data = try await remoteDataLoader(remoteURL)
+            try data.write(to: destinationURL)
+            return destinationURL
+        }
+
+        let apiClient = await MainActor.run { AppContainer.currentInstance?.apiClient }
+        if let apiClient {
+            let data = try await apiClient.downloadAuthenticatedData(
+                fromAbsoluteURLString: remoteURL.absoluteString
+            )
+            try data.write(to: destinationURL)
+            return destinationURL
+        }
+
+        let (temporaryURL, _) = try await URLSession.shared.download(from: remoteURL)
         try FileManager.default.moveItem(at: temporaryURL, to: destinationURL)
         return destinationURL
     }

@@ -437,9 +437,10 @@ final class MeetingStore {
                 assetIdentifiers[fileName] = normalizedAssetIdentifier
                 meeting.noteAttachmentAssetIdentifiersByFileName = assetIdentifiers
             }
-            meeting.updatedAt = .now
+            meeting.markPending()
             persistChanges()
             scheduleNoteAttachmentTextRefresh(for: meeting)
+            scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1.5))
             return .added
         } catch {
             lastErrorMessage = error.localizedDescription
@@ -450,12 +451,22 @@ final class MeetingStore {
     func removeNoteAttachment(fileName: String, from meeting: Meeting) {
         let previousText = meeting.noteAttachmentTextContext.trimmedForImageText
         cancelNoteAttachmentTextTask(for: meeting.id)
+        if let remoteID = meeting.noteAttachmentRemoteIDsByFileName[fileName],
+           !meeting.noteAttachmentPendingDeleteIDs.contains(remoteID) {
+            meeting.noteAttachmentPendingDeleteIDs.append(remoteID)
+        }
         MeetingNoteAttachmentStorage.deleteImage(meetingID: meeting.id, fileName: fileName)
         meeting.noteAttachmentFileNames.removeAll { $0 == fileName }
         var assetIdentifiers = meeting.noteAttachmentAssetIdentifiersByFileName
         assetIdentifiers.removeValue(forKey: fileName)
         meeting.noteAttachmentAssetIdentifiersByFileName = assetIdentifiers
-        meeting.updatedAt = .now
+        var remoteIDs = meeting.noteAttachmentRemoteIDsByFileName
+        remoteIDs.removeValue(forKey: fileName)
+        meeting.noteAttachmentRemoteIDsByFileName = remoteIDs
+        var extractedTexts = meeting.noteAttachmentExtractedTextByFileName
+        extractedTexts.removeValue(forKey: fileName)
+        meeting.noteAttachmentExtractedTextByFileName = extractedTexts
+        meeting.markPending()
 
         if meeting.noteAttachmentFileNames.isEmpty {
             clearNoteAttachmentText(for: meeting)
@@ -465,11 +476,13 @@ final class MeetingStore {
                 newText: ""
             )
             persistChanges()
+            scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1.5))
             return
         }
 
         persistChanges()
         scheduleNoteAttachmentTextRefresh(for: meeting)
+        scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1.5))
     }
 
     func updateMeetingType(_ meetingType: String, for meeting: Meeting) {
@@ -1119,6 +1132,10 @@ final class MeetingStore {
     }
 
     private func ensureAudioUploadedForAudioNotes(_ meeting: Meeting) async throws {
+        guard meeting.audioCloudSyncEnabled else {
+            throw APIClientError.requestFailed("该会议已关闭云端音频同步，无法生成音频版 AI 笔记。")
+        }
+
         guard shouldUploadAudioBeforeGeneratingAudioNotes(for: meeting) else {
             return
         }
@@ -1174,6 +1191,10 @@ final class MeetingStore {
     }
 
     private func shouldUploadAudioBeforeGeneratingAudioNotes(for meeting: Meeting) -> Bool {
+        guard meeting.audioCloudSyncEnabled else {
+            return false
+        }
+
         guard meeting.status == .ended else {
             return false
         }
@@ -1189,6 +1210,37 @@ final class MeetingStore {
         }
 
         return meeting.syncState != .synced
+    }
+
+    func deleteRemoteAudioCopy(meetingID: String) async {
+        guard let meeting = meeting(withID: meetingID) else { return }
+
+        do {
+            try await apiClient.deleteRemoteAudio(meetingID: meetingID)
+            meeting.audioCloudSyncEnabled = false
+            meeting.audioRemotePath = nil
+            meeting.syncState = .synced
+            meeting.lastSyncedAt = .now
+            meeting.updatedAt = .now
+            persistChanges()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func enableRemoteAudioSync(meetingID: String) async {
+        guard let meeting = meeting(withID: meetingID) else { return }
+
+        meeting.audioCloudSyncEnabled = true
+        meeting.markPending()
+        persistChanges()
+
+        do {
+            try await meetingSyncService.syncMeeting(id: meetingID)
+            loadMeetings()
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
     }
 
     func prepareChatSessions(for meetingID: String) {
@@ -3146,7 +3198,7 @@ final class MeetingStore {
         let meetingID = meeting.id
         let taskToken = UUID()
         let imageURLs = fileNames.map {
-            MeetingNoteAttachmentStorage.imageURL(meetingID: meetingID, fileName: $0)
+            ($0, MeetingNoteAttachmentStorage.imageURL(meetingID: meetingID, fileName: $0))
         }
         noteAttachmentTaskTokens[meetingID] = taskToken
 
@@ -3154,11 +3206,23 @@ final class MeetingStore {
             guard let self else { return }
 
             do {
-                let extractedText = try await noteAttachmentImageTextExtractor.extractText(from: imageURLs)
+                var extractedTextByFileName = meeting.noteAttachmentExtractedTextByFileName
+                for (fileName, imageURL) in imageURLs {
+                    let extractedText = try await noteAttachmentImageTextExtractor.extractText(from: [imageURL])
+                    guard !Task.isCancelled else { return }
+                    guard noteAttachmentTaskTokens[meetingID] == taskToken else { return }
+
+                    let normalizedText = extractedText.trimmedForImageText
+                    if normalizedText.isEmpty {
+                        extractedTextByFileName.removeValue(forKey: fileName)
+                    } else {
+                        extractedTextByFileName[fileName] = normalizedText
+                    }
+                }
                 guard !Task.isCancelled else { return }
                 guard noteAttachmentTaskTokens[meetingID] == taskToken else { return }
                 guard let meeting = self.meeting(withID: meetingID) else { return }
-                applyNoteAttachmentText(extractedText, to: meeting)
+                applyNoteAttachmentText(extractedTextByFileName, to: meeting, fileNames: fileNames)
             } catch {
                 guard !Task.isCancelled else { return }
                 guard noteAttachmentTaskTokens[meetingID] == taskToken else { return }
@@ -3166,6 +3230,7 @@ final class MeetingStore {
                 meeting.noteAttachmentTextContext = ""
                 meeting.noteAttachmentTextStatus = .failed
                 meeting.noteAttachmentTextUpdatedAt = .now
+                meeting.noteAttachmentExtractedTextByFileName = [:]
                 meeting.updatedAt = .now
                 persistChanges()
             }
@@ -3175,12 +3240,20 @@ final class MeetingStore {
         }
     }
 
-    private func applyNoteAttachmentText(_ extractedText: String, to meeting: Meeting) {
-        let normalizedText = extractedText.trimmedForImageText
+    private func applyNoteAttachmentText(
+        _ extractedTextByFileName: [String: String],
+        to meeting: Meeting,
+        fileNames: [String]
+    ) {
+        let normalizedText = fileNames
+            .compactMap { extractedTextByFileName[$0]?.trimmedForImageText }
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n\n")
         let previousText = meeting.noteAttachmentTextContext.trimmedForImageText
 
+        meeting.noteAttachmentExtractedTextByFileName = extractedTextByFileName
         meeting.noteAttachmentTextContext = normalizedText
-        meeting.noteAttachmentTextStatus = .ready
+        meeting.noteAttachmentTextStatus = normalizedText.isEmpty ? .idle : .ready
         meeting.noteAttachmentTextUpdatedAt = .now
         meeting.updatedAt = .now
         markMeetingPendingImageTextRefreshIfNeeded(
@@ -3192,6 +3265,7 @@ final class MeetingStore {
     }
 
     private func clearNoteAttachmentText(for meeting: Meeting) {
+        meeting.noteAttachmentExtractedTextByFileName = [:]
         meeting.noteAttachmentTextContext = ""
         meeting.noteAttachmentTextStatus = .idle
         meeting.noteAttachmentTextUpdatedAt = nil

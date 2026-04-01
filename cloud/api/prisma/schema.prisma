@@ -76,6 +76,7 @@ model Meeting {
   date                    DateTime @default(now())
   status                  String   @default("idle")
   duration                Int      @default(0)
+  audioCloudSyncEnabled   Boolean  @default(true)
   audioMimeType           String?
   audioDuration           Int?
   audioUpdatedAt DateTime?
@@ -110,8 +111,24 @@ model Meeting {
 
   segments     TranscriptSegment[]
   chatMessages ChatMessage[]
+  noteAttachments MeetingAttachment[]
   collection   Collection? @relation(fields: [collectionId], references: [id], onDelete: SetNull)
   workspace    Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model MeetingAttachment {
+  id           String   @id @default(uuid())
+  originalName String
+  mimeType     String
+  fileSize     Int      @default(0)
+  extractedText String  @default("")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  meetingId    String
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId, updatedAt])
 }
 
 model Collection {
