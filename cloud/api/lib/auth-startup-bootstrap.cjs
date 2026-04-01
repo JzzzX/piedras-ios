@@ -18,6 +18,41 @@ const LEGACY_BOOTSTRAP_USERS = [
   },
 ];
 
+const MEDIA_SYNC_BOOTSTRAP_SQL = `
+ALTER TABLE "Meeting"
+  ADD COLUMN IF NOT EXISTS "audioCloudSyncEnabled" BOOLEAN NOT NULL DEFAULT true;
+
+CREATE TABLE IF NOT EXISTS "MeetingAttachment" (
+  "id" TEXT NOT NULL,
+  "originalName" TEXT NOT NULL,
+  "mimeType" TEXT NOT NULL,
+  "fileSize" INTEGER NOT NULL DEFAULT 0,
+  "extractedText" TEXT NOT NULL DEFAULT '',
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "meetingId" TEXT NOT NULL,
+
+  CONSTRAINT "MeetingAttachment_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX IF NOT EXISTS "MeetingAttachment_meetingId_updatedAt_idx"
+  ON "MeetingAttachment"("meetingId", "updatedAt");
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'MeetingAttachment_meetingId_fkey'
+  ) THEN
+    ALTER TABLE "MeetingAttachment"
+      ADD CONSTRAINT "MeetingAttachment_meetingId_fkey"
+      FOREIGN KEY ("meetingId") REFERENCES "Meeting"("id")
+      ON DELETE CASCADE ON UPDATE CASCADE;
+  END IF;
+END $$;
+`;
+
 function summarizeAuthSchemaStatus(input) {
   const tableNames = new Set(input.tableNames);
   const status = {
@@ -67,6 +102,56 @@ function summarizeAuthSchemaStatus(input) {
   }
 
   return status;
+}
+
+function summarizeMediaSyncSchemaStatus(input) {
+  const status = {
+    ready: true,
+    missingItems: [],
+    meetingAudioCloudSyncEnabledColumnPresent: Boolean(input.meetingAudioCloudSyncEnabledColumnPresent),
+    meetingAttachmentTablePresent: Boolean(input.meetingAttachmentTablePresent),
+    meetingAttachmentIndexPresent: Boolean(input.meetingAttachmentIndexPresent),
+    meetingAttachmentForeignKeyPresent: Boolean(input.meetingAttachmentForeignKeyPresent),
+  };
+
+  if (!status.meetingAudioCloudSyncEnabledColumnPresent) {
+    status.ready = false;
+    status.missingItems.push('Meeting.audioCloudSyncEnabled 字段');
+  }
+  if (!status.meetingAttachmentTablePresent) {
+    status.ready = false;
+    status.missingItems.push('MeetingAttachment 表');
+  }
+  if (!status.meetingAttachmentIndexPresent) {
+    status.ready = false;
+    status.missingItems.push('MeetingAttachment_meetingId_updatedAt_idx 索引');
+  }
+  if (!status.meetingAttachmentForeignKeyPresent) {
+    status.ready = false;
+    status.missingItems.push('MeetingAttachment_meetingId_fkey 外键');
+  }
+
+  return status;
+}
+
+function mergeSchemaStatuses(...statuses) {
+  const missingItems = [];
+
+  for (const status of statuses) {
+    if (!status) continue;
+    if (Array.isArray(status.missingItems)) {
+      for (const item of status.missingItems) {
+        if (!missingItems.includes(item)) {
+          missingItems.push(item);
+        }
+      }
+    }
+  }
+
+  return {
+    ready: statuses.every((status) => status?.ready !== false),
+    missingItems,
+  };
 }
 
 function buildLegacyBootstrapPlans(workspaces) {
@@ -149,6 +234,41 @@ async function getAuthSchemaStatus(prisma) {
   });
 }
 
+async function getMediaSyncSchemaStatus(prisma) {
+  const meetingAudioCloudSyncEnabledColumn = await prisma.$queryRawUnsafe(`
+    SELECT column_name AS "objectName"
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'Meeting'
+      AND column_name = 'audioCloudSyncEnabled'
+  `);
+  const meetingAttachmentTable = await prisma.$queryRawUnsafe(`
+    SELECT table_name AS "objectName"
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'MeetingAttachment'
+  `);
+  const meetingAttachmentIndex = await prisma.$queryRawUnsafe(`
+    SELECT indexname AS "objectName"
+    FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND tablename = 'MeetingAttachment'
+      AND indexname = 'MeetingAttachment_meetingId_updatedAt_idx'
+  `);
+  const meetingAttachmentForeignKey = await prisma.$queryRawUnsafe(`
+    SELECT conname AS "objectName"
+    FROM pg_constraint
+    WHERE conname = 'MeetingAttachment_meetingId_fkey'
+  `);
+
+  return summarizeMediaSyncSchemaStatus({
+    meetingAudioCloudSyncEnabledColumnPresent: meetingAudioCloudSyncEnabledColumn.length > 0,
+    meetingAttachmentTablePresent: meetingAttachmentTable.length > 0,
+    meetingAttachmentIndexPresent: meetingAttachmentIndex.length > 0,
+    meetingAttachmentForeignKeyPresent: meetingAttachmentForeignKey.length > 0,
+  });
+}
+
 async function runPrismaDbPush(logger) {
   logger('auth_schema_bootstrap_running', {
     cwd: path.resolve(__dirname, '..'),
@@ -167,6 +287,12 @@ async function runPrismaDbPush(logger) {
     stdout: result.stdout.trim(),
     stderr: result.stderr.trim(),
   });
+}
+
+async function runMediaSyncSchemaBootstrap(prisma, logger) {
+  logger('media_sync_schema_bootstrap_running', {});
+  await prisma.$executeRawUnsafe(MEDIA_SYNC_BOOTSTRAP_SQL);
+  logger('media_sync_schema_bootstrap_completed', {});
 }
 
 async function listLegacyWorkspaces(prisma) {
@@ -256,19 +382,30 @@ async function bootstrapAuthRuntime(logger = () => {}) {
   const prisma = new PrismaClient();
 
   try {
-    let schemaStatus = await getAuthSchemaStatus(prisma);
+    let authSchemaStatus = await getAuthSchemaStatus(prisma);
 
-    if (!schemaStatus.ready) {
+    if (!authSchemaStatus.ready) {
       logger('auth_schema_bootstrap_needed', {
-        missingItems: schemaStatus.missingItems,
+        missingItems: authSchemaStatus.missingItems,
       });
       await prisma.$disconnect();
       await runPrismaDbPush(logger);
       await prisma.$connect();
-      schemaStatus = await getAuthSchemaStatus(prisma);
+      authSchemaStatus = await getAuthSchemaStatus(prisma);
     }
 
-    const legacyUsers = schemaStatus.ready
+    let mediaSyncSchemaStatus = await getMediaSyncSchemaStatus(prisma);
+
+    if (!mediaSyncSchemaStatus.ready) {
+      logger('media_sync_schema_bootstrap_needed', {
+        missingItems: mediaSyncSchemaStatus.missingItems,
+      });
+      await runMediaSyncSchemaBootstrap(prisma, logger);
+      mediaSyncSchemaStatus = await getMediaSyncSchemaStatus(prisma);
+    }
+
+    const schemaStatus = mergeSchemaStatuses(authSchemaStatus, mediaSyncSchemaStatus);
+    const legacyUsers = authSchemaStatus.ready
       ? await ensureLegacyBootstrapUsers(prisma, logger)
       : [];
 
@@ -284,5 +421,7 @@ async function bootstrapAuthRuntime(logger = () => {}) {
 module.exports = {
   bootstrapAuthRuntime,
   buildLegacyBootstrapPlans,
+  mergeSchemaStatuses,
   summarizeAuthSchemaStatus,
+  summarizeMediaSyncSchemaStatus,
 };

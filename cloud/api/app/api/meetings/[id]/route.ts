@@ -7,6 +7,7 @@ import { deleteMeetingAudioFile, hasMeetingAudioFile } from '@/lib/meeting-audio
 import { deleteMeetingAttachmentsDir } from '@/lib/meeting-attachment';
 import { recoverPendingMeetingAudioProcessing } from '@/lib/meeting-audio-processing';
 import { serializeMeetingDetail } from '@/lib/meeting-response';
+import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
 
 // GET /api/meetings/[id] — 获取单个会议详情
 export async function GET(
@@ -18,6 +19,11 @@ export async function GET(
 
   if (auth instanceof Response) {
     return auth;
+  }
+
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
   }
 
   try {
@@ -44,7 +50,22 @@ export async function GET(
     const hasAudio =
       Boolean(meeting.audioMimeType) && (await hasMeetingAudioFile(meeting.id));
 
-    return jsonResponse(context, serializeMeetingDetail(meeting, { hasAudio }));
+    const payload = serializeMeetingDetail(meeting, { hasAudio });
+    console.log(
+      JSON.stringify({
+        scope: 'cloud-sync',
+        event: 'meeting_detail_loaded',
+        route: context.route,
+        requestId: context.requestId,
+        workspaceId: auth.workspace.id,
+        meetingId: meeting.id,
+        hasAudio,
+        noteAttachmentCount: payload.noteAttachments.length,
+        audioCloudSyncEnabled: payload.audioCloudSyncEnabled,
+      })
+    );
+
+    return jsonResponse(context, payload);
   } catch (error) {
     return errorResponse(
       context,
@@ -65,6 +86,11 @@ export async function PUT(
 
   if (auth instanceof Response) {
     return auth;
+  }
+
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
   }
 
   try {
@@ -175,11 +201,29 @@ export async function PUT(
         ? await hasMeetingAudioFile(hydratedMeeting.id)
         : false;
 
+    const payload = hydratedMeeting
+      ? serializeMeetingDetail(hydratedMeeting, { hasAudio })
+      : null;
+
+    if (payload) {
+      console.log(
+        JSON.stringify({
+          scope: 'cloud-sync',
+          event: 'meeting_updated',
+          route: context.route,
+          requestId: context.requestId,
+          workspaceId: auth.workspace.id,
+          meetingId: payload.id,
+          segmentCount: Array.isArray(segments) ? segments.length : null,
+          chatMessageCount: Array.isArray(chatMessages) ? chatMessages.length : null,
+          audioCloudSyncEnabled: payload.audioCloudSyncEnabled ?? true,
+        })
+      );
+    }
+
     return jsonResponse(
       context,
-      hydratedMeeting
-        ? serializeMeetingDetail(hydratedMeeting, { hasAudio })
-        : null
+      payload
     );
   } catch (error) {
     return errorResponse(
@@ -203,6 +247,11 @@ export async function DELETE(
     return auth;
   }
 
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
+  }
+
   try {
     const { id } = await params;
 
@@ -221,6 +270,17 @@ export async function DELETE(
     await deleteMeetingAudioFile(id);
     await deleteMeetingAttachmentsDir(id);
     await prisma.meeting.delete({ where: { id } });
+
+    console.log(
+      JSON.stringify({
+        scope: 'cloud-sync',
+        event: 'meeting_deleted',
+        route: context.route,
+        requestId: context.requestId,
+        workspaceId: auth.workspace.id,
+        meetingId: id,
+      })
+    );
 
     return jsonResponse(context, { success: true });
   } catch (error) {

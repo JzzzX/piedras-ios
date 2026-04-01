@@ -3,7 +3,9 @@ const test = require('node:test');
 
 const {
   buildLegacyBootstrapPlans,
+  mergeSchemaStatuses,
   summarizeAuthSchemaStatus,
+  summarizeMediaSyncSchemaStatus,
 } = require('./auth-startup-bootstrap.cjs');
 
 test('summarizeAuthSchemaStatus reports missing auth tables and workspace owner column', () => {
@@ -57,6 +59,39 @@ test('summarizeAuthSchemaStatus reports missing meeting audio ai columns', () =>
 
   assert.equal(status.ready, false);
   assert.deepEqual(status.missingItems, ['Meeting 音频 AI 笔记字段']);
+});
+
+test('summarizeMediaSyncSchemaStatus reports missing meeting media sync schema objects', () => {
+  const status = summarizeMediaSyncSchemaStatus({
+    meetingAudioCloudSyncEnabledColumnPresent: false,
+    meetingAttachmentTablePresent: false,
+    meetingAttachmentIndexPresent: false,
+    meetingAttachmentForeignKeyPresent: false,
+  });
+
+  assert.equal(status.ready, false);
+  assert.deepEqual(status.missingItems, [
+    'Meeting.audioCloudSyncEnabled 字段',
+    'MeetingAttachment 表',
+    'MeetingAttachment_meetingId_updatedAt_idx 索引',
+    'MeetingAttachment_meetingId_fkey 外键',
+  ]);
+});
+
+test('mergeSchemaStatuses keeps bootstrap unhealthy until both auth and media sync schema are ready', () => {
+  const merged = mergeSchemaStatuses(
+    {
+      ready: true,
+      missingItems: [],
+    },
+    {
+      ready: false,
+      missingItems: ['MeetingAttachment 表'],
+    }
+  );
+
+  assert.equal(merged.ready, false);
+  assert.deepEqual(merged.missingItems, ['MeetingAttachment 表']);
 });
 
 test('buildLegacyBootstrapPlans assigns the two largest legacy workspaces to fixed bootstrap accounts', () => {

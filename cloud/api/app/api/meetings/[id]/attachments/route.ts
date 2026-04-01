@@ -6,6 +6,7 @@ import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
 import { saveMeetingAttachmentFile } from '@/lib/meeting-attachment';
+import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
 
 export const runtime = 'nodejs';
 
@@ -18,6 +19,11 @@ export async function GET(
 
   if (auth instanceof Response) {
     return auth;
+  }
+
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
   }
 
   try {
@@ -65,6 +71,11 @@ export async function POST(
     return auth;
   }
 
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
+  }
+
   try {
     const { id } = await params;
     await requireMeetingOwnership(id, auth.workspace.id);
@@ -100,6 +111,20 @@ export async function POST(
         updatedAt: true,
       },
     });
+
+    console.log(
+      JSON.stringify({
+        scope: 'cloud-sync',
+        event: 'meeting_attachment_uploaded',
+        route: context.route,
+        requestId: context.requestId,
+        workspaceId: auth.workspace.id,
+        meetingId: id,
+        attachmentId,
+        fileSize: buffer.byteLength,
+        mimeType: file.type || 'application/octet-stream',
+      })
+    );
 
     return jsonResponse(context, {
       ...attachment,

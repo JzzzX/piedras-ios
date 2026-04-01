@@ -14,6 +14,7 @@ import {
   queueMeetingAudioProcessing,
   recoverPendingMeetingAudioProcessing,
 } from '@/lib/meeting-audio-processing';
+import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
 
 export const runtime = 'nodejs';
 
@@ -34,6 +35,11 @@ export async function GET(
 
   if (auth instanceof Response) {
     return auth;
+  }
+
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
   }
 
   try {
@@ -79,6 +85,11 @@ export async function POST(
     return auth;
   }
 
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
+  }
+
   try {
     const { id } = await params;
     const shouldFinalizeTranscript = req.nextUrl.searchParams.get('finalizeTranscript') === 'true';
@@ -104,6 +115,21 @@ export async function POST(
       requestId: context.requestId,
     });
 
+    console.log(
+      JSON.stringify({
+        scope: 'cloud-sync',
+        event: 'meeting_audio_uploaded',
+        route: context.route,
+        requestId: context.requestId,
+        workspaceId: auth.workspace.id,
+        meetingId: id,
+        method: 'POST',
+        shouldFinalizeTranscript,
+        duration,
+        mimeType,
+      })
+    );
+
     return jsonResponse(context, payload);
   } catch (error) {
     return errorResponse(
@@ -124,6 +150,11 @@ export async function PUT(
 
   if (auth instanceof Response) {
     return auth;
+  }
+
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
   }
 
   try {
@@ -147,6 +178,21 @@ export async function PUT(
       requestId: context.requestId,
     });
 
+    console.log(
+      JSON.stringify({
+        scope: 'cloud-sync',
+        event: 'meeting_audio_uploaded',
+        route: context.route,
+        requestId: context.requestId,
+        workspaceId: auth.workspace.id,
+        meetingId: id,
+        method: 'PUT',
+        shouldFinalizeTranscript,
+        duration,
+        mimeType,
+      })
+    );
+
     return jsonResponse(context, payload);
   } catch (error) {
     return errorResponse(
@@ -169,10 +215,26 @@ export async function DELETE(
     return auth;
   }
 
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
+  }
+
   try {
     const { id } = await params;
     await requireMeetingOwnership(id, auth.workspace.id);
     await saveAudioCloudSyncState(id, false);
+
+    console.log(
+      JSON.stringify({
+        scope: 'cloud-sync',
+        event: 'meeting_audio_deleted',
+        route: context.route,
+        requestId: context.requestId,
+        workspaceId: auth.workspace.id,
+        meetingId: id,
+      })
+    );
 
     return jsonResponse(context, {
       hasAudio: false,

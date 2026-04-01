@@ -4,6 +4,7 @@ import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-err
 import { prisma } from '@/lib/db';
 import { hasMeetingAudioFile } from '@/lib/meeting-audio';
 import { serializeMeetingDetail } from '@/lib/meeting-response';
+import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
 
 interface SegmentPayload {
   id: string;
@@ -30,6 +31,11 @@ export async function GET(req: NextRequest) {
 
   if (auth instanceof Response) {
     return auth;
+  }
+
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
   }
 
   try {
@@ -110,6 +116,19 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    console.log(
+      JSON.stringify({
+        scope: 'cloud-sync',
+        event: 'meetings_list_loaded',
+        route: context.route,
+        requestId: context.requestId,
+        workspaceId: auth.workspace.id,
+        meetingCount: meetings.length,
+        query,
+        collectionId: collectionId || null,
+      })
+    );
+
     return jsonResponse(context, meetings);
   } catch (error) {
     if (error instanceof Error && error.message === '当前账号无权修改该会议') {
@@ -132,6 +151,11 @@ export async function POST(req: NextRequest) {
 
   if (auth instanceof Response) {
     return auth;
+  }
+
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
   }
 
   try {
@@ -251,10 +275,25 @@ export async function POST(req: NextRequest) {
 
     const hasAudio = meeting?.audioMimeType ? await hasMeetingAudioFile(meeting.id) : false;
 
-    return jsonResponse(
-      context,
-      meeting ? serializeMeetingDetail(meeting, { hasAudio }) : null
-    );
+    const payload = meeting ? serializeMeetingDetail(meeting, { hasAudio }) : null;
+
+    if (payload) {
+      console.log(
+        JSON.stringify({
+          scope: 'cloud-sync',
+          event: 'meeting_upserted',
+          route: context.route,
+          requestId: context.requestId,
+          workspaceId: auth.workspace.id,
+          meetingId: payload.id,
+          segmentCount: normalizedSegments.length,
+          chatMessageCount: normalizedChatMessages.length,
+          audioCloudSyncEnabled: payload.audioCloudSyncEnabled ?? true,
+        })
+      );
+    }
+
+    return jsonResponse(context, payload);
   } catch (error) {
     return errorResponse(
       context,

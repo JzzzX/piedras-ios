@@ -8,6 +8,7 @@ import {
   deleteMeetingAttachmentFile,
   hasMeetingAttachmentFile,
 } from '@/lib/meeting-attachment';
+import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
 
 export const runtime = 'nodejs';
 
@@ -20,6 +21,11 @@ export async function GET(
 
   if (auth instanceof Response) {
     return auth;
+  }
+
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
   }
 
   try {
@@ -57,6 +63,11 @@ export async function DELETE(
     return auth;
   }
 
+  const startupGuard = requireStartupBootstrapReady(context);
+  if (startupGuard) {
+    return startupGuard;
+  }
+
   try {
     const { id, attachmentId } = await params;
     await requireAttachmentOwnership(id, attachmentId, auth.workspace.id);
@@ -64,6 +75,18 @@ export async function DELETE(
     await prisma.meetingAttachment.delete({
       where: { id: attachmentId },
     });
+
+    console.log(
+      JSON.stringify({
+        scope: 'cloud-sync',
+        event: 'meeting_attachment_deleted',
+        route: context.route,
+        requestId: context.requestId,
+        workspaceId: auth.workspace.id,
+        meetingId: id,
+        attachmentId,
+      })
+    );
 
     return new Response(null, { status: 204 });
   } catch (error) {
