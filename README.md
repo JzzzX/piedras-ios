@@ -32,6 +32,7 @@ piedras-ios/
 
 - 详细方案见 [docs/piedras-ios-mvp-plan.md](docs/piedras-ios-mvp-plan.md)
 - 部署说明见 [docs/cloud-deployment.md](docs/cloud-deployment.md)
+- ASR / LLM 技术交接说明见 [docs/asr-llm-handoff.md](docs/asr-llm-handoff.md)
 - `cloud/api` 部署说明见 [cloud/api/README.md](cloud/api/README.md)
 - 提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)
 
