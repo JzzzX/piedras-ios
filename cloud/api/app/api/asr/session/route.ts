@@ -46,10 +46,12 @@ function createProxySessionToken(payload: Record<string, unknown>) {
 }
 
 function resolveProxyWSURL(req: NextRequest, sessionToken: string) {
-  const explicitBaseURL = resolveAsrProxyPublicBaseURL(
-    new URL(req.url).protocol === 'https:' ? 'https' : 'http'
-  );
-  const baseURL = explicitBaseURL ?? new URL(req.nextUrl.origin);
+  const requestBaseURL = new URL(req.nextUrl.origin);
+  const explicitBaseURL = resolveAsrProxyPublicBaseURL(requestBaseURL.protocol.replace(/:$/, ''));
+  const baseURL =
+    requestBaseURL.hostname === 'localhost' || requestBaseURL.hostname === '127.0.0.1'
+      ? explicitBaseURL ?? requestBaseURL
+      : requestBaseURL;
   const wsProtocol = baseURL.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsURL = new URL(resolveAsrProxyWSPath(), `${wsProtocol}//${baseURL.host}`);
   wsURL.searchParams.set('session_token', sessionToken);

@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!hasAvailableLlm(llmRuntimeConfig)) {
-      const demo = `当前为 Demo 模式，已检索到 ${retrieval.sources.length} 场相关会议。\n\n你可以配置默认 LLM 或 OpenAI 兼容 API Key 后获得真实模型回答。\n\n${formatSources(retrieval.sources)}`;
+      const demo = `当前为 Demo 模式，已检索到 ${retrieval.sources.length} 场相关会议。\n\n你可以配置 AiHubMix API Key 后获得真实模型回答。\n\n${formatSources(retrieval.sources)}`;
       return textResponse(context, createTextStream(demo), {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
@@ -182,7 +182,6 @@ export async function POST(req: NextRequest) {
       temperature: 0.4,
       maxTokens: GLOBAL_CHAT_MAX_TOKENS,
       timeoutMs: GLOBAL_CHAT_TIMEOUT_MS,
-      retries: 0,
       runtimeConfig: llmRuntimeConfig,
     });
 

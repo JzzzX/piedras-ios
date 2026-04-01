@@ -39,7 +39,7 @@ function formatDateTime(value: Date | string | null | undefined) {
 function runtimeCards(runtime: AdminRuntimeSummary) {
   const llmTitle = runtime.llmProviders.length > 0 ? runtime.llmProviders.join(', ') : 'Unconfigured';
   const llmDescription =
-    runtime.llmProviders.length > 0 ? '当前云端优先 provider 列表。' : '当前没有可用的云端大模型 provider。';
+    runtime.llmProviders.length > 0 ? '当前云端启用的 AiHubMix 模型链路。' : '当前没有可用的云端大模型链路。';
 
   const asrTitle = runtime.asr?.ready ? 'Ready' : runtime.asr?.configured ? 'Configured' : 'Unconfigured';
   const asrDescription = runtime.asr?.message ?? '未完成 ASR 状态检查。';

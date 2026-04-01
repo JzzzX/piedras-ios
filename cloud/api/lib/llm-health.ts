@@ -1,4 +1,4 @@
-import { DEFAULT_LLM_SETTINGS, inferOpenAIPreset } from './llm-config.ts';
+import { DEFAULT_LLM_SETTINGS, inferLlmPreset } from './llm-config.ts';
 import {
   getConfiguredProviders,
   hasAvailableLlm,
@@ -81,25 +81,16 @@ async function getCachedLlmProbeStatus(
 
 function resolveModel(provider: LlmProvider): string | null {
   switch (provider) {
-    case 'openai':
-      return process.env.OPENAI_MODEL || DEFAULT_LLM_SETTINGS.openaiModel;
-    case 'gemini':
-      return process.env.GEMINI_MODEL || 'gemini-flash-latest';
-    case 'minimax':
-      return process.env.MINIMAX_MODEL || 'MiniMax-Text-01';
+    case 'aihubmix':
+      return process.env.AIHUBMIX_MODEL || DEFAULT_LLM_SETTINGS.model;
   }
 }
 
 function resolveMessage(provider: LlmProvider, preset: string | null): string {
   switch (provider) {
-    case 'openai':
+    case 'aihubmix':
       if (preset === 'aihubmix') return 'AiHubMix 已配置';
-      if (preset === 'openai') return 'OpenAI 兼容接口已配置';
-      return '自定义 OpenAI 兼容接口已配置';
-    case 'gemini':
-      return 'Gemini 已配置';
-    case 'minimax':
-      return 'MiniMax 已配置';
+      return '自定义 AiHubMix 兼容接口已配置';
   }
 }
 
@@ -118,10 +109,10 @@ export async function getLlmRuntimeStatus(): Promise<LlmRuntimeStatus> {
     };
   }
 
-  const configuredProvider = getConfiguredProviders()[0] ?? 'openai';
+  const configuredProvider = getConfiguredProviders()[0] ?? 'aihubmix';
   const config = resolveLlmRuntimeHealthConfig();
   const probe = await getCachedLlmProbeStatus(
-    `llm:${configuredProvider}:${process.env.OPENAI_MODEL || ''}:${process.env.OPENAI_BASE_URL || ''}`,
+    `llm:${configuredProvider}:${process.env.AIHUBMIX_MODEL || ''}:${process.env.AIHUBMIX_BASE_URL || ''}`,
     config,
     async (): Promise<CachedLlmProbeStatus> => {
       const checkedAt = new Date().toISOString();
@@ -146,7 +137,10 @@ export async function getLlmRuntimeStatus(): Promise<LlmRuntimeStatus> {
   );
 
   const provider = probe.provider;
-  const preset = provider === 'openai' ? inferOpenAIPreset(process.env.OPENAI_BASE_URL) : null;
+  const preset =
+    provider === 'aihubmix'
+      ? inferLlmPreset(process.env.AIHUBMIX_BASE_URL)
+      : null;
   const reachable = probe.reachable;
 
   return {

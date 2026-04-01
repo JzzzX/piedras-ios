@@ -18,7 +18,7 @@
 
 - 主入口服务当前在线，基础健康检查正常
 - 实时 ASR 可用，但它对公网回探、WS 路径和 session 签发有较强依赖
-- LLM 普通文本链路可用，但并不代表所有 AI 能力都稳定，尤其是大音频场景
+- LLM 当前已收敛到 AiHubMix 单 provider，普通文本链路可用，但仍要关注上游 429 / 5xx 与超时
 - 仓库中的“推荐部署形态”和当前 Zeabur 上的“真实资源形态”存在偏差，接手时要先认清现状
 
 ## 当前线上真实现状
@@ -44,7 +44,7 @@ curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
 
 - `/healthz` 返回数据库与启动初始化状态正常
 - `/api/asr/status` 返回 `mode=doubao`、`provider=doubao-proxy`、`ready=true`
-- `/api/llm/status` 返回 `provider=openai`、`preset=aihubmix`、`model=gemini-3-flash-preview`、`ready=true`
+- `/api/llm/status` 应返回 `provider=aihubmix`、`preset=aihubmix`、`model=gemini-3-flash-preview`、`ready=true`
 - `/asr-proxy/healthz` 返回内置 ASR 代理可达
 
 ### 2. Zeabur 当前资源形态
@@ -209,16 +209,16 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 
 ### 当前主 LLM 路径
 
-当前线上 `LLM` 状态接口返回：
+当前服务端 LLM 主链路固定为：
 
-- provider: `openai`
+- provider: `aihubmix`
 - preset: `aihubmix`
 - model: `gemini-3-flash-preview`
 
 这表示当前主链路是：
 
-- 代码层使用 OpenAI-compatible 调用方式
-- 实际上游配置为 AiHubMix
+- 代码层只保留 AiHubMix 一个 provider
+- 上游模型固定走 `gemini-3-flash-preview`
 
 关键代码：
 
@@ -228,22 +228,20 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 
 ### 当前线上环境变量的实际含义
 
-本次通过 Zeabur variable list 看到，`piedras-ios` 服务已配置：
+当前应当只保留以下 LLM 变量：
 
-- `OPENAI_API_KEY`
-- `OPENAI_BASE_URL`
-- `OPENAI_MODEL`
-- `OPENAI_PATH`
-- `LLM_PROVIDER`
+- `AIHUBMIX_API_KEY`
+- `AIHUBMIX_BASE_URL`
+- `AIHUBMIX_MODEL`
+- `AIHUBMIX_PATH`
+- `LLM_PROVIDER=aihubmix`
 
-但当前没有看到这些变量：
+不再需要：
 
+- `OPENAI_*`
 - `GEMINI_API_KEY`
-- `MINIMAX_API_KEY`
-- `MINIMAX_GROUP_ID`
+- `MINIMAX_*`
 - `LLM_FALLBACKS`
-
-这意味着截至本次核查，线上更接近“单一主 provider 运行”，而不是“多 provider 热备”。
 
 ### `/api/llm/status` 的局限性
 
@@ -258,33 +256,24 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 
 - 长上下文是否稳定
 - 音频理解链路是否稳定
-- 大文件上传链路是否稳定
-- fallback provider 是否真的可用
+- 长音频转码链路是否稳定
+- 高峰时段 AiHubMix 上游是否抖动
 
 对应代码见 [llm-health.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/llm-health.ts#L106) 和 [llm-provider.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/llm-provider.ts#L715)。
 
-## 音频 AI 笔记是当前 LLM 最容易误判的风险点
+## 音频 AI 笔记当前也统一走 AiHubMix
 
-音频 AI 笔记接口：
+音频 AI 笔记链路已经改成单一路径：
 
-- [audio ai notes route.ts](/Users/a123456/Desktop/piedras/cloud/api/app/api/meetings/[id]/ai-notes/audio/route.ts)
+- 服务端统一先转成单声道 `mp3`
+- 请求体统一走 inline audio
+- 不再依赖 Gemini Files API
 
-这条链路有一个很关键的分叉：
+这意味着现在的风险点主要是：
 
-- 音频 `<= 18MB` 时，直接走 inline audio
-- 音频 `> 18MB` 时，要求服务端先把文件上传到 Gemini Files API，再把 `fileUri` 交给模型
-
-对应代码见 [audio ai notes route.ts](/Users/a123456/Desktop/piedras/cloud/api/app/api/meetings/[id]/ai-notes/audio/route.ts#L163)。
-
-### 当前已知风险
-
-当前线上变量里没有看到 `GEMINI_API_KEY`，因此：
-
-- 普通文本聊天可能是绿的
-- 小音频 AI 笔记也可能正常
-- 但大于 `18MB` 的音频 AI 笔记大概率会直接失败
-
-这也是为什么不能把“`/api/llm/status` 正常”直接理解成“所有 AI 功能都稳定”。
+- `ffmpeg` 转码失败
+- 长音频导致总耗时偏大
+- AiHubMix 上游在音频理解场景下超时或限流
 
 ## 已知不稳定点清单
 
@@ -344,23 +333,23 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 
 常见原因：
 
-- `OPENAI_*` 配置异常
+- `AIHUBMIX_*` 配置异常
 - AiHubMix 上游 429 / 5xx
 - `LLM_TIMEOUT_MS` 偏紧
-- 没有真正的 fallback provider
+- 代理层误把占位文本当成成功响应
 
-### E. 大音频 AI 笔记问题
+### E. 音频 AI 笔记问题
 
 表现：
 
 - 普通聊天正常
-- 音频 AI 笔记仅在大音频时报错
+- 音频 AI 笔记在长音频或特定格式下报错
 
 优先检查：
 
-- 是否超过 `18MB`
-- 是否配置 `GEMINI_API_KEY`
-- 是否是 Gemini Files 上传失败
+- `ffmpeg` 是否可用
+- 输入音频是否损坏
+- 是否出现 AiHubMix 超时 / 429 / 5xx
 
 ## 建议排查顺序
 
@@ -405,9 +394,9 @@ node scripts/asr_smoke_test.mjs tmp-asr-sample.wav https://piedras.preview.aliyu
 ### 环境变量
 
 - `ASR_*` 相关变量是否完整
-- `OPENAI_*` 是否与当前 AiHubMix 配置一致
-- 是否真的需要补 `LLM_FALLBACKS`
-- 是否要补 `GEMINI_API_KEY` 以覆盖大音频场景
+- `AIHUBMIX_*` 是否完整且只保留这一套
+- `LLM_PROVIDER` 是否明确为 `aihubmix`
+- 是否还残留历史 `OPENAI_*` 变量
 
 ### 日志关注点
 
@@ -417,7 +406,7 @@ node scripts/asr_smoke_test.mjs tmp-asr-sample.wav https://piedras.preview.aliyu
 - `upstream_closed`
 - 豆包 ASR 初始化失败
 - LLM 429 / 5xx
-- Gemini 文件上传初始化失败
+- 音频转码失败
 
 ## 首次接手建议动作
 
@@ -427,7 +416,7 @@ node scripts/asr_smoke_test.mjs tmp-asr-sample.wav https://piedras.preview.aliyu
 2. 再次确认 Zeabur 上真正在线的 service、domain、deployment
 3. 固化一份当前线上环境变量清单，只记录 key，不记录 secret 值
 4. 用一个小音频跑通实时 ASR smoke test
-5. 用一个大于 `18MB` 的样本验证音频 AI 笔记是否确实受 `GEMINI_API_KEY` 缺失影响
+5. 用一个长音频样本验证音频 AI 笔记在转码和上游响应上是否稳定
 6. 决定是否正式下线 `piedras-asr` 这个独立项目，避免后续认知混乱
 
 ## 最后提醒

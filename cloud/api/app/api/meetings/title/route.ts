@@ -10,8 +10,6 @@ import {
   shouldRejectGeneratedTitle,
 } from '@/lib/meeting-title';
 
-const TITLE_TIMEOUT_MS = 8_000;
-
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/meetings/title');
   const auth = await requireAuthenticatedRequest(req, context);
@@ -40,23 +38,30 @@ export async function POST(req: NextRequest) {
 
     const options = normalizePromptOptions(promptOptions);
 
-    const { content, provider } = await generateTextWithFallback({
-      messages: [
-        {
-          role: 'system',
-          content: buildTitleSystemPrompt(options.meetingType),
-        },
-        {
-          role: 'user',
-          content: `请为以下会议内容生成标题：\n\n${normalizedTranscript.slice(0, 3000)}`,
-        },
-      ],
-      temperature: 0.2,
-      maxTokens: 80,
-      timeoutMs: TITLE_TIMEOUT_MS,
-      retries: 0,
-      runtimeConfig: llmRuntimeConfig,
-    });
+    let provider = 'heuristic';
+    let content = '';
+    try {
+      const result = await generateTextWithFallback({
+        messages: [
+          {
+            role: 'system',
+            content: buildTitleSystemPrompt(options.meetingType),
+          },
+          {
+            role: 'user',
+            content: `请为以下会议内容生成标题：\n\n${normalizedTranscript.slice(0, 3000)}`,
+          },
+        ],
+        temperature: 0.2,
+        maxTokens: 80,
+        runtimeConfig: llmRuntimeConfig,
+      });
+      provider = result.provider;
+      content = result.content;
+    } catch {
+      provider = 'heuristic';
+      content = '';
+    }
 
     const title = sanitizeGeneratedTitle(content);
 

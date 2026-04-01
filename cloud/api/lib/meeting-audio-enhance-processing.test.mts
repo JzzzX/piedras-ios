@@ -16,8 +16,8 @@ test('buildMeetingAudioEnhanceStatus normalizes persisted audio AI notes state f
     audioEnhancedNotesStatus: 'processing',
     audioEnhancedNotesError: '',
     audioEnhancedNotesUpdatedAt: new Date('2026-03-31T08:00:00.000Z'),
-    audioEnhancedNotesProvider: 'openai',
-    audioEnhancedNotesModel: 'gpt-4.1',
+    audioEnhancedNotesProvider: 'aihubmix',
+    audioEnhancedNotesModel: 'gemini-3-flash-preview',
     audioEnhancedNotesAttempts: 2,
     audioEnhancedNotesRequestedAt: new Date('2026-03-31T07:59:59.000Z'),
     audioEnhancedNotesStartedAt: new Date('2026-03-31T08:00:01.000Z'),
@@ -28,8 +28,8 @@ test('buildMeetingAudioEnhanceStatus normalizes persisted audio AI notes state f
     audioEnhancedNotesStatus: 'processing',
     audioEnhancedNotesError: null,
     audioEnhancedNotesUpdatedAt: '2026-03-31T08:00:00.000Z',
-    audioEnhancedNotesProvider: 'openai',
-    audioEnhancedNotesModel: 'gpt-4.1',
+    audioEnhancedNotesProvider: 'aihubmix',
+    audioEnhancedNotesModel: 'gemini-3-flash-preview',
     audioEnhancedNotesAttempts: 2,
     audioEnhancedNotesRequestedAt: '2026-03-31T07:59:59.000Z',
     audioEnhancedNotesStartedAt: '2026-03-31T08:00:01.000Z',
@@ -60,22 +60,20 @@ test('meeting can be enqueued again after audio AI note generation completes', (
   assert.deepEqual(runtime.queue, ['meeting-1']);
 });
 
-test('audio AI notes transcode unsupported mime types to inline mp3 when gemini is unavailable', () => {
+test('audio AI notes keep inline mp3 strategy for AiHubMix requests', () => {
   const strategy = resolveMeetingAudioEnhanceInputStrategy({
     mimeType: 'audio/m4a',
     byteLength: 4 * 1024 * 1024,
-    geminiConfigured: false,
   });
 
   assert.equal(strategy, 'inline_mp3');
 });
 
-test('audio AI notes keep large inputs as file uploads when gemini is available', () => {
+test('audio AI notes keep inline mp3 strategy even for large inputs', () => {
   const strategy = resolveMeetingAudioEnhanceInputStrategy({
     mimeType: 'audio/m4a',
     byteLength: 24 * 1024 * 1024,
-    geminiConfigured: true,
   });
 
-  assert.equal(strategy, 'file_upload');
+  assert.equal(strategy, 'inline_mp3');
 });

@@ -1,6 +1,6 @@
-import type { LlmSettings, OpenAICompatiblePreset } from './types.ts';
+import type { LlmPreset, LlmSettings } from './types.ts';
 
-export interface OpenAICompatiblePresetConfig {
+export interface AiHubMixPresetConfig {
   label: string;
   description: string;
   baseUrl: string;
@@ -9,10 +9,7 @@ export interface OpenAICompatiblePresetConfig {
   modelHint: string;
 }
 
-export const OPENAI_COMPATIBLE_PRESETS: Record<
-  Exclude<OpenAICompatiblePreset, 'custom'>,
-  OpenAICompatiblePresetConfig
-> = {
+export const AIHUBMIX_PRESETS: Record<Exclude<LlmPreset, 'custom'>, AiHubMixPresetConfig> = {
   aihubmix: {
     label: 'AiHubMix',
     description: 'LLM 聚合网关，使用 OpenAI 兼容 Chat Completions 接口。',
@@ -21,68 +18,56 @@ export const OPENAI_COMPATIBLE_PRESETS: Record<
     defaultModel: 'gemini-3-flash-preview',
     modelHint: '填模型市场里的 model id，例如 gemini-3-flash-preview',
   },
-  openai: {
-    label: 'OpenAI 官方',
-    description: '直接请求 OpenAI 官方兼容接口。',
-    baseUrl: 'https://api.openai.com/v1',
-    path: '/chat/completions',
-    defaultModel: 'gpt-4.1-mini',
-    modelHint: '例如 gpt-4.1-mini',
-  },
 };
 
 export const DEFAULT_LLM_SETTINGS: LlmSettings = {
-  provider: 'auto',
-  minimaxApiKey: '',
-  minimaxGroupId: '',
-  minimaxModel: 'MiniMax-Text-01',
-  openaiPreset: 'aihubmix',
-  openaiApiKey: '',
-  openaiModel: OPENAI_COMPATIBLE_PRESETS.aihubmix.defaultModel,
-  openaiBaseUrl: OPENAI_COMPATIBLE_PRESETS.aihubmix.baseUrl,
-  openaiPath: OPENAI_COMPATIBLE_PRESETS.aihubmix.path,
+  provider: 'aihubmix',
+  preset: 'aihubmix',
+  apiKey: '',
+  model: AIHUBMIX_PRESETS.aihubmix.defaultModel,
+  baseUrl: AIHUBMIX_PRESETS.aihubmix.baseUrl,
+  path: AIHUBMIX_PRESETS.aihubmix.path,
 };
 
-export function inferOpenAIPreset(baseUrl?: string): OpenAICompatiblePreset {
+export function inferLlmPreset(baseUrl?: string): LlmPreset {
   const normalized = (baseUrl || '').trim().toLowerCase().replace(/\/+$/, '');
-  if (!normalized) return DEFAULT_LLM_SETTINGS.openaiPreset;
+  if (!normalized) return DEFAULT_LLM_SETTINGS.preset;
   if (normalized.includes('aihubmix.com')) return 'aihubmix';
-  if (normalized === 'https://api.openai.com/v1') return 'openai';
   return 'custom';
 }
 
-export function normalizeOpenAIPath(path?: string): string {
+export function normalizeAiHubMixPath(path?: string): string {
   const trimmed = (path || '').trim();
   if (!trimmed) return '/chat/completions';
   return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
 }
 
-export function getOpenAIPresetConfig(preset: OpenAICompatiblePreset): OpenAICompatiblePresetConfig {
+export function getLlmPresetConfig(preset: LlmPreset): AiHubMixPresetConfig {
   if (preset === 'custom') {
     return {
       label: '自定义兼容接口',
       description: '适用于任意兼容 OpenAI Chat Completions 的服务。',
-      baseUrl: DEFAULT_LLM_SETTINGS.openaiBaseUrl,
-      path: DEFAULT_LLM_SETTINGS.openaiPath,
-      defaultModel: DEFAULT_LLM_SETTINGS.openaiModel,
+      baseUrl: DEFAULT_LLM_SETTINGS.baseUrl,
+      path: DEFAULT_LLM_SETTINGS.path,
+      defaultModel: DEFAULT_LLM_SETTINGS.model,
       modelHint: '填写服务商要求的模型名称',
     };
   }
 
-  return OPENAI_COMPATIBLE_PRESETS[preset];
+  return AIHUBMIX_PRESETS[preset];
 }
 
-export function applyOpenAIPreset(
-  preset: OpenAICompatiblePreset,
+export function applyLlmPreset(
+  preset: LlmPreset,
   currentApiKey = ''
-): Pick<LlmSettings, 'openaiPreset' | 'openaiApiKey' | 'openaiBaseUrl' | 'openaiPath' | 'openaiModel'> {
-  const config = getOpenAIPresetConfig(preset);
+): Pick<LlmSettings, 'preset' | 'apiKey' | 'baseUrl' | 'path' | 'model'> {
+  const config = getLlmPresetConfig(preset);
   return {
-    openaiPreset: preset,
-    openaiApiKey: currentApiKey,
-    openaiBaseUrl: config.baseUrl,
-    openaiPath: config.path,
-    openaiModel: config.defaultModel,
+    preset,
+    apiKey: currentApiKey,
+    baseUrl: config.baseUrl,
+    path: config.path,
+    model: config.defaultModel,
   };
 }
 
@@ -91,16 +76,16 @@ export function normalizeLlmSettings(input?: Partial<LlmSettings>): LlmSettings 
     ...DEFAULT_LLM_SETTINGS,
     ...input,
   };
-  const openaiPreset =
-    input?.openaiPreset && ['aihubmix', 'openai', 'custom'].includes(input.openaiPreset)
-      ? input.openaiPreset
-      : inferOpenAIPreset(input?.openaiBaseUrl);
+  const preset =
+    input?.preset && ['aihubmix', 'custom'].includes(input.preset)
+      ? input.preset
+      : inferLlmPreset(input?.baseUrl);
 
   return {
     ...merged,
-    openaiPreset,
-    openaiBaseUrl: (merged.openaiBaseUrl || DEFAULT_LLM_SETTINGS.openaiBaseUrl).trim(),
-    openaiPath: normalizeOpenAIPath(merged.openaiPath),
-    openaiModel: (merged.openaiModel || getOpenAIPresetConfig(openaiPreset).defaultModel).trim(),
+    preset,
+    baseUrl: (merged.baseUrl || DEFAULT_LLM_SETTINGS.baseUrl).trim(),
+    path: normalizeAiHubMixPath(merged.path),
+    model: (merged.model || getLlmPresetConfig(preset).defaultModel).trim(),
   };
 }

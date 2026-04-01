@@ -18,25 +18,21 @@ export interface ChatMessage {
 
 export type RecipeSurface = 'chat' | 'meeting' | 'both';
 
-export type LlmSelection = 'auto' | 'minimax' | 'openai';
-export type OpenAICompatiblePreset = 'aihubmix' | 'openai' | 'custom';
+export type LlmSelection = 'aihubmix';
+export type LlmPreset = 'aihubmix' | 'custom';
 
 export interface LlmSettings {
   provider: LlmSelection;
-  minimaxApiKey: string;
-  minimaxGroupId: string;
-  minimaxModel: string;
-  openaiPreset: OpenAICompatiblePreset;
-  openaiApiKey: string;
-  openaiModel: string;
-  openaiBaseUrl: string;
-  openaiPath: string;
+  preset: LlmPreset;
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+  path: string;
 }
 
 export type LlmRuntimeConfig =
-  | { provider: 'auto' }
-  | { provider: 'minimax'; apiKey: string; groupId: string; model?: string }
-  | { provider: 'openai'; apiKey: string; model: string; baseUrl?: string; path?: string };
+  | { provider: 'aihubmix'; apiKey?: string; model?: string; baseUrl?: string; path?: string }
+  | undefined;
 
 export type MeetingType =
   | '通用'

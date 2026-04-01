@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
       // Demo 模式：无 API Key 时返回模拟结果
       return jsonResponse(context, {
         content: generateDemoEnhancedNotes(transcript, userNotes, meetingTitle),
-        provider: 'demo',
+      provider: 'demo',
       });
     }
 
@@ -70,7 +70,6 @@ ${buildMeetingMaterialContext({
       temperature: 0.3,
       maxTokens: ENHANCE_MAX_TOKENS,
       timeoutMs: ENHANCE_TIMEOUT_MS,
-      retries: 0,
       runtimeConfig: llmRuntimeConfig,
     });
 
@@ -99,10 +98,10 @@ ${userNotes ? '- 基于用户笔记的重点' : ''}
 
 ## 决策事项
 - 此为 Demo 模式生成的示例内容
-- 配置默认 LLM 或 OpenAI 兼容 API Key 后将使用真实 AI 生成
+- 配置 AiHubMix API Key 后将使用真实 AI 生成
 
 ## 行动项
-- [ ] 配置默认 LLM 或 OpenAI 兼容 API Key
+- [ ] 配置 AiHubMix API Key
 - [ ] 配置阿里云 ASR 相关密钥以启用实时转写
 
 ## 待确认事项

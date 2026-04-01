@@ -42,12 +42,11 @@ export interface MeetingAudioEnhanceStatus {
   audioEnhancedNotesStartedAt: string | null;
 }
 
-type MeetingAudioEnhanceInputStrategy = 'inline_mp3' | 'file_upload';
+type MeetingAudioEnhanceInputStrategy = 'inline_mp3';
 
 interface MeetingAudioEnhanceInputStrategyOptions {
   mimeType: string;
   byteLength: number;
-  geminiConfigured: boolean;
 }
 
 interface QueueMeetingAudioEnhanceOptions {
@@ -133,10 +132,7 @@ export function buildMeetingAudioEnhanceStatus(
 export function resolveMeetingAudioEnhanceInputStrategy(
   options: MeetingAudioEnhanceInputStrategyOptions
 ): MeetingAudioEnhanceInputStrategy {
-  if (options.geminiConfigured && options.byteLength > INLINE_AUDIO_MAX_BYTES) {
-    return 'file_upload';
-  }
-
+  void options;
   return 'inline_mp3';
 }
 
@@ -386,7 +382,6 @@ async function generateAudioEnhancedNotes(
   const audioPart = await buildAudioContentPart({
     meetingId,
     mimeType,
-    requestId: `audio-ai-notes:${meetingId}`,
   });
   const contextText = buildAudioMeetingMaterialContext({
     userNotes: payload.userNotes,
@@ -411,9 +406,8 @@ async function generateAudioEnhancedNotes(
     temperature: 0.2,
     maxTokens: AUDIO_ENHANCE_MAX_TOKENS,
     timeoutMs: AUDIO_ENHANCE_TIMEOUT_MS,
-    retries: 0,
-    preferredProvider: 'openai',
-    allowedProviders: ['openai', 'gemini'],
+    preferredProvider: 'aihubmix',
+    allowedProviders: ['aihubmix'],
   });
 
   return {
@@ -426,39 +420,16 @@ async function generateAudioEnhancedNotes(
 async function buildAudioContentPart({
   meetingId,
   mimeType,
-  requestId,
 }: {
   meetingId: string;
   mimeType: string;
-  requestId: string;
 }) {
   const preparedAudio = await prepareAudioForMeetingEnhance(getMeetingAudioPath(meetingId));
   try {
-    const strategy = resolveMeetingAudioEnhanceInputStrategy({
-      mimeType,
-      byteLength: preparedAudio.byteLength,
-      geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
-    });
-
-    if (strategy === 'inline_mp3') {
-      return {
-        type: 'audio' as const,
-        mimeType: 'audio/mpeg',
-        data: (await readFile(preparedAudio.outputPath)).toString('base64'),
-      };
-    }
-
-    const uploadMimeType = 'audio/mpeg';
-    const fileUri = await uploadGeminiAudioFile({
-      buffer: await readFile(preparedAudio.outputPath),
-      mimeType: uploadMimeType,
-      displayName: `meeting-${meetingId}-${requestId}`,
-    });
-
     return {
-      type: 'file_audio' as const,
-      mimeType: uploadMimeType,
-      fileUri,
+      type: 'audio' as const,
+      mimeType: 'audio/mpeg',
+      data: (await readFile(preparedAudio.outputPath)).toString('base64'),
     };
   } finally {
     await preparedAudio.cleanup();
@@ -501,69 +472,6 @@ async function prepareAudioForMeetingEnhance(inputPath: string) {
   }
 }
 
-async function uploadGeminiAudioFile({
-  buffer,
-  mimeType,
-  displayName,
-}: {
-  buffer: Buffer;
-  mimeType: string;
-  displayName: string;
-}): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY 未配置');
-  }
-
-  const startResponse = await fetch('https://generativelanguage.googleapis.com/upload/v1beta/files', {
-    method: 'POST',
-    headers: {
-      'x-goog-api-key': apiKey,
-      'X-Goog-Upload-Protocol': 'resumable',
-      'X-Goog-Upload-Command': 'start',
-      'X-Goog-Upload-Header-Content-Length': String(buffer.byteLength),
-      'X-Goog-Upload-Header-Content-Type': mimeType,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      file: {
-        display_name: displayName,
-      },
-    }),
-  });
-
-  if (!startResponse.ok) {
-    throw new Error(`Gemini 文件上传初始化失败（HTTP ${startResponse.status}）`);
-  }
-
-  const uploadUrl = startResponse.headers.get('x-goog-upload-url');
-  if (!uploadUrl) {
-    throw new Error('Gemini 文件上传初始化失败：未返回上传地址');
-  }
-
-  const uploadResponse = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Length': String(buffer.byteLength),
-      'X-Goog-Upload-Offset': '0',
-      'X-Goog-Upload-Command': 'upload, finalize',
-    },
-    body: new Uint8Array(buffer),
-  });
-
-  if (!uploadResponse.ok) {
-    throw new Error(`Gemini 文件上传失败（HTTP ${uploadResponse.status}）`);
-  }
-
-  const payload = await uploadResponse.json();
-  const fileUri = payload?.file?.uri;
-  if (typeof fileUri !== 'string' || !fileUri.trim()) {
-    throw new Error('Gemini 文件上传失败：未返回 file uri');
-  }
-
-  return fileUri;
-}
-
 async function markAudioEnhanceFailure(meetingId: string, message: string) {
   await prisma.meeting.update({
     where: { id: meetingId },
@@ -577,12 +485,9 @@ async function markAudioEnhanceFailure(meetingId: string, message: string) {
   });
 }
 
-function resolveAudioEnhanceModel(provider: 'gemini' | 'minimax' | 'openai' | 'demo') {
-  if (provider === 'gemini') {
-    return process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
-  }
-  if (provider === 'openai') {
-    return process.env.OPENAI_MODEL || null;
+function resolveAudioEnhanceModel(provider: 'aihubmix' | 'demo') {
+  if (provider === 'aihubmix') {
+    return process.env.AIHUBMIX_MODEL || 'gemini-3-flash-preview';
   }
   return null;
 }

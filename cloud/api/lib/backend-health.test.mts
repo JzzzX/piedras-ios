@@ -7,7 +7,7 @@ test('buildBackendHealthPayload stays unhealthy until startup bootstrap is ready
   const payload = buildBackendHealthPayload({
     mode: 'full',
     database: true,
-    llmProviders: ['openai'],
+    llmProviders: ['aihubmix'],
     asr: {
       ready: true,
       configured: true,
@@ -36,8 +36,8 @@ test('buildBackendHealthPayload stays unhealthy until startup bootstrap is ready
       ready: true,
       checkedAt: '2026-03-30T06:00:00.000Z',
       lastError: null,
-      provider: 'openai',
-      model: 'gpt-4o-mini',
+      provider: 'aihubmix',
+      model: 'gemini-3-flash-preview',
       preset: 'aihubmix',
       message: 'AiHubMix 已配置',
     },

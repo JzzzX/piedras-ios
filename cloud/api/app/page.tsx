@@ -17,13 +17,13 @@ function llmSummary(llmProviders: string[]) {
   if (llmProviders.length === 0) {
     return {
       title: 'Unconfigured',
-      description: '当前没有可用的云端大模型 provider。',
+      description: '当前没有可用的云端大模型链路。',
     };
   }
 
   return {
     title: llmProviders.join(', '),
-    description: '当前云端优先 provider 列表。',
+    description: '当前云端启用的 AiHubMix 模型链路。',
   };
 }
 

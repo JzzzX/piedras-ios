@@ -1,4 +1,4 @@
-import { fetchWithTimeout, getCachedRuntimeHealth, toErrorMessage } from './runtime-health';
+import { fetchWithTimeout, getCachedRuntimeHealth, toErrorMessage } from './runtime-health.ts';
 
 export type AsrMode = 'browser' | 'aliyun' | 'doubao';
 
@@ -25,7 +25,8 @@ function normalizeProxyPath(value: string): string {
 }
 
 export function resolveAsrProxyHealthPath(): string {
-  return normalizeProxyPath(process.env.ASR_PROXY_HEALTH_PATH || '/asr-proxy/healthz');
+  const configuredPath = normalizeProxyPath(process.env.ASR_PROXY_HEALTH_PATH || '/asr-proxy/healthz');
+  return configuredPath === '/healthz' ? '/asr-proxy/healthz' : configuredPath;
 }
 
 export function resolveAsrProxyWSPath(): string {

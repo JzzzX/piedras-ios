@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { generateTextWithFallback } from './llm-provider.ts';
+import {
+  generateTextWithFallback,
+  getConfiguredProviders,
+  hasAvailableLlm,
+  probeConfiguredLlm,
+} from './llm-provider.ts';
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -18,12 +23,12 @@ function resetEnv() {
   }
 }
 
-function configureOpenAIProvider() {
-  process.env.LLM_PROVIDER = 'openai';
-  process.env.OPENAI_API_KEY = 'test-key';
-  process.env.OPENAI_MODEL = 'test-model';
-  process.env.OPENAI_BASE_URL = 'https://example.com/v1';
-  process.env.OPENAI_PATH = '/chat/completions';
+function configureAiHubMixProvider() {
+  process.env.LLM_PROVIDER = 'aihubmix';
+  process.env.AIHUBMIX_API_KEY = 'test-key';
+  process.env.AIHUBMIX_MODEL = 'gemini-3-flash-preview';
+  process.env.AIHUBMIX_BASE_URL = 'https://example.com/v1';
+  process.env.AIHUBMIX_PATH = '/chat/completions';
 }
 
 test.afterEach(() => {
@@ -31,8 +36,8 @@ test.afterEach(() => {
   globalThis.fetch = ORIGINAL_FETCH;
 });
 
-test('generateTextWithFallback retries transient openai failures once', async () => {
-  configureOpenAIProvider();
+test('generateTextWithFallback retries transient AiHubMix failures once', async () => {
+  configureAiHubMixProvider();
 
   let calls = 0;
   globalThis.fetch = async () => {
@@ -58,13 +63,13 @@ test('generateTextWithFallback retries transient openai failures once', async ()
     timeoutMs: 500,
   });
 
-  assert.equal(result.provider, 'openai');
+  assert.equal(result.provider, 'aihubmix');
   assert.equal(result.content, 'OK');
   assert.equal(calls, 2);
 });
 
 test('generateTextWithFallback does not retry non-transient auth failures', async () => {
-  configureOpenAIProvider();
+  configureAiHubMixProvider();
 
   let calls = 0;
   globalThis.fetch = async () => {
@@ -85,7 +90,7 @@ test('generateTextWithFallback does not retry non-transient auth failures', asyn
 });
 
 test('generateTextWithFallback respects per-request retry override', async () => {
-  configureOpenAIProvider();
+  configureAiHubMixProvider();
   process.env.LLM_TIMEOUT_MS = '10';
   process.env.LLM_RETRIES = '1';
 
@@ -107,8 +112,8 @@ test('generateTextWithFallback respects per-request retry override', async () =>
   assert.equal(attempts, 1);
 });
 
-test('generateTextWithFallback sends audio content to openai-compatible payloads', async () => {
-  configureOpenAIProvider();
+test('generateTextWithFallback sends audio content to AiHubMix payloads', async () => {
+  configureAiHubMixProvider();
 
   let requestBody: Record<string, unknown> | null = null;
   globalThis.fetch = async (_input, init) => {
@@ -146,4 +151,32 @@ test('generateTextWithFallback sends audio content to openai-compatible payloads
     data: 'ZmFrZS1hdWRpbw==',
     format: 'mp3',
   });
+});
+
+test('probeConfiguredLlm rejects placeholder text responses from AiHubMix', async () => {
+  configureAiHubMixProvider();
+
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({
+        choices: [{ message: { content: 'thought' } }],
+      }),
+      {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+
+  await assert.rejects(probeConfiguredLlm(500), /返回了不可用正文/);
+});
+
+test('getConfiguredProviders ignores legacy OPENAI env vars', () => {
+  process.env.LLM_PROVIDER = 'aihubmix';
+  process.env.OPENAI_API_KEY = 'legacy-key';
+  process.env.OPENAI_MODEL = 'legacy-model';
+  process.env.OPENAI_BASE_URL = 'https://legacy.example.com/v1';
+  process.env.OPENAI_PATH = '/chat/completions';
+
+  assert.deepEqual(getConfiguredProviders(), []);
+  assert.equal(hasAvailableLlm(), false);
 });
