@@ -297,6 +297,82 @@ struct MeetingRecordingRepairTests {
 
     @MainActor
     @Test
+    func emptyRepairTranscriptFallsBackToNotesOnlyFinalizationWhenNoTranscriptExists() async throws {
+        MeetingRecordingRepairMockURLProtocol.reset()
+        defer { MeetingRecordingRepairMockURLProtocol.reset() }
+
+        var enhanceCalls = 0
+        MeetingRecordingRepairMockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/enhance":
+                enhanceCalls += 1
+                let body = try requestBodyData(from: request)
+                let json = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+                #expect(json["transcript"] as? String == "")
+                #expect((json["userNotes"] as? String)?.contains("客户反馈") == true)
+
+                let payload: [String: Any] = [
+                    "content": "## 会议摘要\n- 仅基于用户笔记整理",
+                    "provider": "test"
+                ]
+                return (response, try JSONSerialization.data(withJSONObject: payload))
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+
+        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "已有标题"
+        meeting.userNotesPlainText = "客户反馈需要先收敛，再补路线图。"
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.markTranscriptCoverageGap()
+
+        let audioURL = try makeTemporaryAudioFile(named: "empty-repair-transcript-notes-only.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        await fixture.meetingStore.finishStoppedRecording(
+            meetingID: meeting.id,
+            artifact: LocalAudioArtifact(
+                fileURL: audioURL,
+                durationSeconds: 12,
+                mimeType: "audio/m4a"
+            )
+        )
+
+        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.status == .ended)
+        #expect(refreshedMeeting.transcriptPipelineState == .ready)
+        #expect(refreshedMeeting.speakerDiarizationState == .idle)
+        #expect(refreshedMeeting.speakerDiarizationErrorMessage == nil)
+        #expect(refreshedMeeting.orderedSegments.isEmpty)
+        #expect(refreshedMeeting.enhancedNotes.contains("仅基于用户笔记整理"))
+        #expect(enhanceCalls == 1)
+        #expect(fixture.transcriber.transcribeCalls == 1)
+        #expect(fixture.syncService.syncedMeetingIDs == [meeting.id])
+        #expect(fixture.syncService.transcriptSnapshotsAtSync == [""])
+        #expect(fixture.meetingStore.fileTranscriptionStatus(meetingID: meeting.id) == nil)
+    }
+
+    @MainActor
+    @Test
     func createMeetingForHomeRecordingPrimesRecordingStateBeforeNavigation() throws {
         let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
 
@@ -910,13 +986,36 @@ struct MeetingRecordingRepairTests {
                 return (response, try JSONSerialization.data(withJSONObject: payload))
 
             case "/api/meetings/\(meeting.id)/ai-notes/audio":
-                let payload: [String: Any] = [
-                    "content": "## 会议摘要\n- 已根据原始音频生成",
-                    "provider": "test",
-                    "model": "gemini-3-flash-preview",
-                    "status": "ready",
-                    "updatedAt": "2026-03-31T00:00:02.000Z",
-                ]
+                let payload: [String: Any]
+                if request.httpMethod == "POST" {
+                    payload = [
+                        "meetingId": meeting.id,
+                        "hasAudio": true,
+                        "audioEnhancedNotes": "",
+                        "audioEnhancedNotesStatus": "processing",
+                        "audioEnhancedNotesError": "",
+                        "audioEnhancedNotesUpdatedAt": NSNull(),
+                        "audioEnhancedNotesProvider": NSNull(),
+                        "audioEnhancedNotesModel": NSNull(),
+                        "audioEnhancedNotesAttempts": 1,
+                        "audioEnhancedNotesRequestedAt": "2026-03-31T00:00:01.000Z",
+                        "audioEnhancedNotesStartedAt": NSNull(),
+                    ]
+                } else {
+                    payload = [
+                        "meetingId": meeting.id,
+                        "hasAudio": true,
+                        "audioEnhancedNotes": "## 会议摘要\n- 已根据原始音频生成",
+                        "audioEnhancedNotesStatus": "ready",
+                        "audioEnhancedNotesError": "",
+                        "audioEnhancedNotesUpdatedAt": "2026-03-31T00:00:02.000Z",
+                        "audioEnhancedNotesProvider": "test",
+                        "audioEnhancedNotesModel": "gemini-3-flash-preview",
+                        "audioEnhancedNotesAttempts": 1,
+                        "audioEnhancedNotesRequestedAt": "2026-03-31T00:00:01.000Z",
+                        "audioEnhancedNotesStartedAt": "2026-03-31T00:00:01.500Z",
+                    ]
+                }
                 return (response, try JSONSerialization.data(withJSONObject: payload))
 
             default:

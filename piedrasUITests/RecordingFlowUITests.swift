@@ -479,7 +479,11 @@ final class RecordingDetailUITests: XCTestCase {
         dismissPermissionAlertsIfNeeded(in: app)
         app.tap()
 
-        let stopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
+        let stopButton = element(
+            in: app,
+            identifier: "StopRecordingButton",
+            fallbackLabel: "停止录音"
+        )
         XCTAssertTrue(stopButton.waitForExistence(timeout: 12), "开始录音后未进入录音态。")
 
         XCTAssertTrue(app.staticTexts["笔记类型"].waitForExistence(timeout: 3), "录音态应展示“笔记类型”文案。")
@@ -498,11 +502,17 @@ final class RecordingDetailUITests: XCTestCase {
 
         let dismissButton = element(
             in: app,
-            identifier: "RecordingKeyboardDismissButton",
+            identifier: "RecordingBottomBarDismissKeyboardButton",
             fallbackLabel: "收起键盘"
         )
-        XCTAssertTrue(dismissButton.waitForExistence(timeout: 2), "进入输入态后应显示明确的收起键盘入口。")
-        XCTAssertTrue(stopButton.isHittable, "进入输入态后录音底栏的停止按钮应仍可点击。")
+        XCTAssertTrue(dismissButton.waitForExistence(timeout: 2), "进入输入态后底栏右侧应切换为收起键盘入口。")
+        XCTAssertFalse(stopButton.isHittable, "进入输入态后底栏右侧不应继续显示结束录音按钮。")
+
+        dismissButton.tap()
+
+        XCTAssertTrue(stopButton.waitForExistence(timeout: 2), "收起键盘后底栏右侧应恢复结束录音按钮。")
+        XCTAssertTrue(stopButton.isHittable, "收起键盘后应可再次直接结束录音。")
+        stopButton.tap()
     }
 
     private func launchApp() -> XCUIApplication {

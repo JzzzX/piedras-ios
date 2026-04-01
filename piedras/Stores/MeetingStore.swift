@@ -991,6 +991,7 @@ final class MeetingStore {
     func generateEnhancedNotes(for meetingID: String) async {
         guard let meeting = meeting(withID: meetingID) else { return }
         guard !enhancingMeetingIDs.contains(meetingID) else { return }
+        guard meeting.hasEnhanceableMaterial else { return }
         guard await ensureBackendReachable(force: false) else {
             lastErrorMessage = "\(AppEnvironment.cloudName) 暂时不可用。"
             return
@@ -1633,22 +1634,33 @@ final class MeetingStore {
             )
 
             guard let meeting = meeting(withID: meetingID) else { return }
+            let hadExistingSegments = !meeting.orderedSegments.isEmpty
             let replacementSegments = makeTranscriptSegments(
                 from: repairedResults,
                 speaker: meeting.recordingMode == .fileMix ? "混合音频" : "麦克风"
             )
-            if replacementSegments.isEmpty, !meeting.orderedSegments.isEmpty {
+            if replacementSegments.isEmpty, hadExistingSegments {
                 throw APIClientError.requestFailed("补转写未返回任何结果。")
             }
 
             repository.replaceSegments(for: meeting, with: replacementSegments)
             meeting.status = .ended
-            meeting.transcriptPipelineState = .refining
             meeting.audioLocalPath = artifact.fileURL.path
             meeting.audioMimeType = artifact.mimeType
             meeting.audioDuration = artifact.durationSeconds
             meeting.audioUpdatedAt = .now
             meeting.durationSeconds = max(meeting.durationSeconds, artifact.durationSeconds)
+
+            if replacementSegments.isEmpty {
+                meeting.transcriptPipelineState = .ready
+                meeting.speakerDiarizationState = .idle
+                meeting.speakerDiarizationErrorMessage = nil
+            } else {
+                meeting.transcriptPipelineState = .refining
+                meeting.speakerDiarizationState = .processing
+                meeting.speakerDiarizationErrorMessage = nil
+            }
+
             meeting.markPending()
             try repository.save()
             settingsStore.markASRStreamSucceeded()
@@ -2634,8 +2646,9 @@ final class MeetingStore {
         }
 
         let transcript = MeetingPayloadMapper.transcriptText(from: meeting)
-        let canGenerateTitle = !transcript.isEmpty
-        let canGenerateEnhancedNotes = hasEnhanceableMeetingMaterial(meeting, transcript: transcript)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let canGenerateTitle = meeting.hasDisplayableTranscript && !transcript.isEmpty
+        let canGenerateEnhancedNotes = meeting.hasEnhanceableMaterial
         let needsBackendForAIFinalization = canGenerateTitle || canGenerateEnhancedNotes
         let backendReachable = needsBackendForAIFinalization
             ? await ensureBackendReachable(force: false)
@@ -2698,26 +2711,6 @@ final class MeetingStore {
         if meeting.syncState != .synced || meeting.lastSyncedAt == nil {
             await syncMeetingIfPossible(meetingID: meetingID, userVisibleFailurePrefix: "会议同步失败")
         }
-    }
-
-    private func hasEnhanceableMeetingMaterial(_ meeting: Meeting, transcript: String) -> Bool {
-        if !transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return true
-        }
-
-        if !meeting.userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return true
-        }
-
-        if !MeetingCommentContextBuilder.noteAttachmentsContext(for: meeting)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty {
-            return true
-        }
-
-        return !MeetingCommentContextBuilder.segmentCommentsContext(for: meeting)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .isEmpty
     }
 
     private func updateTranscriptNotesFreshnessIfNeeded(for meeting: Meeting) {

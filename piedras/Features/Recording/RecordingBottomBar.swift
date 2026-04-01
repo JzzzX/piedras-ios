@@ -7,7 +7,9 @@ struct RecordingBottomBar: View {
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
 
     let meeting: Meeting
+    var isEditorFocused = false
     var onRequestTranscript: (() -> Void)? = nil
+    var onDismissKeyboard: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -118,31 +120,7 @@ struct RecordingBottomBar: View {
 
             Spacer()
 
-            // Stop button
-            Button {
-                Task {
-                    await meetingStore.stopRecording()
-                }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 12, weight: .bold))
-                    Text(AppStrings.current.stop)
-                        .font(.system(size: 14, weight: .bold, design: .monospaced))
-                }
-                .foregroundStyle(AppTheme.surface)
-                .frame(height: 44)
-                .padding(.horizontal, 20)
-                .background(AppTheme.highlight)
-                .overlay(
-                    Rectangle()
-                        .stroke(AppTheme.ink, lineWidth: 2)
-                )
-            }
-            .buttonStyle(.plain)
-            .disabled(recordingSessionStore.phase == .stopping)
-            .accessibilityLabel(AppStrings.current.stopRecording)
-            .accessibilityIdentifier("RecordingBottomBarStopButton")
+            actionButton
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -152,6 +130,53 @@ struct RecordingBottomBar: View {
 
     private var isPaused: Bool {
         recordingSessionStore.phase == .paused
+    }
+
+    private var actionButton: some View {
+        Group {
+            if isEditorFocused {
+                Button {
+                    onDismissKeyboard?()
+                } label: {
+                    Image(systemName: "keyboard.chevron.compact.down")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(AppTheme.ink)
+                        .frame(width: 84, height: 44)
+                        .background(AppTheme.surface)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.border, lineWidth: AppTheme.retroBorderWidth)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(AppStrings.current.dismissKeyboard)
+                .accessibilityIdentifier("RecordingBottomBarDismissKeyboardButton")
+            } else {
+                Button {
+                    Task {
+                        await meetingStore.stopRecording()
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 12, weight: .bold))
+                        Text(AppStrings.current.stop)
+                            .font(.system(size: 14, weight: .bold, design: .monospaced))
+                    }
+                    .foregroundStyle(AppTheme.surface)
+                    .frame(width: 84, height: 44)
+                    .background(AppTheme.highlight)
+                    .overlay(
+                        Rectangle()
+                            .stroke(AppTheme.ink, lineWidth: 2)
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(recordingSessionStore.phase == .stopping)
+                .accessibilityLabel(AppStrings.current.stopRecording)
+                .accessibilityIdentifier("StopRecordingButton")
+            }
+        }
     }
 
     private var transcriptPreviewText: String {

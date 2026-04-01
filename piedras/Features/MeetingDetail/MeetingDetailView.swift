@@ -332,7 +332,6 @@ struct MeetingDetailView: View {
                     fixedHeight: isRecordingNoteEditorFocused ? recordingKeyboardEditorHeight : nil,
                     usesBodyStyle: true,
                     allowsInternalScrolling: isRecordingNoteEditorFocused,
-                    dismissKeyboardAccessoryLabel: AppStrings.current.dismissKeyboard,
                     hidesAccessibility: showsPrompt,
                     allowsDirectEditing: !showsPrompt,
                     focusRequestToken: recordingNoteFocusRequest,
@@ -651,7 +650,6 @@ struct MeetingDetailView: View {
                     fixedHeight: isRecordingNoteEditorFocused ? recordingKeyboardEditorHeight : nil,
                     usesBodyStyle: true,
                     allowsInternalScrolling: isRecordingNoteEditorFocused,
-                    dismissKeyboardAccessoryLabel: AppStrings.current.dismissKeyboard,
                     hidesAccessibility: showsPrompt,
                     allowsDirectEditing: !showsPrompt,
                     focusRequestToken: recordingNoteFocusRequest,
@@ -976,10 +974,9 @@ struct MeetingDetailView: View {
     }
 
     private func actionItems(meeting: Meeting) -> [MeetingActionItem] {
-        let transcript = meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
         let menuItems = MeetingDetailChrome.actionMenuItems(
             isRecording: isRecordingThisMeeting,
-            hasTranscript: !transcript.isEmpty,
+            hasTranscript: meeting.hasDisplayableTranscript,
             canRetryTranscription: meetingStore.fileTranscriptionStatus(meetingID: meeting.id)?.canRetry == true,
             showsNotesRefreshHint: meeting.hasTranscriptNotesRefreshHint || meeting.hasAttachmentNotesRefreshHint
         )
@@ -1033,7 +1030,7 @@ struct MeetingDetailView: View {
                     isDisabled: false
                 ) {
                     closeActionMenu()
-                    UIPasteboard.general.string = transcript
+                    UIPasteboard.general.string = meeting.displayableTranscriptText
                     UINotificationFeedbackGenerator().notificationOccurred(.success)
                     showToast(AppStrings.current.copiedTranscript)
                 }
@@ -1114,9 +1111,13 @@ struct MeetingDetailView: View {
 
             RecordingBottomBar(
                 meeting: meeting,
+                isEditorFocused: isRecordingNoteEditorFocused,
                 onRequestTranscript: {
                     annotationStore.dismissEditor()
                     showsTranscriptSheet = true
+                },
+                onDismissKeyboard: {
+                    dismissRecordingNoteKeyboard()
                 }
             )
         }
@@ -1132,6 +1133,12 @@ struct MeetingDetailView: View {
         Task { @MainActor in
             isTitleRenameFocused = true
         }
+    }
+
+    private func dismissRecordingNoteKeyboard() {
+        guard isRecordingNoteEditorFocused else { return }
+        isRecordingNoteEditorFocused = false
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
     }
 
     private func openEnhancedNotesEditor(for meeting: Meeting) {
@@ -1210,8 +1217,7 @@ struct MeetingDetailView: View {
     }
 
     private func canRefreshSummary(for meeting: Meeting) -> Bool {
-        !meeting.userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-            !meeting.transcriptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        meeting.hasEnhanceableMaterial
     }
 
     private func canGenerateAudioSummary(for meeting: Meeting) -> Bool {

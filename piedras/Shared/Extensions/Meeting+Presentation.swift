@@ -33,6 +33,34 @@ extension Meeting {
         return ""
     }
 
+    var displayableTranscriptText: String {
+        transcriptText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var hasDisplayableTranscript: Bool {
+        !displayableTranscriptText.isEmpty
+    }
+
+    var hasEnhanceableMaterial: Bool {
+        if hasDisplayableTranscript {
+            return true
+        }
+
+        if !userNotesPlainText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return true
+        }
+
+        if !MeetingCommentContextBuilder.noteAttachmentsContext(for: self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty {
+            return true
+        }
+
+        return !MeetingCommentContextBuilder.segmentCommentsContext(for: self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
+    }
+
     var daySectionTitle: String {
         if Calendar.current.isDateInToday(date) {
             return AppStrings.current.today

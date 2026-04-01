@@ -64,6 +64,30 @@ struct TranscriptInteractionTests {
 
         #expect(meeting.transcriptText == "第一行\n第二行")
         #expect(meeting.previewText == "第一行\n第二行")
+        #expect(meeting.displayableTranscriptText == "第一行\n第二行")
+        #expect(meeting.hasDisplayableTranscript == true)
+        #expect(meeting.hasEnhanceableMaterial == true)
+    }
+
+    @Test
+    func enhanceableMaterialFallsBackToUserNotesAndAttachmentsWhenTranscriptIsEmpty() {
+        let meeting = Meeting(
+            userNotesPlainText: "先整理客户反馈。",
+            noteAttachmentTextContext: "白板记录了发布时间。"
+        )
+
+        #expect(meeting.displayableTranscriptText.isEmpty)
+        #expect(meeting.hasDisplayableTranscript == false)
+        #expect(meeting.hasEnhanceableMaterial == true)
+    }
+
+    @Test
+    func enhanceableMaterialIsFalseWhenTranscriptNotesAndAttachmentsAreAllEmpty() {
+        let meeting = Meeting()
+
+        #expect(meeting.displayableTranscriptText.isEmpty)
+        #expect(meeting.hasDisplayableTranscript == false)
+        #expect(meeting.hasEnhanceableMaterial == false)
     }
 
     @Test
