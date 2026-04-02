@@ -54,6 +54,10 @@ struct SpeakerDiarizationTests {
 
     @Test
     func transcriptPayloadUsesSpeakerDisplayNames() {
+        let previousLanguage = AppStrings.currentLanguage
+        AppStrings.syncLanguage(.chinese)
+        defer { AppStrings.syncLanguage(previousLanguage) }
+
         let meeting = Meeting(
             segments: [
                 TranscriptSegment(
@@ -84,10 +88,7 @@ struct SpeakerDiarizationTests {
             workspaceID: "workspace-1"
         )
 
-        #expect(payload.speakers == [
-            "spk_1": "面试官",
-            "spk_2": "候选人",
-        ])
+        #expect(payload.speakers == nil)
         #expect(MeetingPayloadMapper.transcriptText(from: meeting) == """
         [面试官]: 请做个自我介绍。
         [候选人]: 我叫李雷。

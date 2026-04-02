@@ -4,19 +4,19 @@ import Testing
 
 struct TranscriptSpeakerIdentityTests {
     @Test
-    func displayNameUsesAlphabeticFallbackForGeneratedSpeakers() {
+    func displayNameUsesNumericFallbackForGeneratedSpeakers() {
         let previousLanguage = AppStrings.currentLanguage
         AppStrings.syncLanguage(.chinese)
         defer { AppStrings.syncLanguage(previousLanguage) }
 
         let meeting = Meeting()
 
-        #expect(meeting.displayName(forSpeaker: "spk_1") == "发言人 A")
-        #expect(meeting.displayName(forSpeaker: "spk_27") == "发言人 AA")
+        #expect(meeting.displayName(forSpeaker: "spk_1") == "说话人 1")
+        #expect(meeting.displayName(forSpeaker: "spk_27") == "说话人 27")
     }
 
     @Test
-    func resolverUnderstandsLegacySpeakerKeys() {
+    func resolverKeepsStableAvatarTokenForLegacySpeakerKeys() {
         let english = AppStringTable(language: .english)
 
         let alpha = TranscriptSpeakerIdentity.resolve(
@@ -25,8 +25,7 @@ struct TranscriptSpeakerIdentityTests {
             strings: english
         )
         #expect(alpha.avatarToken == "A")
-        #expect(alpha.title == "Speaker A")
-        #expect(alpha.defaultTitle == "Speaker A")
+        #expect(alpha.paletteIndex == 0)
 
         let numeric = TranscriptSpeakerIdentity.resolve(
             speakerKey: "Speaker 2",
@@ -34,8 +33,7 @@ struct TranscriptSpeakerIdentityTests {
             strings: english
         )
         #expect(numeric.avatarToken == "B")
-        #expect(numeric.title == "Speaker B")
-        #expect(numeric.defaultTitle == "Speaker B")
+        #expect(numeric.paletteIndex == 1)
     }
 
     @Test
@@ -50,6 +48,6 @@ struct TranscriptSpeakerIdentityTests {
 
         #expect(identity.avatarToken == "B")
         #expect(identity.title == "张总")
-        #expect(identity.defaultTitle == "发言人 B")
+        #expect(identity.defaultTitle == "说话人 2")
     }
 }

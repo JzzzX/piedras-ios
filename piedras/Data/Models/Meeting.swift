@@ -515,13 +515,20 @@ final class Meeting {
 
     func displayName(forSpeaker speaker: String) -> String {
         let normalized = speaker.trimmingCharacters(in: .whitespacesAndNewlines)
-        let renamed = speakers[normalized]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else {
+            return AppStrings.current.speakerLabel(1)
+        }
 
-        return TranscriptSpeakerIdentity.resolve(
-            speakerKey: normalized,
-            displayName: renamed,
-            strings: AppStrings.current
-        ).title
+        if let displayName = speakers[normalized]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !displayName.isEmpty {
+            return displayName
+        }
+
+        if let index = Self.generatedSpeakerIndex(from: normalized) {
+            return AppStrings.current.speakerLabel(index)
+        }
+
+        return normalized
     }
 
     func setDisplayName(_ displayName: String, forSpeaker speaker: String) {
@@ -614,6 +621,12 @@ final class Meeting {
         }
 
         return values
+    }
+
+    private static func generatedSpeakerIndex(from speaker: String) -> Int? {
+        guard speaker.hasPrefix("spk_") else { return nil }
+        guard let index = Int(speaker.dropFirst(4)), index > 0 else { return nil }
+        return index
     }
 
     private static func legacyTranscriptPipelineState(
