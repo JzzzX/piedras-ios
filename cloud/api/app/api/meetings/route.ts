@@ -75,44 +75,9 @@ export async function GET(req: NextRequest) {
       orderBy: { date: 'desc' },
       select: {
         id: true,
-        title: true,
-        date: true,
-        status: true,
-        duration: true,
-        audioMimeType: true,
-        audioDuration: true,
+        updatedAt: true,
         audioUpdatedAt: true,
-        userNotes: true,
-        enhancedNotes: true,
-        roundLabel: true,
-        interviewerName: true,
-        recommendation: true,
-        handoffNote: true,
-        createdAt: true,
-        collectionId: true,
-        workspaceId: true,
-        collection: {
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            icon: true,
-            color: true,
-            sortOrder: true,
-            workspaceId: true,
-            createdAt: true,
-            updatedAt: true,
-          },
-        },
-        workspace: {
-          select: {
-            id: true,
-            name: true,
-            icon: true,
-            color: true,
-          },
-        },
-        _count: { select: { segments: true, chatMessages: true } },
+        audioProcessingState: true,
       },
     });
 
@@ -181,8 +146,10 @@ export async function POST(req: NextRequest) {
     } = body;
 
     const normalizedDate = date ? new Date(date) : new Date();
-    const normalizedSegments = (segments || []) as SegmentPayload[];
-    const normalizedChatMessages = (chatMessages || []) as ChatMessagePayload[];
+    const normalizedSegments = Array.isArray(segments) ? (segments as SegmentPayload[]) : null;
+    const normalizedChatMessages = Array.isArray(chatMessages)
+      ? (chatMessages as ChatMessagePayload[])
+      : null;
     const meeting = await prisma.$transaction(async (tx: any) => {
       const existingMeeting = id
         ? await tx.meeting.findUnique({
@@ -195,7 +162,7 @@ export async function POST(req: NextRequest) {
         throw new Error('当前账号无权修改该会议');
       }
 
-      const meetingData = {
+      const meetingData: Record<string, unknown> = {
         title: title || '',
         date: normalizedDate,
         status: status || 'ended',
@@ -209,10 +176,12 @@ export async function POST(req: NextRequest) {
         interviewerName: interviewerName || '',
         recommendation: recommendation || 'pending',
         handoffNote: handoffNote || '',
-        speakers: JSON.stringify(speakers || {}),
         audioCloudSyncEnabled:
           audioCloudSyncEnabled === undefined ? true : Boolean(audioCloudSyncEnabled),
       };
+      if (speakers !== undefined) {
+        meetingData.speakers = JSON.stringify(speakers || {});
+      }
 
       const upsertedMeeting = existingMeeting
         ? await tx.meeting.update({
@@ -226,40 +195,29 @@ export async function POST(req: NextRequest) {
             },
           });
 
-      await tx.transcriptSegment.deleteMany({
-        where: { meetingId: upsertedMeeting.id },
-      });
-
-      if (normalizedSegments.length > 0) {
-        await tx.transcriptSegment.createMany({
-          data: normalizedSegments.map((s, i) => ({
-            id: s.id,
-            meetingId: upsertedMeeting.id,
-            speaker: s.speaker,
-            text: s.text,
-            startTime: s.startTime,
-            endTime: s.endTime,
-            isFinal: s.isFinal,
-            order: i,
-          })),
+      if (normalizedSegments) {
+        await tx.transcriptSegment.deleteMany({
+          where: { meetingId: upsertedMeeting.id },
         });
+
+        if (normalizedSegments.length > 0) {
+          await tx.transcriptSegment.createMany({
+            data: normalizedSegments.map((s, i) => ({
+              id: s.id,
+              meetingId: upsertedMeeting.id,
+              speaker: s.speaker,
+              text: s.text,
+              startTime: s.startTime,
+              endTime: s.endTime,
+              isFinal: s.isFinal,
+              order: i,
+            })),
+          });
+        }
       }
 
-      await tx.chatMessage.deleteMany({
-        where: { meetingId: upsertedMeeting.id },
-      });
-
-      if (normalizedChatMessages.length > 0) {
-        await tx.chatMessage.createMany({
-          data: normalizedChatMessages.map((m) => ({
-            id: m.id,
-            meetingId: upsertedMeeting.id,
-            role: m.role,
-            content: m.content,
-            timestamp: m.timestamp,
-            templateId: m.recipeId || m.templateId || null,
-          })),
-        });
+      if (normalizedChatMessages) {
+        await mergeMeetingChatMessages(tx, upsertedMeeting.id, normalizedChatMessages);
       }
 
       return tx.meeting.findUnique({
@@ -286,8 +244,8 @@ export async function POST(req: NextRequest) {
           requestId: context.requestId,
           workspaceId: auth.workspace.id,
           meetingId: payload.id,
-          segmentCount: normalizedSegments.length,
-          chatMessageCount: normalizedChatMessages.length,
+          segmentCount: normalizedSegments?.length ?? null,
+          chatMessageCount: normalizedChatMessages?.length ?? null,
           audioCloudSyncEnabled: payload.audioCloudSyncEnabled ?? true,
         })
       );
@@ -301,5 +259,31 @@ export async function POST(req: NextRequest) {
       error instanceof Error ? `保存会议失败：${error.message}` : '保存会议失败，请稍后重试。',
       error
     );
+  }
+}
+
+async function mergeMeetingChatMessages(
+  tx: any,
+  meetingId: string,
+  chatMessages: ChatMessagePayload[]
+) {
+  for (const message of chatMessages) {
+    await tx.chatMessage.upsert({
+      where: { id: message.id },
+      update: {
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+        templateId: message.recipeId || message.templateId || null,
+      },
+      create: {
+        id: message.id,
+        meetingId,
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+        templateId: message.recipeId || message.templateId || null,
+      },
+    });
   }
 }

@@ -78,6 +78,17 @@ final class MeetingSyncService: MeetingSyncServicing {
         try repository.save()
 
         do {
+            if let remoteBeforeSync = try await fetchRemoteMeetingIfExists(id: meeting.id) {
+                MeetingPayloadMapper.applyRemoteSyncState(
+                    remote: remoteBeforeSync,
+                    to: meeting,
+                    repository: repository,
+                    baseURL: apiClient.baseURL
+                )
+                try await syncRemoteNoteAttachments(for: meeting, remote: remoteBeforeSync)
+                try repository.save()
+            }
+
             let remoteMeeting = try await apiClient.upsertMeeting(
                 MeetingPayloadMapper.makeMeetingUpsertPayload(from: meeting, workspaceID: workspaceID)
             )
@@ -120,6 +131,17 @@ final class MeetingSyncService: MeetingSyncServicing {
             meeting.syncState = .failed
             try? repository.save()
             throw error
+        }
+    }
+
+    private func fetchRemoteMeetingIfExists(id: String) async throws -> RemoteMeetingDetail? {
+        do {
+            return try await apiClient.getMeeting(id: id)
+        } catch {
+            guard isRemoteMeetingMissing(error) else {
+                throw error
+            }
+            return nil
         }
     }
 
@@ -355,21 +377,32 @@ final class MeetingSyncService: MeetingSyncServicing {
 
         for summary in summaries {
             let localMeeting = try repository.meeting(withID: summary.id)
-            if let localMeeting,
-               localMeeting.syncState == .pending
-                || localMeeting.syncState == .syncing
-                || localMeeting.syncState == .deleted {
+            if let localMeeting, localMeeting.syncState == .deleted || localMeeting.syncState == .syncing {
+                continue
+            }
+
+            if !shouldRefreshRemoteMeeting(localMeeting, summary: summary) {
                 continue
             }
 
             let remoteDetail = try await apiClient.getMeeting(id: summary.id)
             if let localMeeting {
-                MeetingPayloadMapper.apply(
-                    remote: remoteDetail,
-                    to: localMeeting,
-                    repository: repository,
-                    baseURL: apiClient.baseURL
-                )
+                if localMeeting.syncState == .pending || localMeeting.syncState == .failed {
+                    MeetingPayloadMapper.applyRemoteSyncState(
+                        remote: remoteDetail,
+                        to: localMeeting,
+                        repository: repository,
+                        baseURL: apiClient.baseURL
+                    )
+                } else {
+                    MeetingPayloadMapper.apply(
+                        remote: remoteDetail,
+                        to: localMeeting,
+                        repository: repository,
+                        baseURL: apiClient.baseURL
+                    )
+                }
+                try await syncRemoteNoteAttachments(for: localMeeting, remote: remoteDetail)
             } else {
                 repository.insert(MeetingPayloadMapper.makeMeeting(from: remoteDetail, baseURL: apiClient.baseURL))
             }
@@ -440,5 +473,51 @@ final class MeetingSyncService: MeetingSyncServicing {
 
         let hasTranscriptChanged = lastTranscriptFingerprint != meeting.transcriptFingerprint
         meeting.aiNotesFreshnessState = meeting.aiNotesFreshnessState.settingTranscriptChanges(hasTranscriptChanged)
+    }
+
+    private func shouldRefreshRemoteMeeting(
+        _ localMeeting: Meeting?,
+        summary: RemoteMeetingListItem
+    ) -> Bool {
+        guard let localMeeting else {
+            return true
+        }
+
+        if localMeeting.lastSyncedAt == nil {
+            return true
+        }
+
+        if let updatedAt = summary.updatedAt, updatedAt > max(localMeeting.lastSyncedAt ?? .distantPast, localMeeting.updatedAt) {
+            return true
+        }
+
+        if summary.audioUpdatedAt != localMeeting.audioUpdatedAt {
+            return true
+        }
+
+        return normalizeAudioProcessingState(summary.audioProcessingState) != currentAudioProcessingState(for: localMeeting)
+    }
+
+    private func currentAudioProcessingState(for meeting: Meeting) -> String {
+        switch meeting.speakerDiarizationState {
+        case .processing:
+            return "processing"
+        case .failed:
+            return "failed"
+        case .ready:
+            return "completed"
+        case .idle:
+            return "idle"
+        }
+    }
+
+    private func normalizeAudioProcessingState(_ value: String?) -> String {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return trimmed.isEmpty ? "idle" : trimmed
+    }
+
+    private func isRemoteMeetingMissing(_ error: Error) -> Bool {
+        let message = error.localizedDescription
+        return message.contains("会议不存在") || message.contains("HTTP 404")
     }
 }

@@ -20,13 +20,16 @@ const proxyStats = {
   totalConnections: 0,
   activeConnections: 0,
   lastReadyAt: null,
+  lastUpstreamReadyAt: null,
   lastPartialAt: null,
   lastFinalAt: null,
   lastUpstreamCloseAt: null,
+  lastUpstreamError: null,
   lastCloseAt: null,
   lastCloseReason: null,
   lastCloseSeverity: null,
   lastError: null,
+  upstreamConnected: false,
 };
 
 const VERSION_AND_HEADER = 0x11;
@@ -421,6 +424,10 @@ async function main() {
       res.end(
         JSON.stringify({
           ok: true,
+          ready:
+            !proxyStats.lastUpstreamError ||
+            (proxyStats.lastUpstreamReadyAt &&
+              proxyStats.lastUpstreamReadyAt >= (proxyStats.lastUpstreamCloseAt || '')),
           ...proxyStats,
         })
       );
@@ -565,12 +572,26 @@ async function main() {
       upstream = new WebSocket(DOUBAO_WS_URL, {
         headers: makeConnectHeaders(),
       });
+      proxyStats.upstreamConnected = false;
 
       upstream.on('open', () => {
         log('upstream_open', { connectionId });
         try {
           upstream.send(encodeJSONFrame(FULL_CLIENT_REQUEST, makeStartPayload(sessionPayload)));
           upstreamStartSent = true;
+          proxyStats.upstreamConnected = true;
+          proxyStats.lastUpstreamReadyAt = new Date().toISOString();
+          proxyStats.lastUpstreamError = null;
+          proxyStats.lastReadyAt = proxyStats.lastUpstreamReadyAt;
+          log('proxy_ready', { connectionId });
+          if (!sendJSON(client, { type: 'ready' })) {
+            closeSession({
+              message: 'ASR 客户端连接不可用',
+              severity: 'info',
+              notifyClientError: false,
+            });
+            return;
+          }
           flushPendingAudio();
         } catch (error) {
           closeSession({
@@ -650,6 +671,8 @@ async function main() {
       });
 
       upstream.on('error', (error) => {
+        proxyStats.upstreamConnected = false;
+        proxyStats.lastUpstreamError = error.message;
         closeSession({
           message: '豆包 ASR 连接失败',
           detail: error.message,
@@ -657,6 +680,7 @@ async function main() {
       });
 
       upstream.on('close', () => {
+        proxyStats.upstreamConnected = false;
         proxyStats.lastUpstreamCloseAt = new Date().toISOString();
         log('upstream_closed', { connectionId });
         if (connectionClosed) {
@@ -670,10 +694,6 @@ async function main() {
         });
       });
     };
-
-    proxyStats.lastReadyAt = new Date().toISOString();
-    log('proxy_ready', { connectionId });
-    sendJSON(client, { type: 'ready' });
 
     client.on('message', (data, isBinary) => {
       if (isBinary) {
@@ -729,6 +749,8 @@ async function main() {
       log('client_socket_error', { connectionId });
       closePair(client, upstream);
     });
+
+    ensureUpstream();
   });
 
   server.listen(PROXY_PORT, '0.0.0.0', () => {

@@ -146,10 +146,11 @@ export async function PUT(
       data: updateData,
     });
 
-    if (segments) {
+    if (Array.isArray(segments)) {
       await prisma.transcriptSegment.deleteMany({ where: { meetingId: id } });
-      await prisma.transcriptSegment.createMany({
-        data: segments.map(
+      if (segments.length > 0) {
+        await prisma.transcriptSegment.createMany({
+          data: segments.map(
           (
             s: { id: string; speaker: string; text: string; startTime: number; endTime: number; isFinal: boolean },
             i: number
@@ -163,26 +164,13 @@ export async function PUT(
             isFinal: s.isFinal,
             order: i,
           })
-        ),
-      });
+          ),
+        });
+      }
     }
 
-    if (chatMessages) {
-      await prisma.chatMessage.deleteMany({ where: { meetingId: id } });
-      await prisma.chatMessage.createMany({
-        data: chatMessages.map(
-          (
-            m: { id: string; role: string; content: string; timestamp: number; recipeId?: string; templateId?: string }
-          ) => ({
-            id: m.id,
-            meetingId: id,
-            role: m.role,
-            content: m.content,
-            timestamp: m.timestamp,
-            templateId: m.recipeId || m.templateId || null,
-          })
-        ),
-      });
+    if (Array.isArray(chatMessages)) {
+      await mergeMeetingChatMessages(prisma, id, chatMessages);
     }
 
     const hydratedMeeting = await prisma.meeting.findUnique({
@@ -232,6 +220,39 @@ export async function PUT(
       error instanceof Error ? `更新会议失败：${error.message}` : '更新会议失败，请稍后重试。',
       error
     );
+  }
+}
+
+async function mergeMeetingChatMessages(
+  client: typeof prisma,
+  meetingId: string,
+  chatMessages: Array<{
+    id: string;
+    role: string;
+    content: string;
+    timestamp: number;
+    recipeId?: string;
+    templateId?: string;
+  }>
+) {
+  for (const message of chatMessages) {
+    await client.chatMessage.upsert({
+      where: { id: message.id },
+      update: {
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+        templateId: message.recipeId || message.templateId || null,
+      },
+      create: {
+        id: message.id,
+        meetingId,
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+        templateId: message.recipeId || message.templateId || null,
+      },
+    });
   }
 }
 

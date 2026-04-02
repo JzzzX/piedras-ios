@@ -40,6 +40,14 @@ private enum MeetingHomeLayout {
     static let emptyStateBottomPadding: CGFloat = 168
 }
 
+private struct HomeSectionHeaderMinYPreferenceKey: PreferenceKey {
+    static var defaultValue: [String: CGFloat] = [:]
+
+    static func reduce(value: inout [String: CGFloat], nextValue: () -> [String: CGFloat]) {
+        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    }
+}
+
 private struct HomeBrandWordmark: View {
     let title: String
 
@@ -206,23 +214,23 @@ struct MeetingListView: View {
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
                         }
-                        .background(
-                            GeometryReader { geo in
-                                Color.clear
-                                    .onAppear { updateCurrentSection(section.title, minY: geo.frame(in: .global).minY) }
-                                    .onChange(of: geo.frame(in: .global).minY) { old, new in
-                                        updateCurrentSection(section.title, minY: new)
-                                    }
-                            }
-                        )
                     } header: {
                         HomeSectionHeaderLabel(title: section.title)
                             .textCase(nil)
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear.preference(
+                                        key: HomeSectionHeaderMinYPreferenceKey.self,
+                                        value: [section.title: geo.frame(in: .named("MeetingHomeList")).minY]
+                                    )
+                                }
+                            )
                     }
                 }
             }
         }
         .listStyle(.plain)
+        .coordinateSpace(name: "MeetingHomeList")
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
@@ -239,16 +247,8 @@ struct MeetingListView: View {
                     }
             }
         )
-        .id(feedStructureIdentity)
-    }
-
-    private func updateCurrentSection(_ title: String, minY: CGFloat) {
-        // 当 section 的顶部接近顶栏时，更新当前显示的标题
-        if minY < 150 && minY > 50 {
-            currentSectionTitle = title
-        } else if minY > 150 && currentSectionTitle == title && title == homeSections.first?.title {
-            // 如果滚回到顶部
-            currentSectionTitle = ""
+        .onPreferenceChange(HomeSectionHeaderMinYPreferenceKey.self) { positions in
+            currentSectionTitle = resolvedCurrentSectionTitle(from: positions)
         }
     }
 
@@ -517,15 +517,6 @@ struct MeetingListView: View {
         }
     }
 
-    private var feedStructureIdentity: String {
-        homeSections
-            .map { section in
-                let rowIDs = section.rows.map(\.id).joined(separator: ",")
-                return "\(section.id):\(rowIDs)"
-            }
-            .joined(separator: "|")
-    }
-
     private func sectionBucket(for meeting: Meeting, calendar: Calendar) -> MeetingHomeBucket {
         if isMeetingProcessing(meeting) {
             return .processing
@@ -612,6 +603,29 @@ struct MeetingListView: View {
                 toastMessage = nil
             }
         }
+    }
+
+    private func resolvedCurrentSectionTitle(from positions: [String: CGFloat]) -> String {
+        guard !positions.isEmpty else { return "" }
+
+        let topThreshold: CGFloat = 96
+        let candidates = positions
+            .filter { $0.value <= topThreshold }
+            .sorted { $0.value < $1.value }
+
+        if let nearestPinnedSection = candidates.last {
+            return nearestPinnedSection.key
+        }
+
+        guard let firstSection = homeSections.first else {
+            return ""
+        }
+
+        if let firstSectionMinY = positions[firstSection.title], firstSectionMinY < 180 {
+            return firstSection.title
+        }
+
+        return ""
     }
 
 }

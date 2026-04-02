@@ -3009,10 +3009,11 @@ final class MeetingStore {
                 return
             }
 
-            let batchResult = await meetingSyncService.syncPendingMeetings()
-
             do {
-                let refreshedCount = try await meetingSyncService.refreshRemoteMeetings()
+                let preRefreshCount = try await meetingSyncService.refreshRemoteMeetings()
+                let batchResult = await meetingSyncService.syncPendingMeetings()
+                let postRefreshCount = try await meetingSyncService.refreshRemoteMeetings()
+                let refreshedCount = preRefreshCount + postRefreshCount
                 loadMeetings()
 
                 if batchResult.failedCount > 0 {

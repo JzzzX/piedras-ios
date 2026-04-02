@@ -6,6 +6,7 @@
     "dev": "next dev --webpack",
     "build": "npx prisma generate && next build",
     "start": "node server.cjs",
+    "test:node": "node --experimental-strip-types --test $(find app lib -name '*.test.mts' -o -name '*.test.cjs' | sort)",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate:deploy": "prisma migrate deploy",

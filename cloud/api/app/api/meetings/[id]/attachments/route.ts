@@ -3,7 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { NextRequest } from 'next/server';
 
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
-import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
+import {
+  ApiRouteError,
+  createRequestContext,
+  errorResponse,
+  jsonResponse,
+} from '@/lib/api-error';
 import { prisma } from '@/lib/db';
 import { saveMeetingAttachmentFile } from '@/lib/meeting-attachment';
 import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
@@ -51,6 +56,12 @@ export async function GET(
       }))
     );
   } catch (error) {
+    if (error instanceof ApiRouteError) {
+      return errorResponse(context, error.status, error.message, error.cause, {
+        logLevel: error.logLevel,
+      });
+    }
+
     return errorResponse(
       context,
       500,
@@ -131,6 +142,12 @@ export async function POST(
       url: `/api/meetings/${id}/attachments/${attachment.id}`,
     });
   } catch (error) {
+    if (error instanceof ApiRouteError) {
+      return errorResponse(context, error.status, error.message, error.cause, {
+        logLevel: error.logLevel,
+      });
+    }
+
     return errorResponse(
       context,
       500,
@@ -150,6 +167,8 @@ async function requireMeetingOwnership(meetingId: string, workspaceId: string) {
   });
 
   if (!meeting) {
-    throw new Error('会议不存在，无法保存资料区附件');
+    throw new ApiRouteError(404, '会议不存在，无法保存资料区附件', {
+      logLevel: 'silent',
+    });
   }
 }

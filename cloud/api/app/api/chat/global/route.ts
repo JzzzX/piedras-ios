@@ -16,52 +16,6 @@ import { selectRetrievalResult } from '@/lib/global-chat-selection';
 
 const GLOBAL_CHAT_MAX_TOKENS = 1_536;
 
-function createTextStream(text: string): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-  let interval: ReturnType<typeof setInterval> | null = null;
-  let isClosed = false;
-
-  const cleanup = () => {
-    isClosed = true;
-    if (interval) {
-      clearInterval(interval);
-      interval = null;
-    }
-  };
-
-  return new ReadableStream({
-    start(controller) {
-      const chars = text.split('');
-      let i = 0;
-      interval = setInterval(() => {
-        if (isClosed) {
-          cleanup();
-          return;
-        }
-
-        if (i < chars.length) {
-          try {
-            controller.enqueue(encoder.encode(chars[i]));
-            i++;
-          } catch {
-            cleanup();
-          }
-        } else {
-          cleanup();
-          try {
-            controller.close();
-          } catch {
-            cleanup();
-          }
-        }
-      }, 8);
-    },
-    cancel() {
-      cleanup();
-    },
-  });
-}
-
 function formatSources(
   sources: Array<{ ref: string; type: 'meeting' | 'asset'; title: string; date: string }>
 ) {
@@ -149,7 +103,7 @@ export async function POST(req: NextRequest) {
 
     if (!hasAvailableLlm(llmRuntimeConfig)) {
       const demo = `当前为 Demo 模式，已检索到 ${retrieval.sources.length} 场相关会议。\n\n你可以配置 AiHubMix API Key 后获得真实模型回答。\n\n${formatSources(retrieval.sources)}`;
-      return textResponse(context, createTextStream(demo), {
+      return textResponse(context, demo, {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }
@@ -191,9 +145,8 @@ export async function POST(req: NextRequest) {
     });
 
     const fullContent = `${content.trim()}\n\n${formatSources(retrieval.sources)}`;
-    const stream = createTextStream(fullContent);
 
-    return textResponse(context, stream, {
+    return textResponse(context, fullContent, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-LLM-Provider': provider,

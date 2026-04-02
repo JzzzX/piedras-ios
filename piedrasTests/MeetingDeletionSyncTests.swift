@@ -169,6 +169,18 @@ struct MeetingDeletionSyncTests {
 
         MockURLProtocol.requestHandler = { request in
             let url = try #require(request.url)
+            if url.path == "/api/meetings/\(meeting.id)" {
+                let notFoundResponse = try #require(
+                    HTTPURLResponse(
+                        url: url,
+                        statusCode: 404,
+                        httpVersion: nil,
+                        headerFields: ["Content-Type": "application/json"]
+                    )
+                )
+                return (notFoundResponse, Data(#"{"error":"会议不存在"}"#.utf8))
+            }
+
             let response = try #require(
                 HTTPURLResponse(
                     url: url,
@@ -227,6 +239,18 @@ struct MeetingDeletionSyncTests {
 
         MockURLProtocol.requestHandler = { request in
             let url = try #require(request.url)
+            if url.path == "/api/meetings/\(meeting.id)" {
+                let notFoundResponse = try #require(
+                    HTTPURLResponse(
+                        url: url,
+                        statusCode: 404,
+                        httpVersion: nil,
+                        headerFields: ["Content-Type": "application/json"]
+                    )
+                )
+                return (notFoundResponse, Data(#"{"error":"会议不存在"}"#.utf8))
+            }
+
             let response = try #require(
                 HTTPURLResponse(
                     url: url,
@@ -277,10 +301,10 @@ struct MeetingDeletionSyncTests {
         #expect(refreshedMeeting.audioLocalPath == audioURL.path)
         #expect(refreshedMeeting.audioRemotePath == "https://example.com/api/meetings/meeting-upload-success/audio?t=123")
         #expect(FileManager.default.fileExists(atPath: audioURL.path))
-        #expect(MockURLProtocol.requests.count == 2)
-        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings", "/api/meetings/\(meeting.id)/audio"])
-        #expect(MockURLProtocol.requests.last?.httpMethod == "POST")
-        #expect(MockURLProtocol.requests.last?.value(forHTTPHeaderField: "Content-Type")?.contains("multipart/form-data") == true)
+        #expect(MockURLProtocol.requests.count == 3)
+        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings/\(meeting.id)", "/api/meetings", "/api/meetings/\(meeting.id)/audio"])
+        #expect(MockURLProtocol.requests.last?.httpMethod == "PUT")
+        #expect(MockURLProtocol.requests.last?.value(forHTTPHeaderField: "Content-Type") == "audio/m4a")
     }
 
     @MainActor
@@ -312,9 +336,23 @@ struct MeetingDeletionSyncTests {
         meeting.speakerDiarizationState = .processing
         repository.insert(meeting)
         try repository.save()
+        var remoteLookupCount = 0
 
         MockURLProtocol.requestHandler = { request in
             let url = try #require(request.url)
+            if url.path == "/api/meetings/\(meeting.id)" && request.httpMethod == "GET" && remoteLookupCount == 0 {
+                remoteLookupCount += 1
+                let notFoundResponse = try #require(
+                    HTTPURLResponse(
+                        url: url,
+                        statusCode: 404,
+                        httpVersion: nil,
+                        headerFields: ["Content-Type": "application/json"]
+                    )
+                )
+                return (notFoundResponse, Data(#"{"error":"会议不存在"}"#.utf8))
+            }
+
             let response = try #require(
                 HTTPURLResponse(
                     url: url,
@@ -350,6 +388,22 @@ struct MeetingDeletionSyncTests {
                 return (
                     response,
                     Data(
+                        #"{"hasAudio":true,"audioMimeType":"audio/m4a","audioDuration":24,"audioUpdatedAt":"2026-03-24T04:00:00.000Z","audioUrl":"/api/meetings/meeting-upload-diarized/audio?t=123","audioCloudSyncEnabled":true,"audioProcessingState":"queued","audioProcessingError":"","audioProcessingAttempts":0,"audioProcessingRequestedAt":"2026-03-24T04:00:00.000Z","audioProcessingStartedAt":null,"audioProcessingCompletedAt":null}"#.utf8
+                    )
+                )
+
+            case "/api/meetings/\(meeting.id)/processing-status":
+                return (
+                    response,
+                    Data(
+                        #"{"meetingId":"meeting-upload-diarized","hasAudio":true,"audioProcessingState":"completed","audioProcessingError":"","audioProcessingAttempts":1,"audioProcessingRequestedAt":"2026-03-24T04:00:00.000Z","audioProcessingStartedAt":"2026-03-24T04:00:01.000Z","audioProcessingCompletedAt":"2026-03-24T04:00:02.000Z"}"#.utf8
+                    )
+                )
+
+            case "/api/meetings/\(meeting.id)":
+                return (
+                    response,
+                    Data(
                         """
                         {
                           "id": "\(meeting.id)",
@@ -382,7 +436,10 @@ struct MeetingDeletionSyncTests {
                           ],
                           "chatMessages": [],
                           "hasAudio": true,
-                          "audioUrl": "/api/meetings/\(meeting.id)/audio?t=123"
+                          "audioUrl": "/api/meetings/\(meeting.id)/audio?t=123",
+                          "audioProcessingState": "completed",
+                          "audioProcessingError": "",
+                          "audioProcessingAttempts": 1
                         }
                         """.utf8
                     )
@@ -407,7 +464,7 @@ struct MeetingDeletionSyncTests {
         #expect(refreshedMeeting.orderedSegments.map { $0.speaker } == ["spk_1"])
         #expect(refreshedMeeting.orderedSegments.map { $0.text } == ["请做个自我介绍。"])
         #expect(FileManager.default.fileExists(atPath: audioURL.path))
-        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings", "/api/meetings/\(meeting.id)/audio"])
+        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings/\(meeting.id)", "/api/meetings", "/api/meetings/\(meeting.id)/audio", "/api/meetings/\(meeting.id)/processing-status", "/api/meetings/\(meeting.id)"])
     }
 
     @MainActor
@@ -441,6 +498,18 @@ struct MeetingDeletionSyncTests {
 
         MockURLProtocol.requestHandler = { request in
             let url = try #require(request.url)
+            if url.path == "/api/meetings/\(meeting.id)" {
+                let notFoundResponse = try #require(
+                    HTTPURLResponse(
+                        url: url,
+                        statusCode: 404,
+                        httpVersion: nil,
+                        headerFields: ["Content-Type": "application/json"]
+                    )
+                )
+                return (notFoundResponse, Data(#"{"error":"会议不存在"}"#.utf8))
+            }
+
             let statusCode = url.path == "/api/meetings/\(meeting.id)/audio" ? 500 : 200
             let response = try #require(
                 HTTPURLResponse(
@@ -488,7 +557,7 @@ struct MeetingDeletionSyncTests {
         #expect(refreshedMeeting.syncState == .failed)
         #expect(refreshedMeeting.audioLocalPath == audioURL.path)
         #expect(FileManager.default.fileExists(atPath: audioURL.path))
-        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings", "/api/meetings/\(meeting.id)/audio"])
+        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings/\(meeting.id)", "/api/meetings", "/api/meetings/\(meeting.id)/audio"])
     }
 
     @MainActor
@@ -522,12 +591,16 @@ struct MeetingDeletionSyncTests {
         try repository.save()
 
         var audioUploadAttempts = 0
+        var remoteLookupCount = 0
         MockURLProtocol.requestHandler = { request in
             let url = try #require(request.url)
             let statusCode: Int
             if url.path == "/api/meetings/\(meeting.id)/audio" {
                 audioUploadAttempts += 1
                 statusCode = audioUploadAttempts == 1 ? 500 : 200
+            } else if url.path == "/api/meetings/\(meeting.id)" && request.httpMethod == "GET" {
+                remoteLookupCount += 1
+                statusCode = remoteLookupCount == 1 ? 404 : 200
             } else {
                 statusCode = 200
             }
@@ -570,6 +643,26 @@ struct MeetingDeletionSyncTests {
                 return (
                     response,
                     Data(
+                        #"{"hasAudio":true,"audioMimeType":"audio/m4a","audioDuration":22,"audioUpdatedAt":"2026-03-24T04:00:00.000Z","audioUrl":"/api/meetings/meeting-finalize-retry/audio?t=123","audioCloudSyncEnabled":true,"audioProcessingState":"queued","audioProcessingError":"","audioProcessingAttempts":0,"audioProcessingRequestedAt":"2026-03-24T04:00:00.000Z","audioProcessingStartedAt":null,"audioProcessingCompletedAt":null}"#.utf8
+                    )
+                )
+
+            case "/api/meetings/\(meeting.id)/processing-status":
+                return (
+                    response,
+                    Data(
+                        #"{"meetingId":"meeting-finalize-retry","hasAudio":true,"audioProcessingState":"completed","audioProcessingError":"","audioProcessingAttempts":1,"audioProcessingRequestedAt":"2026-03-24T04:00:00.000Z","audioProcessingStartedAt":"2026-03-24T04:00:01.000Z","audioProcessingCompletedAt":"2026-03-24T04:00:02.000Z"}"#.utf8
+                    )
+                )
+
+            case "/api/meetings/\(meeting.id)":
+                if remoteLookupCount == 1 {
+                    return (response, Data(#"{"error":"会议不存在"}"#.utf8))
+                }
+
+                return (
+                    response,
+                    Data(
                         """
                         {
                           "id": "\(meeting.id)",
@@ -601,7 +694,8 @@ struct MeetingDeletionSyncTests {
                           ],
                           "chatMessages": [],
                           "hasAudio": true,
-                          "audioUrl": "/api/meetings/\(meeting.id)/audio?t=123"
+                          "audioUrl": "/api/meetings/\(meeting.id)/audio?t=123",
+                          "audioProcessingState": "completed"
                         }
                         """.utf8
                     )
@@ -633,6 +727,297 @@ struct MeetingDeletionSyncTests {
         #expect(recoveredMeeting.audioLocalPath == audioURL.path)
         #expect(recoveredMeeting.orderedSegments.map { $0.text } == ["补转写成功"])
         #expect(FileManager.default.fileExists(atPath: audioURL.path))
+    }
+
+    @MainActor
+    @Test
+    func syncMeetingPreservesRemoteTranscriptStateWhenRemoteAlreadyFinalized() async throws {
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
+        let settingsStore = makeSettingsStore()
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let syncService = MeetingSyncService(
+            repository: repository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+
+        let meeting = Meeting(
+            id: "meeting-remote-transcript",
+            title: "Remote transcript wins",
+            status: .ended,
+            userNotesPlainText: "本地用户笔记",
+            hiddenWorkspaceId: "workspace-1",
+            speakers: ["local": "本地说话人"],
+            syncState: .pending
+        )
+        meeting.segments = [
+            TranscriptSegment(
+                id: "local-segment",
+                speaker: "local",
+                text: "本地旧转写",
+                startTime: 0,
+                endTime: 1000,
+                isFinal: true,
+                orderIndex: 0
+            ),
+        ]
+        repository.insert(meeting)
+        try repository.save()
+
+        var upsertBody: [String: Any]?
+        MockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/meetings/\(meeting.id)":
+                return (
+                    response,
+                    Data(
+                        """
+                        {
+                          "id": "\(meeting.id)",
+                          "title": "Remote transcript wins",
+                          "date": "2026-03-24T04:00:00.000Z",
+                          "status": "ended",
+                          "duration": 0,
+                          "userNotes": "",
+                          "enhancedNotes": "",
+                          "createdAt": "2026-03-24T03:50:00.000Z",
+                          "updatedAt": "2026-03-24T04:00:00.000Z",
+                          "workspaceId": "workspace-1",
+                          "speakers": {
+                            "spk_1": "远端说话人"
+                          },
+                          "segments": [
+                            {
+                              "id": "remote-segment",
+                              "speaker": "spk_1",
+                              "text": "远端已完成补转写",
+                              "startTime": 0,
+                              "endTime": 1200,
+                              "isFinal": true,
+                              "order": 0
+                            }
+                          ],
+                          "chatMessages": [],
+                          "hasAudio": true,
+                          "audioUrl": "/api/meetings/\(meeting.id)/audio?t=123",
+                          "audioMimeType": "audio/m4a",
+                          "audioDuration": 12,
+                          "audioUpdatedAt": "2026-03-24T04:00:00.000Z",
+                          "audioProcessingState": "completed"
+                        }
+                        """.utf8
+                    )
+                )
+
+            case "/api/meetings":
+                let requestBody = try #require(request.httpBody)
+                upsertBody = try #require(
+                    JSONSerialization.jsonObject(with: requestBody) as? [String: Any]
+                )
+                return (
+                    response,
+                    Data(
+                        """
+                        {
+                          "id": "\(meeting.id)",
+                          "title": "Remote transcript wins",
+                          "date": "2026-03-24T04:00:00.000Z",
+                          "status": "ended",
+                          "duration": 0,
+                          "userNotes": "<p>本地用户笔记</p>",
+                          "enhancedNotes": "",
+                          "createdAt": "2026-03-24T03:50:00.000Z",
+                          "updatedAt": "2026-03-24T04:00:01.000Z",
+                          "workspaceId": "workspace-1",
+                          "speakers": {
+                            "spk_1": "远端说话人"
+                          },
+                          "segments": [
+                            {
+                              "id": "remote-segment",
+                              "speaker": "spk_1",
+                              "text": "远端已完成补转写",
+                              "startTime": 0,
+                              "endTime": 1200,
+                              "isFinal": true,
+                              "order": 0
+                            }
+                          ],
+                          "chatMessages": [],
+                          "hasAudio": true,
+                          "audioUrl": "/api/meetings/\(meeting.id)/audio?t=123",
+                          "audioMimeType": "audio/m4a",
+                          "audioDuration": 12,
+                          "audioUpdatedAt": "2026-03-24T04:00:00.000Z",
+                          "audioProcessingState": "completed"
+                        }
+                        """.utf8
+                    )
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+        defer { MockURLProtocol.reset() }
+
+        try await syncService.syncMeeting(id: meeting.id)
+
+        let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.orderedSegments.map { $0.text } == ["远端已完成补转写"])
+        #expect(refreshedMeeting.speakers == ["spk_1": "远端说话人"])
+        #expect(refreshedMeeting.userNotesPlainText == "本地用户笔记")
+        #expect(upsertBody?["segments"] == nil)
+        #expect(upsertBody?["speakers"] == nil)
+    }
+
+    @MainActor
+    @Test
+    func syncMeetingPreservesRemoteOnlyChatMessagesDuringMerge() async throws {
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
+        let settingsStore = makeSettingsStore()
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let syncService = MeetingSyncService(
+            repository: repository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+
+        let meeting = Meeting(
+            id: "meeting-chat-merge",
+            title: "Chat merge",
+            status: .ended,
+            hiddenWorkspaceId: "workspace-1",
+            syncState: .pending
+        )
+        meeting.chatMessages = [
+            ChatMessage(
+                id: "local-chat",
+                role: "user",
+                content: "本地新问题",
+                timestamp: Date(timeIntervalSince1970: 1_711_251_200),
+                orderIndex: 0
+            ),
+        ]
+        repository.insert(meeting)
+        try repository.save()
+
+        var upsertBody: [String: Any]?
+        MockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/meetings/\(meeting.id)":
+                return (
+                    response,
+                    Data(
+                        """
+                        {
+                          "id": "\(meeting.id)",
+                          "title": "Chat merge",
+                          "date": "2026-03-24T04:00:00.000Z",
+                          "status": "ended",
+                          "duration": 0,
+                          "userNotes": "",
+                          "enhancedNotes": "",
+                          "createdAt": "2026-03-24T03:50:00.000Z",
+                          "updatedAt": "2026-03-24T04:00:00.000Z",
+                          "workspaceId": "workspace-1",
+                          "speakers": {},
+                          "segments": [],
+                          "chatMessages": [
+                            {
+                              "id": "remote-chat",
+                              "role": "assistant",
+                              "content": "远端已有回复",
+                              "timestamp": "2026-03-24T04:00:00.000Z"
+                            }
+                          ],
+                          "hasAudio": false,
+                          "audioUrl": null
+                        }
+                        """.utf8
+                    )
+                )
+
+            case "/api/meetings":
+                let requestBody = try #require(request.httpBody)
+                upsertBody = try #require(
+                    JSONSerialization.jsonObject(with: requestBody) as? [String: Any]
+                )
+                return (
+                    response,
+                    Data(
+                        """
+                        {
+                          "id": "\(meeting.id)",
+                          "title": "Chat merge",
+                          "date": "2026-03-24T04:00:00.000Z",
+                          "status": "ended",
+                          "duration": 0,
+                          "userNotes": "",
+                          "enhancedNotes": "",
+                          "createdAt": "2026-03-24T03:50:00.000Z",
+                          "updatedAt": "2026-03-24T04:00:01.000Z",
+                          "workspaceId": "workspace-1",
+                          "speakers": {},
+                          "segments": [],
+                          "chatMessages": [
+                            {
+                              "id": "remote-chat",
+                              "role": "assistant",
+                              "content": "远端已有回复",
+                              "timestamp": "2026-03-24T04:00:00.000Z"
+                            },
+                            {
+                              "id": "local-chat",
+                              "role": "user",
+                              "content": "本地新问题",
+                              "timestamp": "2024-03-24T04:00:00.000Z"
+                            }
+                          ],
+                          "hasAudio": false,
+                          "audioUrl": null
+                        }
+                        """.utf8
+                    )
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+        defer { MockURLProtocol.reset() }
+
+        try await syncService.syncMeeting(id: meeting.id)
+
+        let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        let chatIDs = Set(refreshedMeeting.orderedChatMessages.map(\.id))
+        let requestChatMessages = upsertBody?["chatMessages"] as? [[String: Any]] ?? []
+        let requestChatIDs = Set(requestChatMessages.compactMap { $0["id"] as? String })
+
+        #expect(chatIDs == Set(["remote-chat", "local-chat"]))
+        #expect(requestChatIDs == Set(["remote-chat", "local-chat"]))
     }
 
     @MainActor

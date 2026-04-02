@@ -174,12 +174,13 @@ export async function getAsrRuntimeStatus(): Promise<AsrStatus> {
   const probe = await getCachedRuntimeHealth(
     cacheKey,
     30_000,
-    async (): Promise<{ reachable: boolean; checkedAt: string; lastError: string | null }> => {
+    async (): Promise<{ reachable: boolean; ready: boolean; checkedAt: string; lastError: string | null }> => {
       const probeCheckedAt = new Date().toISOString();
 
       if (!proxyBaseURL) {
         return {
           reachable: false,
+          ready: false,
           checkedAt: probeCheckedAt,
           lastError: 'ASR_PROXY_PUBLIC_BASE_URL / HOST 未配置',
         };
@@ -194,14 +195,25 @@ export async function getAsrRuntimeStatus(): Promise<AsrStatus> {
           throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
         }
 
+        const payload = (await response.json().catch(() => null)) as
+          | {
+              ready?: boolean;
+              lastUpstreamError?: string | null;
+              lastError?: string | null;
+            }
+          | null;
+        const lastError = payload?.lastUpstreamError || payload?.lastError || null;
+
         return {
           reachable: true,
+          ready: payload?.ready !== false && !lastError,
           checkedAt: probeCheckedAt,
-          lastError: null,
+          lastError,
         };
       } catch (error) {
         return {
           reachable: false,
+          ready: false,
           checkedAt: probeCheckedAt,
           lastError: toErrorMessage(error),
         };
@@ -212,11 +224,13 @@ export async function getAsrRuntimeStatus(): Promise<AsrStatus> {
   return {
     ...configuredStatus,
     reachable: probe.reachable,
-    ready: configuredStatus.configured && probe.reachable,
+    ready: configuredStatus.configured && probe.reachable && probe.ready,
     checkedAt: probe.checkedAt,
     lastError: probe.lastError,
-    message: probe.reachable
-      ? '豆包 ASR 代理在线'
-      : `豆包 ASR 代理不可达${probe.lastError ? `：${probe.lastError}` : ''}`,
+    message: !probe.reachable
+      ? `豆包 ASR 代理不可达${probe.lastError ? `：${probe.lastError}` : ''}`
+      : probe.ready
+        ? '豆包 ASR 代理在线'
+        : `豆包 ASR 代理在线，但上游初始化失败${probe.lastError ? `：${probe.lastError}` : ''}`,
   };
 }

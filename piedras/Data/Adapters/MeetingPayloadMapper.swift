@@ -78,6 +78,9 @@ struct ASRSessionRequestPayload: Encodable {
 
 struct RemoteMeetingListItem: Decodable {
     let id: String
+    let updatedAt: Date?
+    let audioUpdatedAt: Date?
+    let audioProcessingState: String?
 }
 
 struct RemoteTranscriptSegment: Decodable {
@@ -316,9 +319,9 @@ struct MeetingUpsertPayload: Encodable {
     let workspaceId: String
     let userNotes: String
     let enhancedNotes: String
-    let speakers: [String: String]
-    let segments: [MeetingSegmentPayload]
-    let chatMessages: [MeetingChatMessagePayload]
+    let speakers: [String: String]?
+    let segments: [MeetingSegmentPayload]?
+    let chatMessages: [MeetingChatMessagePayload]?
 }
 
 struct EnhanceRequestPayload: Encodable {
@@ -378,7 +381,13 @@ enum MeetingPayloadMapper {
         return formatter
     }()
 
-    static func makeMeetingUpsertPayload(from meeting: Meeting, workspaceID: String) -> MeetingUpsertPayload {
+    static func makeMeetingUpsertPayload(
+        from meeting: Meeting,
+        workspaceID: String,
+        includeSpeakers: Bool = false,
+        includeSegments: Bool = false,
+        includeChatMessages: Bool = true
+    ) -> MeetingUpsertPayload {
         MeetingUpsertPayload(
             id: meeting.id,
             title: meeting.title,
@@ -389,25 +398,29 @@ enum MeetingPayloadMapper {
             workspaceId: workspaceID,
             userNotes: PlainTextHTMLAdapter.html(from: meeting.userNotesPlainText),
             enhancedNotes: meeting.enhancedNotes,
-            speakers: meeting.speakers,
-            segments: meeting.orderedSegments.map {
-                MeetingSegmentPayload(
-                    id: $0.id,
-                    speaker: $0.speaker,
-                    text: $0.text,
-                    startTime: $0.startTime,
-                    endTime: $0.endTime,
-                    isFinal: $0.isFinal
-                )
-            },
-            chatMessages: meeting.orderedChatMessages.map {
-                MeetingChatMessagePayload(
-                    id: $0.id,
-                    role: $0.role,
-                    content: $0.content,
-                    timestamp: Int64(($0.timestamp.timeIntervalSince1970 * 1000).rounded())
-                )
-            }
+            speakers: includeSpeakers ? meeting.speakers : nil,
+            segments: includeSegments
+                ? meeting.orderedSegments.map {
+                    MeetingSegmentPayload(
+                        id: $0.id,
+                        speaker: $0.speaker,
+                        text: $0.text,
+                        startTime: $0.startTime,
+                        endTime: $0.endTime,
+                        isFinal: $0.isFinal
+                    )
+                }
+                : nil,
+            chatMessages: includeChatMessages
+                ? meeting.orderedChatMessages.map {
+                    MeetingChatMessagePayload(
+                        id: $0.id,
+                        role: $0.role,
+                        content: $0.content,
+                        timestamp: Int64(($0.timestamp.timeIntervalSince1970 * 1000).rounded())
+                    )
+                }
+                : nil
         )
     }
 
@@ -555,7 +568,7 @@ enum MeetingPayloadMapper {
         let remoteChatMessages = makeChatMessages(from: remote.chatMessages)
 
         if meeting.chatSessions.isEmpty {
-            repository.replaceChatMessages(for: meeting, with: remoteChatMessages)
+            repository.mergeChatMessages(for: meeting, with: remoteChatMessages)
             return
         }
 
@@ -567,7 +580,7 @@ enum MeetingPayloadMapper {
             return
         }
 
-        repository.replaceChatMessages(for: meeting, in: onlySession, with: remoteChatMessages)
+        repository.mergeChatMessages(for: meeting, in: onlySession, with: remoteChatMessages)
         if let title = remoteChatMessages.first(where: { $0.role == "user" })?.content
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !title.isEmpty {
@@ -602,6 +615,35 @@ enum MeetingPayloadMapper {
         meeting.audioEnhancedNotesUpdatedAt = remote.audioEnhancedNotesUpdatedAt
         meeting.audioEnhancedNotesProvider = remote.audioEnhancedNotesProvider
         meeting.audioEnhancedNotesModel = remote.audioEnhancedNotesModel
+    }
+
+    static func applyRemoteSyncState(
+        remote: RemoteMeetingDetail,
+        to meeting: Meeting,
+        repository: MeetingRepository,
+        baseURL: URL?
+    ) {
+        meeting.audioRemotePath = resolveRemoteAudioURLString(from: remote.audioUrl, baseURL: baseURL)
+        meeting.audioMimeType = remote.audioMimeType ?? meeting.audioMimeType
+        meeting.audioDuration = remote.audioDuration ?? meeting.audioDuration
+        meeting.audioUpdatedAt = remote.audioUpdatedAt ?? meeting.audioUpdatedAt
+        meeting.hiddenWorkspaceId = remote.workspaceId ?? meeting.hiddenWorkspaceId
+        meeting.speakers = remote.speakers ?? meeting.speakers
+        meeting.createdAt = remote.createdAt ?? meeting.createdAt
+        applyRemoteAudioProcessing(remote, to: meeting)
+
+        repository.replaceSegments(for: meeting, with: makeSegments(from: remote.segments))
+        let remoteChatMessages = makeChatMessages(from: remote.chatMessages)
+        if meeting.chatSessions.isEmpty {
+            repository.mergeChatMessages(for: meeting, with: remoteChatMessages)
+            return
+        }
+
+        guard let onlySession = meeting.chatSessions.only else {
+            return
+        }
+
+        repository.mergeChatMessages(for: meeting, in: onlySession, with: remoteChatMessages)
     }
 
     static func transcriptText(from meeting: Meeting) -> String {

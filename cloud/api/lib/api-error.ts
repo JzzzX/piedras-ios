@@ -1,37 +1,21 @@
-import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
+import {
+  createRequestContext,
+  logApiError,
+  type ApiErrorResponseOptions,
+  type ApiRequestContext,
+  withRequestHeaders,
+} from './api-error-core.ts';
 
-type HeaderSource = Pick<Request, 'headers'> | undefined;
-
-export interface ApiRequestContext {
-  requestId: string;
-  route: string;
-}
-
-export interface ApiErrorResponseOptions {
-  logLevel?: 'error' | 'warn' | 'silent';
-}
-
-function incomingRequestId(source: HeaderSource): string | null {
-  const value = source?.headers.get('x-request-id')?.trim();
-  return value ? value : null;
-}
-
-export function createRequestContext(source: HeaderSource, route: string): ApiRequestContext {
-  return {
-    route,
-    requestId: incomingRequestId(source) || randomUUID(),
-  };
-}
-
-export function withRequestHeaders(
-  context: ApiRequestContext,
-  headers?: HeadersInit
-): Headers {
-  const resolvedHeaders = new Headers(headers);
-  resolvedHeaders.set('X-Request-Id', context.requestId);
-  return resolvedHeaders;
-}
+export {
+  ApiRouteError,
+  createRequestContext,
+  withRequestHeaders,
+} from './api-error-core.ts';
+export type {
+  ApiErrorResponseOptions,
+  ApiRequestContext,
+} from './api-error-core.ts';
 
 export function jsonResponse(
   context: ApiRequestContext,
@@ -62,22 +46,7 @@ export function errorResponse(
   cause?: unknown,
   options?: ApiErrorResponseOptions
 ) {
-  const detail =
-    cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : undefined;
-
-  const message =
-    `[api-error] route=${context.route} requestId=${context.requestId} status=${status}` +
-    (detail ? ` detail=${detail}` : '');
-  const logLevel = options?.logLevel ?? 'error';
-
-  if (logLevel !== 'silent') {
-    const args = cause === undefined ? [message] : [message, cause];
-    if (logLevel === 'warn') {
-      console.warn(...args);
-    } else {
-      console.error(...args);
-    }
-  }
+  logApiError(context, status, cause, options);
 
   return jsonResponse(
     context,

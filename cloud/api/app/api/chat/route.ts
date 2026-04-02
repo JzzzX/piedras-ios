@@ -14,25 +14,6 @@ import {
 
 const CHAT_MAX_TOKENS = 1_536;
 
-function createTextStream(text: string): ReadableStream<Uint8Array> {
-  const encoder = new TextEncoder();
-  return new ReadableStream({
-    start(controller) {
-      const chars = text.split('');
-      let i = 0;
-      const interval = setInterval(() => {
-        if (i < chars.length) {
-          controller.enqueue(encoder.encode(chars[i]));
-          i++;
-        } else {
-          clearInterval(interval);
-          controller.close();
-        }
-      }, 8);
-    },
-  });
-}
-
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/chat');
   const auth = await requireAuthenticatedRequest(req, context);
@@ -59,8 +40,7 @@ export async function POST(req: NextRequest) {
     if (!hasAvailableLlm(llmRuntimeConfig)) {
       // Demo 模式
       const demoResponse = getDemoResponse(question);
-      const stream = createTextStream(demoResponse);
-      return textResponse(context, stream, {
+      return textResponse(context, demoResponse, {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }
@@ -100,9 +80,7 @@ export async function POST(req: NextRequest) {
       runtimeConfig: llmRuntimeConfig,
     });
 
-    const stream = createTextStream(content);
-
-    return textResponse(context, stream, {
+    return textResponse(context, content, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'X-LLM-Provider': provider,

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import llmProviderModule from './llm-provider.ts';
+import * as llmProviderModule from './llm-provider.ts';
 
 const {
   generateTextWithFallback,
@@ -9,7 +9,7 @@ const {
   hasAvailableLlm,
   probeConfiguredLlm,
   resolveLlmRequestPolicy,
-} = llmProviderModule as typeof import('./llm-provider.ts');
+} = llmProviderModule;
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_FETCH = globalThis.fetch;

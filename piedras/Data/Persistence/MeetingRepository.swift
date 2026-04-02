@@ -128,6 +128,46 @@ final class MeetingRepository {
         session.messages = chatMessages
     }
 
+    func mergeChatMessages(for meeting: Meeting, with chatMessages: [ChatMessage]) {
+        let existingByID = Dictionary(uniqueKeysWithValues: meeting.chatMessages.map { ($0.id, $0) })
+        var mergedMessages = meeting.chatMessages
+
+        for incomingMessage in chatMessages {
+            if let existingMessage = existingByID[incomingMessage.id] {
+                existingMessage.role = incomingMessage.role
+                existingMessage.content = incomingMessage.content
+                existingMessage.timestamp = incomingMessage.timestamp
+                continue
+            }
+
+            incomingMessage.meeting = meeting
+            mergedMessages.append(incomingMessage)
+        }
+
+        mergedMessages.sort { lhs, rhs in
+            if lhs.timestamp == rhs.timestamp {
+                return lhs.id < rhs.id
+            }
+            return lhs.timestamp < rhs.timestamp
+        }
+
+        for (index, message) in mergedMessages.enumerated() {
+            message.orderIndex = index
+            message.meeting = meeting
+        }
+
+        meeting.chatMessages = mergedMessages
+    }
+
+    func mergeChatMessages(for meeting: Meeting, in session: ChatSession, with chatMessages: [ChatMessage]) {
+        mergeChatMessages(for: meeting, with: chatMessages)
+        let orderedMessages = meeting.orderedChatMessages
+        for message in orderedMessages {
+            message.session = session
+        }
+        session.messages = orderedMessages
+    }
+
     func seedPreviewDataIfNeeded(workspaceID: String?, preferLocalOnly: Bool = false) {
         let existing: [Meeting]
         do {

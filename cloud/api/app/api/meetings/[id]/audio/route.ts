@@ -1,6 +1,11 @@
 import { NextRequest } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
-import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
+import {
+  ApiRouteError,
+  createRequestContext,
+  errorResponse,
+  jsonResponse,
+} from '@/lib/api-error';
 import { prisma } from '@/lib/db';
 import {
   buildMeetingAudioResponse,
@@ -69,6 +74,12 @@ export async function GET(
 
     return buildMeetingAudioResponse(id, meeting.audioMimeType, req.headers.get('range'));
   } catch (error) {
+    if (error instanceof ApiRouteError) {
+      return errorResponse(context, error.status, error.message, error.cause, {
+        logLevel: error.logLevel,
+      });
+    }
+
     return errorResponse(
       context,
       500,
@@ -136,6 +147,12 @@ export async function POST(
 
     return jsonResponse(context, payload);
   } catch (error) {
+    if (error instanceof ApiRouteError) {
+      return errorResponse(context, error.status, error.message, error.cause, {
+        logLevel: error.logLevel,
+      });
+    }
+
     return errorResponse(
       context,
       500,
@@ -199,6 +216,12 @@ export async function PUT(
 
     return jsonResponse(context, payload);
   } catch (error) {
+    if (error instanceof ApiRouteError) {
+      return errorResponse(context, error.status, error.message, error.cause, {
+        logLevel: error.logLevel,
+      });
+    }
+
     return errorResponse(
       context,
       500,
@@ -246,6 +269,12 @@ export async function DELETE(
       audioCloudSyncEnabled: false,
     });
   } catch (error) {
+    if (error instanceof ApiRouteError) {
+      return errorResponse(context, error.status, error.message, error.cause, {
+        logLevel: error.logLevel,
+      });
+    }
+
     return errorResponse(
       context,
       500,
@@ -265,7 +294,9 @@ async function requireMeetingOwnership(meetingId: string, workspaceId: string) {
   });
 
   if (!meeting) {
-    throw new Error('会议不存在，无法保存音频');
+    throw new ApiRouteError(404, '会议不存在，无法保存音频', {
+      logLevel: 'silent',
+    });
   }
 }
 
@@ -329,6 +360,15 @@ async function saveAudioCloudSyncState(meetingId: string, enabled: boolean) {
     where: { id: meetingId },
     data: {
       audioCloudSyncEnabled: enabled,
+      audioMimeType: enabled ? undefined : null,
+      audioDuration: enabled ? undefined : null,
+      audioUpdatedAt: enabled ? undefined : null,
+      audioProcessingState: enabled ? undefined : 'idle',
+      audioProcessingError: enabled ? undefined : '',
+      audioProcessingAttempts: enabled ? undefined : 0,
+      audioProcessingRequestedAt: enabled ? undefined : null,
+      audioProcessingStartedAt: enabled ? undefined : null,
+      audioProcessingCompletedAt: enabled ? undefined : null,
     },
   });
 }
