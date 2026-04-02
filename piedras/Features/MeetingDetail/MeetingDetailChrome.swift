@@ -9,12 +9,14 @@ struct MeetingDetailPresentationState: Equatable {
         meetingID: String,
         recordingSessionMeetingID: String?,
         recordingPhase: RecordingPhase,
+        postStopProcessingStage: MeetingPostStopProcessingStage,
         transcriptionStatus: FileTranscriptionStatusSnapshot?,
         isEnhancing: Bool,
         hasEnhancedNotes: Bool
     ) {
         let isCurrentRecordingMeeting = recordingSessionMeetingID == meetingID
         let isStoppingCurrentMeeting = isCurrentRecordingMeeting && recordingPhase == .stopping
+        let hasPendingPostStopProcessing = postStopProcessingStage != .idle
 
         usesRecordingWorkspace = isCurrentRecordingMeeting
             && recordingPhase != .idle
@@ -22,7 +24,7 @@ struct MeetingDetailPresentationState: Equatable {
 
         if let transcriptionStatus {
             self.transcriptionStatus = transcriptionStatus
-        } else if isStoppingCurrentMeeting {
+        } else if isStoppingCurrentMeeting || hasPendingPostStopProcessing {
             self.transcriptionStatus = FileTranscriptionStatusSnapshot(
                 phase: .finalizing,
                 errorMessage: nil
@@ -31,7 +33,7 @@ struct MeetingDetailPresentationState: Equatable {
             self.transcriptionStatus = nil
         }
 
-        showsEnhancedNotesProcessing = isEnhancing || (isStoppingCurrentMeeting && !hasEnhancedNotes)
+        showsEnhancedNotesProcessing = isEnhancing || ((isStoppingCurrentMeeting || hasPendingPostStopProcessing) && !hasEnhancedNotes)
     }
 }
 

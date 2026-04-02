@@ -1088,6 +1088,7 @@ struct MeetingDetailView: View {
             meetingID: meeting.id,
             recordingSessionMeetingID: recordingSessionStore.meetingID,
             recordingPhase: recordingSessionStore.phase,
+            postStopProcessingStage: meeting.postStopProcessingStage,
             transcriptionStatus: meetingStore.fileTranscriptionStatus(meetingID: meeting.id),
             isEnhancing: meetingStore.isEnhancing(meetingID: meeting.id),
             hasEnhancedNotes: !meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

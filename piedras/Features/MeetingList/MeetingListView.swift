@@ -445,7 +445,14 @@ struct MeetingListView: View {
                 bucket: bucket,
                 rows: meetings
                     .sorted(by: { $0.updatedAt > $1.updatedAt })
-                    .map { MeetingRowSnapshot(meeting: $0, isRecording: isMeetingRecording($0)) }
+                    .map {
+                        let isRecording = isMeetingRecording($0)
+                        return MeetingRowSnapshot(
+                            meeting: $0,
+                            isRecording: isRecording,
+                            isProcessing: !isRecording && isMeetingProcessing($0)
+                        )
+                    }
             )
         }
     }
@@ -485,6 +492,15 @@ struct MeetingListView: View {
             return true
         }
 
+        if meeting.id == recordingSessionStore.meetingID,
+           recordingSessionStore.phase == .stopping {
+            return true
+        }
+
+        if meeting.postStopProcessingStage != .idle {
+            return true
+        }
+
         if meetingStore.isFileTranscribing(meetingID: meeting.id) {
             return true
         }
@@ -501,7 +517,14 @@ struct MeetingListView: View {
     }
 
     private func isMeetingRecording(_ meeting: Meeting) -> Bool {
-        meeting.id == recordingSessionStore.meetingID && recordingSessionStore.phase != .idle
+        guard meeting.id == recordingSessionStore.meetingID else { return false }
+
+        switch recordingSessionStore.phase {
+        case .starting, .recording, .paused:
+            return true
+        case .idle, .stopping:
+            return false
+        }
     }
 
     private func openGlobalChat() {

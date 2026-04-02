@@ -119,6 +119,7 @@ final class MeetingStore {
     private var fileTranscriptionTasks: [String: Task<Void, Never>] = [:]
     private var chatStreamingTasks: [String: Task<Bool, Never>] = [:]
     private var backgroundTranscriptBackfillTask: Task<Void, Never>?
+    private var postStopProcessingTasks: [String: Task<Void, Never>] = [:]
     private var noteAttachmentTextTasks: [String: Task<Void, Never>] = [:]
     private var noteAttachmentTaskTokens: [String: UUID] = [:]
     private var backgroundTranscriptPCMBuffer = Data()
@@ -312,6 +313,7 @@ final class MeetingStore {
         didLoad = true
         recoverInterruptedFileTranscriptionsIfNeeded()
         loadMeetings()
+        resumePendingPostStopProcessingIfNeeded()
         migrateLegacyChatSessionsIfNeeded()
         startBackendPreparationIfNeeded()
     }
@@ -806,6 +808,8 @@ final class MeetingStore {
             recordingSessionStore.infoBanner = nil
             recordingLiveActivityCoordinator.end()
             updateKeepScreenAwake()
+            loadMeetings()
+            await Task.yield()
             await asrService.stopStreaming()
             flushLiveTranscriptTailIfNeeded()
             let artifact = try audioRecorderService.stopRecording()
@@ -845,6 +849,7 @@ final class MeetingStore {
                 beginBackgroundShadowBuffering()
             }
         case .active:
+            resumePendingPostStopProcessingIfNeeded()
             if recordingSessionStore.phase == .recording {
                 switch audioRecorderService.reconcileForegroundRecording() {
                 case .healthy, .recovered:
@@ -1412,6 +1417,7 @@ final class MeetingStore {
         meeting.transcriptPipelineState = needsTranscriptRepair ? .refining : .ready
         meeting.speakerDiarizationState = needsTranscriptRepair ? .processing : .idle
         meeting.speakerDiarizationErrorMessage = nil
+        meeting.postStopProcessingStage = needsTranscriptRepair ? .repairingTranscript : .finalizing
         updateTranscriptNotesFreshnessIfNeeded(for: meeting)
         meeting.markPending()
 
@@ -1431,16 +1437,68 @@ final class MeetingStore {
         updateKeepScreenAwake()
         loadMeetings()
 
-        await appActivityCoordinator.performExpiringActivity(named: "finish-meeting-\(meetingID)") { [weak self] in
-            guard let self else { return }
+        await startPostStopProcessing(for: meetingID, useExpiringActivity: true).value
+    }
 
-            if needsTranscriptRepair {
-                await self.repairStoppedRecordingTranscript(meetingID: meetingID, artifact: artifact)
-                return
-            }
-
-            await self.finalizeStoppedMeeting(meetingID: meetingID)
+    @discardableResult
+    private func startPostStopProcessing(for meetingID: String, useExpiringActivity: Bool) -> Task<Void, Never> {
+        if let existingTask = postStopProcessingTasks[meetingID] {
+            return existingTask
         }
+
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.postStopProcessingTasks.removeValue(forKey: meetingID) }
+
+            if useExpiringActivity {
+                await self.appActivityCoordinator.performExpiringActivity(named: "finish-meeting-\(meetingID)") { [weak self] in
+                    guard let self else { return }
+                    await self.resumePostStopProcessing(meetingID: meetingID)
+                }
+            } else {
+                await self.resumePostStopProcessing(meetingID: meetingID)
+            }
+        }
+
+        postStopProcessingTasks[meetingID] = task
+        return task
+    }
+
+    private func resumePendingPostStopProcessingIfNeeded() {
+        let pendingMeetings = ((try? repository.fetchMeetings(includeDeleted: true)) ?? [])
+            .filter { $0.syncState != .deleted && $0.postStopProcessingStage != .idle }
+
+        for meeting in pendingMeetings {
+            startPostStopProcessing(for: meeting.id, useExpiringActivity: false)
+        }
+    }
+
+    private func resumePostStopProcessing(meetingID: String) async {
+        guard let meeting = meeting(withID: meetingID) else { return }
+
+        switch meeting.postStopProcessingStage {
+        case .idle:
+            return
+        case .repairingTranscript:
+            guard let artifact = localAudioArtifact(for: meeting) else { return }
+            await repairStoppedRecordingTranscript(meetingID: meetingID, artifact: artifact)
+        case .finalizing:
+            await finalizeStoppedMeeting(meetingID: meetingID)
+        }
+    }
+
+    private func localAudioArtifact(for meeting: Meeting) -> LocalAudioArtifact? {
+        guard let audioLocalPath = meeting.audioLocalPath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !audioLocalPath.isEmpty,
+              FileManager.default.fileExists(atPath: audioLocalPath) else {
+            return nil
+        }
+
+        return LocalAudioArtifact(
+            fileURL: URL(fileURLWithPath: audioLocalPath),
+            durationSeconds: max(meeting.audioDuration, meeting.durationSeconds),
+            mimeType: meeting.audioMimeType ?? "audio/m4a"
+        )
     }
 
     private func prepareMeetingForFileTranscription(
@@ -2631,6 +2689,7 @@ final class MeetingStore {
 
     private func finalizeStoppedMeeting(meetingID: String) async {
         guard let currentMeeting = meeting(withID: meetingID) else { return }
+        var finalizationComplete = true
 
         if currentMeeting.speakerDiarizationState == .processing {
             await syncMeetingIfPossible(
@@ -2640,7 +2699,9 @@ final class MeetingStore {
         }
 
         guard let meeting = meeting(withID: meetingID) else { return }
-        if meeting.transcriptPipelineState == .initializing || meeting.transcriptPipelineState == .failed {
+        if meeting.speakerDiarizationState == .processing
+            || meeting.transcriptPipelineState == .initializing
+            || meeting.transcriptPipelineState == .failed {
             loadMeetings()
             return
         }
@@ -2652,7 +2713,11 @@ final class MeetingStore {
         let needsBackendForAIFinalization = canGenerateTitle || canGenerateEnhancedNotes
         let backendReachable = needsBackendForAIFinalization
             ? await ensureBackendReachable(force: false)
-            : false
+            : true
+
+        if needsBackendForAIFinalization, !backendReachable {
+            return
+        }
 
         if meeting.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
            canGenerateTitle,
@@ -2675,6 +2740,7 @@ final class MeetingStore {
                     loadMeetings()
                 }
             } catch {
+                finalizationComplete = false
                 let message = "标题生成失败：\(error.localizedDescription)"
                 lastErrorMessage = message
                 settingsStore.syncStatusMessage = message
@@ -2701,6 +2767,7 @@ final class MeetingStore {
                     loadMeetings()
                 }
             } catch {
+                finalizationComplete = false
                 let message = "AI 后处理失败：\(error.localizedDescription)"
                 lastErrorMessage = message
                 settingsStore.syncStatusMessage = message
@@ -2710,6 +2777,23 @@ final class MeetingStore {
 
         if meeting.syncState != .synced || meeting.lastSyncedAt == nil {
             await syncMeetingIfPossible(meetingID: meetingID, userVisibleFailurePrefix: "会议同步失败")
+            guard let syncedMeeting = self.meeting(withID: meetingID),
+                  syncedMeeting.syncState == .synced,
+                  syncedMeeting.lastSyncedAt != nil else {
+                return
+            }
+        }
+
+        guard finalizationComplete, let finalizedMeeting = self.meeting(withID: meetingID) else { return }
+        guard finalizedMeeting.postStopProcessingStage != .idle else { return }
+
+        finalizedMeeting.postStopProcessingStage = .idle
+
+        do {
+            try repository.save()
+            loadMeetings()
+        } catch {
+            lastErrorMessage = error.localizedDescription
         }
     }
 
@@ -3053,6 +3137,10 @@ final class MeetingStore {
         cancelSyncRecoveryTask()
         backgroundTranscriptBackfillTask?.cancel()
         backgroundTranscriptBackfillTask = nil
+        for task in postStopProcessingTasks.values {
+            task.cancel()
+        }
+        postStopProcessingTasks.removeAll()
 
         for task in scheduledSyncTasks.values {
             task.cancel()
@@ -3123,6 +3211,8 @@ final class MeetingStore {
     private func discardLocalMeetingState(for meeting: Meeting) {
         scheduledSyncTasks[meeting.id]?.cancel()
         scheduledSyncTasks[meeting.id] = nil
+        postStopProcessingTasks[meeting.id]?.cancel()
+        postStopProcessingTasks[meeting.id] = nil
         fileTranscriptionTasks[meeting.id]?.cancel()
         fileTranscriptionTasks[meeting.id] = nil
         cancelNoteAttachmentTextTask(for: meeting.id)

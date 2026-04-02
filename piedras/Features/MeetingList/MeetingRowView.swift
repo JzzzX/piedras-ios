@@ -17,17 +17,24 @@ struct MeetingRowSnapshot: Identifiable, Hashable {
     let metadataPrimary: String
     let metadataDuration: String?
     let isRecording: Bool
+    let isProcessing: Bool
     let showsSyncFailure: Bool
     let matchedSources: [MeetingSearchSource]
 
-    init(meeting: Meeting, isRecording: Bool, matchedSources: [MeetingSearchSource] = []) {
+    init(
+        meeting: Meeting,
+        isRecording: Bool,
+        isProcessing: Bool = false,
+        matchedSources: [MeetingSearchSource] = []
+    ) {
         id = meeting.id
         title = meeting.displayTitle
         let metadataComponents = meeting.homeMetadataComponents()
         metadataPrimary = metadataComponents.first ?? ""
         metadataDuration = metadataComponents.dropFirst().first
         self.isRecording = isRecording
-        showsSyncFailure = !isRecording && meeting.syncState == .failed
+        self.isProcessing = isProcessing
+        showsSyncFailure = !isRecording && !isProcessing && meeting.syncState == .failed
         self.matchedSources = Array(matchedSources.prefix(2))
     }
 }
@@ -52,6 +59,8 @@ struct MeetingRowView: View {
 
                         if snapshot.isRecording {
                             RetroStampLabel(text: "REC")
+                        } else if snapshot.isProcessing {
+                            RetroStampLabel(text: AppStrings.current.bucketProcessing)
                         } else if snapshot.showsSyncFailure {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 14, weight: .bold))
@@ -99,8 +108,8 @@ struct MeetingRowView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .softCard(
                 fill: AppTheme.surface,
-                borderColor: snapshot.isRecording ? AppTheme.highlight : AppTheme.noteSectionRule,
-                lineWidth: snapshot.isRecording ? 1.5 : AppTheme.subtleBorderWidth
+                borderColor: (snapshot.isRecording || snapshot.isProcessing) ? AppTheme.highlight : AppTheme.noteSectionRule,
+                lineWidth: (snapshot.isRecording || snapshot.isProcessing) ? 1.5 : AppTheme.subtleBorderWidth
             )
             .contentShape(Rectangle())
         }
@@ -124,7 +133,7 @@ struct MeetingRowView: View {
             }
             .frame(width: AppTheme.compactIconSize, height: AppTheme.compactIconSize)
 
-            if snapshot.isRecording {
+            if snapshot.isRecording || snapshot.isProcessing {
                 Rectangle()
                     .fill(AppTheme.highlight)
                     .frame(width: 8, height: 8)

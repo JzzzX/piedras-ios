@@ -43,6 +43,8 @@ private final class StubAudioFileTranscriptionService: AudioFileTranscriptionSer
 
     var behavior: Behavior
     private(set) var transcribeCalls = 0
+    var shouldSuspendTranscription = false
+    private var transcriptionContinuation: CheckedContinuation<Void, Never>?
 
     init(behavior: Behavior) {
         self.behavior = behavior
@@ -59,6 +61,12 @@ private final class StubAudioFileTranscriptionService: AudioFileTranscriptionSer
         onPhaseChange(.preparing)
         onPhaseChange(.connecting)
 
+        if shouldSuspendTranscription {
+            await withCheckedContinuation { continuation in
+                transcriptionContinuation = continuation
+            }
+        }
+
         switch behavior {
         case let .succeed(results):
             onPartialText("partial")
@@ -69,6 +77,11 @@ private final class StubAudioFileTranscriptionService: AudioFileTranscriptionSer
         case let .fail(message):
             throw APIClientError.requestFailed(message)
         }
+    }
+
+    func resumeTranscription() {
+        transcriptionContinuation?.resume()
+        transcriptionContinuation = nil
     }
 }
 
@@ -555,10 +568,14 @@ struct MeetingRecordingRepairTests {
         #expect(refreshedMeeting.status == .ended)
         #expect(refreshedMeeting.speakerDiarizationState == .idle)
         #expect(refreshedMeeting.transcriptPipelineState == .ready)
+        #expect(refreshedMeeting.postStopProcessingStage == .finalizing)
         #expect(fixture.meetingStore.fileTranscriptionStatus(meetingID: meeting.id) == nil)
 
         fixture.syncService.resumeSync()
         await stopTask.value
+
+        let finalizedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(finalizedMeeting.postStopProcessingStage == .idle)
     }
 
     @MainActor
@@ -783,6 +800,103 @@ struct MeetingRecordingRepairTests {
         #expect(fixture.recordingSessionStore.phase == .idle)
         #expect(fixture.recordingSessionStore.needsTranscriptRepairAfterStop == false)
         #expect(fixture.meetingStore.fileTranscriptionStatus(meetingID: meeting.id) == nil)
+    }
+
+    @MainActor
+    @Test
+    func stopRecordingWithCoverageGapMarksMeetingAsRepairingBeforeRepairCompletes() async throws {
+        let fixture = try makeFixture(
+            transcriptionBehavior: .succeed([
+                ASRFinalResult(text: "完整补转写", startTime: 0, endTime: 2_000)
+            ])
+        )
+        fixture.transcriber.shouldSuspendTranscription = true
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "已有标题"
+        meeting.enhancedNotes = "已有 AI 笔记"
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.markTranscriptCoverageGap()
+
+        let audioURL = try makeTemporaryAudioFile(named: "recording-repair-stage.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        let stopTask = Task { @MainActor in
+            await fixture.meetingStore.finishStoppedRecording(
+                meetingID: meeting.id,
+                artifact: LocalAudioArtifact(
+                    fileURL: audioURL,
+                    durationSeconds: 8,
+                    mimeType: "audio/m4a"
+                )
+            )
+        }
+
+        try await waitUntil { fixture.transcriber.transcribeCalls == 1 }
+
+        let repairingMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(repairingMeeting.postStopProcessingStage == .repairingTranscript)
+        #expect(fixture.recordingSessionStore.phase == .idle)
+
+        fixture.transcriber.resumeTranscription()
+        await stopTask.value
+    }
+
+    @MainActor
+    @Test
+    func loadIfNeededResumesPendingPostStopFinalization() async throws {
+        let container = try ModelContainerFactory.makeContainer(inMemory: true)
+        let repository = MeetingRepository(modelContext: container.mainContext)
+        let chatRepository = ChatSessionRepository(modelContext: container.mainContext)
+        let settingsStore = makeSettingsStore()
+        settingsStore.hiddenWorkspaceID = "workspace-1"
+        settingsStore.workspaceBootstrapState = .success
+        settingsStore.markBackendReachable()
+        let recordingSessionStore = RecordingSessionStore()
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let recorder = StubAudioRecorderService()
+        let transcriber = StubAudioFileTranscriptionService(behavior: .succeed([]))
+        let syncService = StubMeetingSyncService(repository: repository)
+        let asrService = StubASRService()
+
+        let meeting = try repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "已有标题"
+        meeting.enhancedNotes = "已有 AI 笔记"
+        meeting.status = .ended
+        meeting.transcriptPipelineState = .ready
+        meeting.syncState = .pending
+        meeting.postStopProcessingStage = .finalizing
+        meeting.markPending()
+        try repository.save()
+
+        let meetingStore = MeetingStore(
+            repository: repository,
+            chatSessionRepository: chatRepository,
+            settingsStore: settingsStore,
+            recordingSessionStore: recordingSessionStore,
+            appActivityCoordinator: AppActivityCoordinator(),
+            recordingLiveActivityCoordinator: StubRecordingLiveActivityCoordinator(),
+            audioRecorderService: recorder,
+            audioFileTranscriptionService: transcriber,
+            apiClient: apiClient,
+            asrService: asrService,
+            workspaceBootstrapService: WorkspaceBootstrapService(
+                apiClient: apiClient,
+                settingsStore: settingsStore
+            ),
+            meetingSyncService: syncService
+        )
+
+        meetingStore.loadIfNeeded()
+        try await waitUntil { syncService.syncedMeetingIDs == [meeting.id] }
+
+        let resumedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(resumedMeeting.postStopProcessingStage == .idle)
     }
 
     @MainActor

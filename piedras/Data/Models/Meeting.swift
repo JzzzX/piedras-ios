@@ -124,6 +124,14 @@ enum AudioEnhancedNotesStatus: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+enum MeetingPostStopProcessingStage: String, Codable, CaseIterable, Identifiable {
+    case idle
+    case repairingTranscript
+    case finalizing
+
+    var id: String { rawValue }
+}
+
 @Model
 final class Meeting {
     @Attribute(.unique) var id: String
@@ -138,6 +146,8 @@ final class Meeting {
     private var audioEnhancedNotesValue: String?
     @Attribute(originalName: "audioEnhancedNotesStatusRawValue")
     private var audioEnhancedNotesStatusRawValueValue: String?
+    @Attribute(originalName: "postStopProcessingStageRawValue")
+    private var postStopProcessingStageRawValueValue: String?
     @Attribute(originalName: "audioEnhancedNotesError")
     private var audioEnhancedNotesErrorValue: String?
     var audioEnhancedNotesUpdatedAt: Date?
@@ -205,6 +215,7 @@ final class Meeting {
         enhancedNotes: String = "",
         audioEnhancedNotes: String = "",
         audioEnhancedNotesStatus: AudioEnhancedNotesStatus = .idle,
+        postStopProcessingStage: MeetingPostStopProcessingStage = .idle,
         audioEnhancedNotesError: String = "",
         audioEnhancedNotesUpdatedAt: Date? = nil,
         audioEnhancedNotesProvider: String? = nil,
@@ -253,6 +264,7 @@ final class Meeting {
         self.enhancedNotes = enhancedNotes
         self.audioEnhancedNotesValue = audioEnhancedNotes
         self.audioEnhancedNotesStatusRawValueValue = audioEnhancedNotesStatus.rawValue
+        self.postStopProcessingStageRawValueValue = postStopProcessingStage.rawValue
         self.audioEnhancedNotesErrorValue = audioEnhancedNotesError
         self.audioEnhancedNotesUpdatedAt = audioEnhancedNotesUpdatedAt
         self.audioEnhancedNotesProvider = audioEnhancedNotesProvider
@@ -321,6 +333,11 @@ final class Meeting {
     var audioEnhancedNotesStatus: AudioEnhancedNotesStatus {
         get { AudioEnhancedNotesStatus(rawValue: audioEnhancedNotesStatusRawValueValue ?? "") ?? .idle }
         set { audioEnhancedNotesStatusRawValueValue = newValue.rawValue }
+    }
+
+    var postStopProcessingStage: MeetingPostStopProcessingStage {
+        get { MeetingPostStopProcessingStage(rawValue: postStopProcessingStageRawValueValue ?? "") ?? .idle }
+        set { postStopProcessingStageRawValueValue = newValue.rawValue }
     }
 
     var audioEnhancedNotesError: String {
