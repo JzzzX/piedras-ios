@@ -102,8 +102,8 @@ struct MeetingListView: View {
                 // 折叠后的紧凑型顶栏
                 compactHeader
                     .padding(.horizontal, 18)
-                    .padding(.top, 14)
-                    .padding(.bottom, 8)
+                    .padding(.top, 6)
+                    .padding(.bottom, 6)
                     .background(AppTheme.background.opacity(scrollOffset > 30 ? 0.9 : 0))
                     .opacity(scrollOffset > 30 ? 1 : 0)
                     .allowsHitTesting(scrollOffset > 30)
@@ -137,7 +137,7 @@ struct MeetingListView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: 12) {
             headerUtilityRow()
 
             HomeBrandWordmark(title: AppStrings.current.appTitle)
@@ -174,7 +174,7 @@ struct MeetingListView: View {
             // 大标题头部
             Section {
                 header
-                    .listRowInsets(EdgeInsets(top: 10, leading: 18, bottom: 10, trailing: 18))
+                    .listRowInsets(EdgeInsets(top: 2, leading: 18, bottom: 6, trailing: 18))
                     .listRowBackground(Color.clear)
                     .listRowSeparator(.hidden)
             }
