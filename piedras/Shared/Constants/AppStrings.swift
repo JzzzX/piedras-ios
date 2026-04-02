@@ -33,6 +33,8 @@ struct AppStringTable {
     var newRecording: String { isChinese ? "新录音" : "New recording" }
     var stop: String { isChinese ? "停止" : "Stop" }
     var deleteAction: String { isChinese ? "删除" : "Delete" }
+    var folders: String { isChinese ? "文件夹" : "Folders" }
+    var foldersComingSoon: String { isChinese ? "文件夹功能即将上线" : "Folders are coming soon" }
 
     // ── MeetingHomeBucket ────────────────────────────────────────
 

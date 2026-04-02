@@ -66,11 +66,26 @@ final class RecordingFlowUITests: XCTestCase {
 
         XCTAssertTrue(app.buttons["NewRecordingButton"].waitForExistence(timeout: 5), "首页录音入口未出现。")
         XCTAssertTrue(app.buttons["HomeGlobalChatLauncher"].waitForExistence(timeout: 5), "首页对话入口未出现。")
+        XCTAssertTrue(app.buttons["HomeFolderButton"].waitForExistence(timeout: 5), "首页顶部缺少文件夹入口。")
+        XCTAssertTrue(app.buttons["HomeSearchButton"].exists, "首页顶部缺少搜索入口。")
+        XCTAssertTrue(app.buttons["HomeSettingsButton"].exists, "首页顶部缺少设置入口。")
 
         XCTAssertTrue(app.staticTexts["Piedras"].waitForExistence(timeout: 5), "首页品牌标题未出现。")
         XCTAssertFalse(app.staticTexts["Piedras 笔记"].exists, "首页标题应简化为 Piedras。")
         XCTAssertFalse(app.buttons["HomeNotesButton"].exists, "dock 应回退为两格结构，不再展示左侧笔记入口。")
         XCTAssertTrue(app.staticTexts["与笔记对话"].exists, "dock 右侧应恢复文字对话入口。")
+    }
+
+    @MainActor
+    func testHomeFolderPlaceholderButtonDoesNotNavigateAway() throws {
+        let app = launchApp()
+
+        let folderButton = element(in: app, identifier: "HomeFolderButton", fallbackLabel: "文件夹")
+        XCTAssertTrue(folderButton.waitForExistence(timeout: 5), "首页顶部缺少文件夹入口。")
+        folderButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Piedras"].exists, "点击文件夹入口后仍应停留在首页。")
+        XCTAssertFalse(app.textFields["GlobalChatInputField"].exists, "点击文件夹入口不应误打开全局对话。")
     }
 
     @MainActor

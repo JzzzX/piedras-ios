@@ -91,6 +91,8 @@ struct MeetingListView: View {
 
     @State private var scrollOffset: CGFloat = 0
     @State private var currentSectionTitle: String = ""
+    @State private var toastMessage: String?
+    @State private var toastTask: Task<Void, Never>?
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -104,6 +106,8 @@ struct MeetingListView: View {
                     .padding(.bottom, 8)
                     .background(AppTheme.background.opacity(scrollOffset > 30 ? 0.9 : 0))
                     .opacity(scrollOffset > 30 ? 1 : 0)
+                    .allowsHitTesting(scrollOffset > 30)
+                    .accessibilityHidden(scrollOffset <= 30)
                     .zIndex(2)
 
                 feedList
@@ -114,76 +118,54 @@ struct MeetingListView: View {
             bottomDock
         }
         .overlay(alignment: .top) {
-            if let error = meetingStore.lastErrorMessage {
-                errorBanner(error)
-                    .padding(.top, 10)
-                    .padding(.horizontal, 16)
+            VStack(spacing: 10) {
+                if let error = meetingStore.lastErrorMessage {
+                    errorBanner(error)
+                }
+
+                if let toastMessage {
+                    homeToast(toastMessage)
+                }
             }
+            .padding(.top, 10)
+            .padding(.horizontal, 16)
+        }
+        .onDisappear {
+            toastTask?.cancel()
         }
         .id(settingsStore.appLanguage)
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 14) {
+        VStack(alignment: .leading, spacing: 20) {
+            headerUtilityRow()
+
             HomeBrandWordmark(title: AppStrings.current.appTitle)
                 .opacity(max(0, 1.0 - Double(scrollOffset) / 36.0))
-
-            Spacer()
-
-            HStack(spacing: 8) {
-                headerToolButton(
-                    systemName: "magnifyingglass",
-                    accessibilityLabel: AppStrings.current.search,
-                    identifier: "HomeSearchButton",
-                    action: {
-                        router.showSearch()
-                    }
-                )
-
-                headerToolButton(
-                    systemName: "slider.horizontal.3",
-                    accessibilityLabel: AppStrings.current.settings,
-                    identifier: "HomeSettingsButton",
-                    action: {
-                        router.showSettings()
-                    }
-                )
-            }
         }
+        .accessibilityHidden(scrollOffset > 30)
     }
 
     private var compactHeader: some View {
         HStack(alignment: .center, spacing: 14) {
+            folderButton(
+                identifier: "HomeCompactFolderButton",
+                size: 32,
+                iconSize: 14
+            )
+
             Text(currentSectionTitle.isEmpty ? "" : currentSectionTitle.uppercased())
                 .font(AppTheme.bodyFont(size: 14, weight: .bold))
                 .foregroundStyle(AppTheme.brandInk)
                 .lineLimit(1)
+                .frame(maxWidth: .infinity)
 
-            Spacer()
-
-            HStack(spacing: 8) {
-                headerToolButton(
-                    systemName: "magnifyingglass",
-                    accessibilityLabel: AppStrings.current.search,
-                    identifier: "HomeSearchButton",
-                    size: 32,
-                    iconSize: 14,
-                    action: {
-                        router.showSearch()
-                    }
-                )
-
-                headerToolButton(
-                    systemName: "slider.horizontal.3",
-                    accessibilityLabel: AppStrings.current.settings,
-                    identifier: "HomeSettingsButton",
-                    size: 32,
-                    iconSize: 14,
-                    action: {
-                        router.showSettings()
-                    }
-                )
-            }
+            headerActionButtons(
+                searchIdentifier: "HomeCompactSearchButton",
+                settingsIdentifier: "HomeCompactSettingsButton",
+                size: 32,
+                iconSize: 14
+            )
         }
     }
 
@@ -370,6 +352,64 @@ struct MeetingListView: View {
         }
     }
 
+    private func headerUtilityRow(size: CGFloat = 40, iconSize: CGFloat = 16) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            folderButton(size: size, iconSize: iconSize)
+
+            Spacer()
+
+            headerActionButtons(size: size, iconSize: iconSize)
+        }
+    }
+
+    private func headerActionButtons(
+        searchIdentifier: String = "HomeSearchButton",
+        settingsIdentifier: String = "HomeSettingsButton",
+        size: CGFloat = 40,
+        iconSize: CGFloat = 16
+    ) -> some View {
+        HStack(spacing: 8) {
+            headerToolButton(
+                systemName: "magnifyingglass",
+                accessibilityLabel: AppStrings.current.search,
+                identifier: searchIdentifier,
+                size: size,
+                iconSize: iconSize,
+                action: {
+                    router.showSearch()
+                }
+            )
+
+            headerToolButton(
+                systemName: "slider.horizontal.3",
+                accessibilityLabel: AppStrings.current.settings,
+                identifier: settingsIdentifier,
+                size: size,
+                iconSize: iconSize,
+                action: {
+                    router.showSettings()
+                }
+            )
+        }
+    }
+
+    private func folderButton(
+        identifier: String = "HomeFolderButton",
+        size: CGFloat = 40,
+        iconSize: CGFloat = 16
+    ) -> some View {
+        headerToolButton(
+            systemName: "folder",
+            accessibilityLabel: AppStrings.current.folders,
+            identifier: identifier,
+            size: size,
+            iconSize: iconSize,
+            action: {
+                showToast(AppStrings.current.foldersComingSoon)
+            }
+        )
+    }
+
     private func headerToolButton(
         systemName: String,
         accessibilityLabel: String,
@@ -393,6 +433,26 @@ struct MeetingListView: View {
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityIdentifier(identifier)
+    }
+
+    private func homeToast(_ message: String) -> some View {
+        HStack {
+            Text(message)
+                .font(AppTheme.bodyFont(size: 13, weight: .semibold))
+                .foregroundStyle(AppTheme.primaryActionForeground)
+                .lineLimit(1)
+        }
+            .padding(.horizontal, 14)
+            .frame(height: 36)
+            .background(AppTheme.primaryActionFill)
+            .overlay(
+                Rectangle()
+                    .stroke(AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
+            )
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(message)
+            .accessibilityIdentifier("HomeFolderPlaceholderToast")
+            .transition(.opacity.combined(with: .move(edge: .top)))
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -536,6 +596,21 @@ struct MeetingListView: View {
         router.showMeeting(id: meeting.id)
         Task {
             await meetingStore.startRecording(meetingID: meeting.id)
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toastTask?.cancel()
+        withAnimation(.easeOut(duration: 0.18)) {
+            toastMessage = message
+        }
+
+        toastTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.18)) {
+                toastMessage = nil
+            }
         }
     }
 
