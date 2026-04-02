@@ -14,8 +14,11 @@ struct TranscriptView: View {
             if sentences.isEmpty {
                 emptyState
             } else {
-                ForEach(sentences) { sentence in
-                    sentenceRow(sentence)
+                ForEach(Array(sentences.enumerated()), id: \.element.id) { index, sentence in
+                    sentenceRow(
+                        sentence,
+                        showsDivider: sentence.usesStructuredSpeakerPresentation && hasLaterStructuredSentence(after: index)
+                    )
                 }
             }
         }
@@ -37,19 +40,71 @@ struct TranscriptView: View {
         }
     }
 
-    // MARK: - Sentence Row
+    private func sentenceRow(_ sentence: TranscriptSentence, showsDivider: Bool) -> some View {
+        VStack(alignment: .leading, spacing: sentence.usesStructuredSpeakerPresentation ? 8 : 2) {
+            if sentence.usesStructuredSpeakerPresentation {
+                structuredSpeakerRow(sentence, showsDivider: showsDivider)
+            } else {
+                legacySentenceRow(sentence)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("TranscriptSegmentRow")
+    }
 
-    private func sentenceRow(_ sentence: TranscriptSentence) -> some View {
+    private func structuredSpeakerRow(_ sentence: TranscriptSentence, showsDivider: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let speakerIdentity = sentence.speakerIdentity {
+                HStack(alignment: .center, spacing: 10) {
+                    TranscriptSpeakerAvatar(identity: speakerIdentity)
+
+                    speakerHeaderButton(sentence: sentence, identity: speakerIdentity)
+
+                    Spacer(minLength: 0)
+
+                    if let segment = sentence.segment,
+                       let annotation = segment.annotation,
+                       annotation.hasContent {
+                        annotationBadges(annotation)
+                    }
+
+                    transcriptTimestamp(sentence.timeLabel)
+                }
+                .accessibilityElement(children: .contain)
+            }
+
+            transcriptBody(sentence)
+
+            if let segment = sentence.segment,
+               annotationStore.activeSegmentID == segment.id {
+                SegmentAnnotationEditor(
+                    segment: segment,
+                    meetingID: meeting.id
+                )
+                .padding(.top, 2)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+
+            if showsDivider {
+                Rectangle()
+                    .fill(AppTheme.transcriptDivider)
+                    .frame(height: AppTheme.subtleBorderWidth)
+                    .padding(.top, 4)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Transcript segment divider")
+                    .accessibilityIdentifier("TranscriptSegmentDivider")
+            }
+        }
+    }
+
+    private func legacySentenceRow(_ sentence: TranscriptSentence) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
-                if let speakerLabel = sentence.speakerLabel {
-                    speakerLabelView(sentence: sentence, speakerLabel: speakerLabel)
+                if let speakerIdentity = sentence.speakerIdentity {
+                    speakerHeaderButton(sentence: sentence, identity: speakerIdentity)
                 }
 
-                Text(sentence.timeLabel)
-                    .font(AppTheme.dataFont(size: 11, weight: .bold))
-                    .foregroundStyle(AppTheme.subtleInk)
-                    .accessibilityIdentifier("TranscriptTimestamp")
+                transcriptTimestamp(sentence.timeLabel)
 
                 if sentence.isLive {
                     Rectangle()
@@ -63,21 +118,16 @@ struct TranscriptView: View {
 
                 Spacer(minLength: 0)
 
-                // Annotation indicator badges (collapsed state)
                 if let segment = sentence.segment,
                    let annotation = segment.annotation,
                    annotation.hasContent {
                     annotationBadges(annotation)
                 }
             }
+            .accessibilityElement(children: .contain)
 
-            Text(sentence.text)
-                .font(AppTheme.bodyFont(size: 16))
-                .lineSpacing(AppTheme.editorialBodyLineSpacing)
-                .foregroundStyle(AppTheme.ink.opacity(sentence.isLive ? 0.84 : 1))
-                .fixedSize(horizontal: false, vertical: true)
+            transcriptBody(sentence)
 
-            // Expanded inline annotation editor
             if let segment = sentence.segment,
                annotationStore.activeSegmentID == segment.id {
                 SegmentAnnotationEditor(
@@ -88,50 +138,66 @@ struct TranscriptView: View {
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    private func transcriptTimestamp(_ label: String) -> some View {
+        ZStack {
+            Text(label)
+                .font(AppTheme.dataFont(size: 11, weight: .bold))
+                .foregroundStyle(AppTheme.subtleInk)
+
+            Color.clear
+                .frame(width: 1, height: 1)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(label)
+                .accessibilityIdentifier("TranscriptTimestamp")
+        }
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private func speakerHeaderButton(
+        sentence: TranscriptSentence,
+        identity: TranscriptSpeakerIdentity
+    ) -> some View {
+        if sentence.canRenameSpeaker {
+            Button {
+                beginSpeakerRename(for: sentence)
+            } label: {
+                HStack(spacing: 5) {
+                    Text(identity.title)
+                        .font(AppTheme.bodyFont(size: 15, weight: .semibold))
+                        .foregroundStyle(AppTheme.brandInk)
+
+                    Image(systemName: "pencil")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(AppTheme.subtleInk)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("TranscriptSpeakerHeaderButton")
+        } else {
+            Text(identity.title)
+                .font(AppTheme.bodyFont(size: 15, weight: .semibold))
+                .foregroundStyle(AppTheme.brandInk)
+                .accessibilityIdentifier("TranscriptSpeakerTitle")
+        }
+    }
+
+    private func transcriptBody(_ sentence: TranscriptSentence) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(sentence.text)
+                .font(AppTheme.bodyFont(size: 16))
+                .lineSpacing(AppTheme.editorialBodyLineSpacing)
+                .foregroundStyle(AppTheme.ink.opacity(sentence.isLive ? 0.84 : 1))
+                .fixedSize(horizontal: false, vertical: true)
+        }
         .contentShape(Rectangle())
         .onTapGesture {
             guard let segment = sentence.segment, !sentence.isLive else { return }
             handleSegmentTap(segment)
         }
     }
-
-    @ViewBuilder
-    private func speakerLabelView(sentence: TranscriptSentence, speakerLabel: String) -> some View {
-        if sentence.canRenameSpeaker {
-            Button {
-                beginSpeakerRename(for: sentence)
-            } label: {
-                speakerBadge(label: speakerLabel, isEditable: true)
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("TranscriptSpeakerButton")
-        } else {
-            speakerBadge(label: speakerLabel, isEditable: false)
-        }
-    }
-
-    private func speakerBadge(label: String, isEditable: Bool) -> some View {
-        HStack(spacing: 4) {
-            Text(label)
-                .font(AppTheme.dataFont(size: 11, weight: .bold))
-                .foregroundStyle(AppTheme.brandInk)
-
-            if isEditable {
-                Image(systemName: "pencil")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(AppTheme.subtleInk)
-            }
-        }
-        .padding(.horizontal, 8)
-        .frame(height: 22)
-        .background(AppTheme.selectedChromeFill)
-        .overlay(
-            Rectangle()
-                .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.subtleBorderWidth)
-        )
-    }
-
-    // MARK: - Annotation Badges
 
     @ViewBuilder
     private func annotationBadges(_ annotation: SegmentAnnotation) -> some View {
@@ -156,15 +222,11 @@ struct TranscriptView: View {
         }
     }
 
-    // MARK: - Tap Handler
-
     private func handleSegmentTap(_ segment: TranscriptSegment) {
         withAnimation(.easeOut(duration: 0.18)) {
             annotationStore.toggleEditor(for: segment.id)
         }
     }
-
-    // MARK: - Empty State
 
     private var emptyState: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -186,8 +248,6 @@ struct TranscriptView: View {
             .frame(width: width, height: height)
     }
 
-    // MARK: - Sentences
-
     private var sentences: [TranscriptSentence] {
         var items = meeting.orderedSegments.compactMap { segment -> TranscriptSentence? in
             let trimmedText = segment.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -208,7 +268,7 @@ struct TranscriptView: View {
                     text: recordingSessionStore.currentPartial.trimmingCharacters(in: .whitespacesAndNewlines),
                     isLive: true,
                     segment: nil,
-                    speakerLabel: nil,
+                    speakerIdentity: nil,
                     speakerKey: nil
                 )
             )
@@ -223,13 +283,18 @@ struct TranscriptView: View {
                         .trimmingCharacters(in: .whitespacesAndNewlines),
                     isLive: true,
                     segment: nil,
-                    speakerLabel: nil,
+                    speakerIdentity: nil,
                     speakerKey: nil
                 )
             )
         }
 
         return items
+    }
+
+    private func hasLaterStructuredSentence(after index: Int) -> Bool {
+        guard index + 1 < sentences.count else { return false }
+        return sentences[(index + 1)...].contains { $0.usesStructuredSpeakerPresentation }
     }
 
     private var showsLiveSentence: Bool {
@@ -303,27 +368,63 @@ struct TranscriptView: View {
     }
 }
 
+private struct TranscriptSpeakerAvatar: View {
+    let identity: TranscriptSpeakerIdentity
+
+    var body: some View {
+        ZStack {
+            Rectangle()
+                .fill(AppTheme.transcriptSpeakerFill(index: identity.paletteIndex))
+                .overlay(
+                    Rectangle()
+                        .stroke(AppTheme.selectedChromeBorder, lineWidth: AppTheme.subtleBorderWidth)
+                )
+
+            Text(identity.avatarToken)
+                .font(AppTheme.dataFont(size: 11, weight: .bold))
+                .foregroundStyle(AppTheme.transcriptSpeakerForeground(index: identity.paletteIndex))
+        }
+        .frame(width: 22, height: 22)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(identity.avatarToken)
+        .accessibilityIdentifier("TranscriptSpeakerAvatar")
+    }
+}
+
 struct TranscriptSentence: Identifiable {
     let id: String
     let timeLabel: String
     let text: String
     let isLive: Bool
     let segment: TranscriptSegment?
-    let speakerLabel: String?
+    let speakerIdentity: TranscriptSpeakerIdentity?
     let speakerKey: String?
 
     var canRenameSpeaker: Bool {
         !isLive && !(speakerKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
     }
 
+    var usesStructuredSpeakerPresentation: Bool {
+        !isLive && speakerIdentity != nil
+    }
+
     static func segment(_ segment: TranscriptSegment, in meeting: Meeting, timeLabel: String) -> TranscriptSentence {
-        TranscriptSentence(
+        let normalizedSpeaker = segment.speaker.trimmingCharacters(in: .whitespacesAndNewlines)
+        let displayName = meeting.speakers[normalizedSpeaker]
+
+        return TranscriptSentence(
             id: segment.id,
             timeLabel: timeLabel,
             text: segment.text.trimmingCharacters(in: .whitespacesAndNewlines),
             isLive: false,
             segment: segment,
-            speakerLabel: meeting.displayName(forSpeaker: segment.speaker),
+            speakerIdentity: segment.isFinal && !normalizedSpeaker.isEmpty
+                ? TranscriptSpeakerIdentity.resolve(
+                    speakerKey: normalizedSpeaker,
+                    displayName: displayName,
+                    strings: AppStrings.current
+                )
+                : nil,
             speakerKey: segment.speaker
         )
     }

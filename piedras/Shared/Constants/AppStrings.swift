@@ -126,7 +126,8 @@ struct AppStringTable {
 
     func speakerLabel(_ index: Int) -> String {
         let normalized = max(index, 1)
-        return isChinese ? "说话人 \(normalized)" : "Speaker \(normalized)"
+        let token = TranscriptSpeakerIdentity.token(forIndex: normalized - 1)
+        return isChinese ? "发言人 \(token)" : "Speaker \(token)"
     }
 
     func transcribingAudioProgress(elapsed: String, total: String) -> String {

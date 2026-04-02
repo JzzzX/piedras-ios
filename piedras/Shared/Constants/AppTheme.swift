@@ -166,6 +166,34 @@ enum AppTheme {
     static let subtleBorderWidth: CGFloat = 1
     static let subtleBorderColor: Color = Color(hex: 0x1E1A17).opacity(0.14)
     static let compactIconSize: CGFloat = 32
+    private static let transcriptSpeakerPalette: [Color] = [
+        Color(hex: 0xDCC8AE), // warm cream
+        Color(hex: 0xD9B08C), // soft apricot
+        Color(hex: 0xCFA8A4), // dusty rose
+        Color(hex: 0xC88E72), // muted terracotta
+        Color(hex: 0xB88079), // subdued wine red
+        Color(hex: 0xB79773), // camel brown
+    ]
+    private static let transcriptSpeakerForegroundPalette: [Color] = [
+        brandInk,
+        brandInk,
+        brandInk,
+        surface,
+        surface,
+        surface,
+    ]
+
+    static func transcriptSpeakerFill(index: Int) -> Color {
+        let normalized = abs(index) % transcriptSpeakerPalette.count
+        return transcriptSpeakerPalette[normalized]
+    }
+
+    static func transcriptSpeakerForeground(index: Int) -> Color {
+        let normalized = abs(index) % transcriptSpeakerForegroundPalette.count
+        return transcriptSpeakerForegroundPalette[normalized]
+    }
+
+    static var transcriptDivider: Color { noteSectionRule.opacity(0.92) }
 }
 
 // MARK: - Color Hex Initializer

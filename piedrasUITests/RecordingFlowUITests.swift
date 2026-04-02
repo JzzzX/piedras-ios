@@ -145,7 +145,16 @@ final class RecordingFlowUITests: XCTestCase {
         app.buttons["MeetingTranscriptSheetButton"].tap()
         XCTAssertTrue(app.otherElements["MeetingTranscriptSheet"].waitForExistence(timeout: 3), "点击 Transcript 后应打开 transcript sheet。")
         XCTAssertTrue(app.staticTexts["MeetingTranscriptSheetTitle"].exists, "Transcript sheet 缺少标题。")
-        XCTAssertTrue(app.staticTexts.matching(identifier: "TranscriptTimestamp").firstMatch.waitForExistence(timeout: 3), "Transcript sheet 缺少时间戳。")
+        XCTAssertTrue(element(in: app, identifier: "TranscriptTimestamp").waitForExistence(timeout: 3), "Transcript sheet 缺少时间戳。")
+        XCTAssertTrue(app.otherElements.matching(identifier: "TranscriptSpeakerAvatar").firstMatch.exists, "Transcript sheet 缺少说话人头像。")
+        XCTAssertTrue(app.buttons.matching(identifier: "TranscriptSpeakerHeaderButton").firstMatch.exists, "Transcript sheet 缺少说话人标题入口。")
+        XCTAssertTrue(app.otherElements.matching(identifier: "TranscriptSegmentDivider").firstMatch.exists, "Transcript sheet 缺少段落分隔线。")
+
+        let speakerHeader = app.buttons.matching(identifier: "TranscriptSpeakerHeaderButton").firstMatch
+        speakerHeader.tap()
+        let renameAlert = app.alerts["重命名说话人"]
+        XCTAssertTrue(renameAlert.waitForExistence(timeout: 2), "点击说话人标题后应打开重命名弹窗。")
+        renameAlert.buttons["取消"].tap()
         app.buttons["MeetingTranscriptSheetCloseButton"].tap()
 
         let moreButton = app.buttons["MeetingDetailMoreButton"]

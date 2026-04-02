@@ -140,7 +140,7 @@ struct SpeakerDiarizationTests {
             timeLabel: "00:00"
         )
 
-        #expect(sentence.speakerLabel == "候选人")
+        #expect(sentence.speakerIdentity?.title == "候选人")
         #expect(sentence.speakerKey == "spk_2")
         #expect(sentence.canRenameSpeaker)
     }
