@@ -24,7 +24,7 @@ enum StreamTextReader {
         try await consume(bytes: bytes, onUpdate: nil)
     }
 
-    private static func consume(
+    static func consume(
         bytes: URLSession.AsyncBytes,
         onUpdate: ((String) -> Void)?
     ) async throws -> String {

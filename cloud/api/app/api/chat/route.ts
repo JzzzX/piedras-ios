@@ -6,9 +6,12 @@ import {
   normalizePromptOptions,
 } from '@/lib/chat-prompts';
 import { buildMeetingMaterialContext } from '@/lib/meeting-ai-context';
-import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
+import {
+  generateTextWithFallback,
+  hasAvailableLlm,
+  resolveLlmRequestPolicy,
+} from '@/lib/llm-provider';
 
-const CHAT_TIMEOUT_MS = 18_000;
 const CHAT_MAX_TOKENS = 1_536;
 
 function createTextStream(text: string): ReadableStream<Uint8Array> {
@@ -86,12 +89,14 @@ export async function POST(req: NextRequest) {
       })),
       { role: 'user', content: question },
     ];
+    const requestPolicy = resolveLlmRequestPolicy('chat');
 
     const { content, provider } = await generateTextWithFallback({
       messages,
       temperature: 0.5,
       maxTokens: CHAT_MAX_TOKENS,
-      timeoutMs: CHAT_TIMEOUT_MS,
+      timeoutMs: requestPolicy.timeoutMs,
+      retries: requestPolicy.retries,
       runtimeConfig: llmRuntimeConfig,
     });
 

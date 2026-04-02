@@ -73,6 +73,9 @@ enum APIClientError: LocalizedError {
 @MainActor
 final class APIClient: AuthNetworking {
     private static let requestIDHeader = "X-Request-Id"
+    private static let defaultRequestTimeout: TimeInterval = 30
+    private static let aiRequestTimeout: TimeInterval = 45
+    private static let aiRequestRetryCount = 1
     private let settingsStore: SettingsStore
     private let authTokenStore: any AuthTokenStoring
     private let session: URLSession
@@ -360,6 +363,7 @@ final class APIClient: AuthNetworking {
 
         var request = URLRequest(url: url)
         request.timeoutInterval = 60
+        request.setValue(Self.makeRequestID(), forHTTPHeaderField: Self.requestIDHeader)
         if let sessionToken = authTokenStore.sessionToken?.nilIfBlank {
             request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
         }
@@ -378,7 +382,12 @@ final class APIClient: AuthNetworking {
     }
 
     func enhanceNotes(_ payload: EnhanceRequestPayload) async throws -> RemoteEnhanceResponse {
-        try await sendJSONRequest(path: "/api/enhance", method: "POST", body: payload)
+        try await sendRetryableAIJSONRequest(
+            path: "/api/enhance",
+            method: "POST",
+            body: payload,
+            fallback: "AI 后处理失败，请稍后重试。"
+        )
     }
 
     func requestAudioEnhancedNotes(
@@ -426,48 +435,20 @@ final class APIClient: AuthNetworking {
 
     func streamChat(_ payload: ChatRequestPayload) async throws -> AsyncThrowingStream<String, Error> {
         var request = try makeRequest(path: "/api/chat", method: "POST")
+        request.timeoutInterval = Self.aiRequestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(payload)
 
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIClientError.invalidResponse
-        }
-
-        guard (200 ..< 300).contains(httpResponse.statusCode) else {
-            let detail = try await StreamTextReader.collect(from: bytes)
-            let message = Self.buildErrorMessage(
-                from: detail.isEmpty ? nil : Data(detail.utf8),
-                response: httpResponse,
-                fallback: "会议对话请求失败。"
-            )
-            throw APIClientError.requestFailed(message)
-        }
-
-        return StreamTextReader.stream(from: bytes)
+        return makeRetryableAITextStream(request: request, fallback: "会议对话请求失败。")
     }
 
     func streamGlobalChat(_ payload: GlobalChatRequestPayload) async throws -> AsyncThrowingStream<String, Error> {
         var request = try makeRequest(path: "/api/chat/global", method: "POST")
+        request.timeoutInterval = Self.aiRequestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(payload)
 
-        let (bytes, response) = try await session.bytes(for: request)
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIClientError.invalidResponse
-        }
-
-        guard (200 ..< 300).contains(httpResponse.statusCode) else {
-            let detail = try await StreamTextReader.collect(from: bytes)
-            let message = Self.buildErrorMessage(
-                from: detail.isEmpty ? nil : Data(detail.utf8),
-                response: httpResponse,
-                fallback: "全局 AI 请求失败。"
-            )
-            throw APIClientError.requestFailed(message)
-        }
-
-        return StreamTextReader.stream(from: bytes)
+        return makeRetryableAITextStream(request: request, fallback: "全局 AI 请求失败。")
     }
 
     func resolveAbsoluteURLString(_ path: String?) -> String? {
@@ -525,6 +506,29 @@ final class APIClient: AuthNetworking {
         return try decoder.decode(Response.self, from: data)
     }
 
+    private func sendRetryableAIJSONRequest<Response: Decodable, Body: Encodable>(
+        path: String,
+        method: String,
+        queryItems: [URLQueryItem] = [],
+        includeAuthorization: Bool = true,
+        body: Body,
+        fallback: String
+    ) async throws -> Response {
+        var request = try makeRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            includeAuthorization: includeAuthorization
+        )
+        request.timeoutInterval = Self.aiRequestTimeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(body)
+
+        let (data, response) = try await performRetryableAIDataRequest(request: request)
+        try validate(response: response, data: data, fallback: fallback)
+        return try decoder.decode(Response.self, from: data)
+    }
+
     private func makeRequest(
         path: String,
         method: String,
@@ -553,12 +557,110 @@ final class APIClient: AuthNetworking {
 
         var request = URLRequest(url: url)
         request.httpMethod = method
-        request.timeoutInterval = 30
+        request.timeoutInterval = Self.defaultRequestTimeout
+        request.setValue(Self.makeRequestID(), forHTTPHeaderField: Self.requestIDHeader)
         if includeAuthorization,
            let sessionToken = authTokenStore.sessionToken?.nilIfBlank {
             request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
         }
         return request
+    }
+
+    private func performRetryableAIDataRequest(
+        request: URLRequest
+    ) async throws -> (Data, URLResponse) {
+        for attempt in 0 ... Self.aiRequestRetryCount {
+            do {
+                let (data, response) = try await session.data(for: request)
+                if let httpResponse = response as? HTTPURLResponse,
+                   Self.isRetryableAIStatusCode(httpResponse.statusCode),
+                   attempt < Self.aiRequestRetryCount {
+                    try await Self.sleepBeforeAIRetry(afterAttempt: attempt)
+                    continue
+                }
+
+                return (data, response)
+            } catch {
+                if attempt < Self.aiRequestRetryCount, Self.isRetryableAITransportError(error) {
+                    try await Self.sleepBeforeAIRetry(afterAttempt: attempt)
+                    continue
+                }
+
+                throw error
+            }
+        }
+
+        throw APIClientError.requestFailed("AI 请求失败，请稍后重试。")
+    }
+
+    private func makeRetryableAITextStream(
+        request: URLRequest,
+        fallback: String
+    ) -> AsyncThrowingStream<String, Error> {
+        let session = self.session
+
+        return AsyncThrowingStream { continuation in
+            let task = Task {
+                for attempt in 0 ... Self.aiRequestRetryCount {
+                    do {
+                        let (bytes, response) = try await session.bytes(for: request)
+                        guard let httpResponse = response as? HTTPURLResponse else {
+                            throw APIClientError.invalidResponse
+                        }
+
+                        guard (200 ..< 300).contains(httpResponse.statusCode) else {
+                            let detail = try await StreamTextReader.collect(from: bytes)
+                            let message = Self.buildErrorMessage(
+                                from: detail.isEmpty ? nil : Data(detail.utf8),
+                                response: httpResponse,
+                                fallback: fallback
+                            )
+                            if attempt < Self.aiRequestRetryCount,
+                               Self.isRetryableAIStatusCode(httpResponse.statusCode) {
+                                try await Self.sleepBeforeAIRetry(afterAttempt: attempt)
+                                continue
+                            }
+
+                            throw APIClientError.requestFailed(message)
+                        }
+
+                        var receivedFirstChunk = false
+
+                        do {
+                            _ = try await StreamTextReader.consume(bytes: bytes) { accumulated in
+                                receivedFirstChunk = true
+                                continuation.yield(accumulated)
+                            }
+                            continuation.finish()
+                            return
+                        } catch {
+                            if attempt < Self.aiRequestRetryCount,
+                               !receivedFirstChunk,
+                               Self.isRetryableAITransportError(error) {
+                                try await Self.sleepBeforeAIRetry(afterAttempt: attempt)
+                                continue
+                            }
+
+                            throw error
+                        }
+                    } catch {
+                        if attempt < Self.aiRequestRetryCount, Self.isRetryableAITransportError(error) {
+                            try await Self.sleepBeforeAIRetry(afterAttempt: attempt)
+                            continue
+                        }
+
+                        continuation.finish(throwing: error)
+                        return
+                    }
+                }
+
+                continuation.finish(throwing: APIClientError.requestFailed(fallback))
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
     }
 
     private func validate(
@@ -634,6 +736,32 @@ final class APIClient: AuthNetworking {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "。.!"))
         return "\(normalizedFallback)（HTTP \(response.statusCode)）"
+    }
+
+    private static func makeRequestID() -> String {
+        UUID().uuidString.lowercased()
+    }
+
+    private static func isRetryableAITransportError(_ error: Error) -> Bool {
+        guard let urlError = error as? URLError else {
+            return false
+        }
+
+        switch urlError.code {
+        case .timedOut, .networkConnectionLost, .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private static func isRetryableAIStatusCode(_ statusCode: Int) -> Bool {
+        [429, 502, 503, 504].contains(statusCode)
+    }
+
+    private static func sleepBeforeAIRetry(afterAttempt attempt: Int) async throws {
+        let delayNanoseconds = UInt64((attempt + 1) * 300_000_000)
+        try await Task.sleep(nanoseconds: delayNanoseconds)
     }
 
     private nonisolated(unsafe) static let iso8601: ISO8601DateFormatter = {

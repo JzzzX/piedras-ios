@@ -2,13 +2,16 @@ import { NextRequest } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { buildMeetingMaterialContext } from '@/lib/meeting-ai-context';
-import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
+import {
+  generateTextWithFallback,
+  hasAvailableLlm,
+  resolveLlmRequestPolicy,
+} from '@/lib/llm-provider';
 import {
   buildEnhanceSystemPrompt,
   normalizeEnhancePromptOptions,
 } from './prompt';
 
-const ENHANCE_TIMEOUT_MS = 12_000;
 const ENHANCE_MAX_TOKENS = 1_200;
 
 export async function POST(req: NextRequest) {
@@ -44,6 +47,7 @@ export async function POST(req: NextRequest) {
 
     const options = normalizeEnhancePromptOptions(promptOptions);
     const systemPrompt = buildEnhanceSystemPrompt(options, resolvedRecipePrompt);
+    const requestPolicy = resolveLlmRequestPolicy('enhance');
 
     const { content, provider } = await generateTextWithFallback({
       messages: [
@@ -69,7 +73,8 @@ ${buildMeetingMaterialContext({
       ],
       temperature: 0.3,
       maxTokens: ENHANCE_MAX_TOKENS,
-      timeoutMs: ENHANCE_TIMEOUT_MS,
+      timeoutMs: requestPolicy.timeoutMs,
+      retries: requestPolicy.retries,
       runtimeConfig: llmRuntimeConfig,
     });
 

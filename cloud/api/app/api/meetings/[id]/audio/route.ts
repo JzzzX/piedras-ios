@@ -55,12 +55,16 @@ export async function GET(
     });
 
     if (!meeting || !meeting.audioMimeType) {
-      return errorResponse(context, 404, '会议音频不存在');
+      return errorResponse(context, 404, '会议音频不存在', undefined, {
+        logLevel: 'silent',
+      });
     }
 
     const exists = await hasMeetingAudioFile(id);
     if (!exists) {
-      return errorResponse(context, 404, '会议音频不存在');
+      return errorResponse(context, 404, '会议音频不存在', undefined, {
+        logLevel: 'silent',
+      });
     }
 
     return buildMeetingAudioResponse(id, meeting.audioMimeType, req.headers.get('range'));

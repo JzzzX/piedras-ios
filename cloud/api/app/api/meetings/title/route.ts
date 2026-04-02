@@ -1,7 +1,11 @@
 import { NextRequest } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
-import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
+import {
+  generateTextWithFallback,
+  hasAvailableLlm,
+  resolveLlmRequestPolicy,
+} from '@/lib/llm-provider';
 import {
   buildHeuristicTitle,
   buildTitleSystemPrompt,
@@ -40,6 +44,7 @@ export async function POST(req: NextRequest) {
 
     let provider = 'heuristic';
     let content = '';
+    const requestPolicy = resolveLlmRequestPolicy('title');
     try {
       const result = await generateTextWithFallback({
         messages: [
@@ -54,6 +59,8 @@ export async function POST(req: NextRequest) {
         ],
         temperature: 0.2,
         maxTokens: 80,
+        timeoutMs: requestPolicy.timeoutMs,
+        retries: requestPolicy.retries,
         runtimeConfig: llmRuntimeConfig,
       });
       provider = result.provider;

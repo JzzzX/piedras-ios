@@ -94,7 +94,9 @@ export async function POST(
     }
 
     if (!meeting.audioMimeType || !(await hasMeetingAudioFile(meeting.id))) {
-      return errorResponse(context, 409, '会议音频不存在，请先完成音频上传。');
+      return errorResponse(context, 409, '会议音频不存在，请先完成音频上传。', undefined, {
+        logLevel: 'silent',
+      });
     }
 
     const payload = await req.json();

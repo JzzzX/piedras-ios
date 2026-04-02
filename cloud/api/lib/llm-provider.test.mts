@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import {
+import llmProviderModule from './llm-provider.ts';
+
+const {
   generateTextWithFallback,
   getConfiguredProviders,
   hasAvailableLlm,
   probeConfiguredLlm,
-} from './llm-provider.ts';
+  resolveLlmRequestPolicy,
+} = llmProviderModule as typeof import('./llm-provider.ts');
 
 const ORIGINAL_ENV = { ...process.env };
 const ORIGINAL_FETCH = globalThis.fetch;
@@ -179,4 +182,20 @@ test('getConfiguredProviders ignores legacy OPENAI env vars', () => {
 
   assert.deepEqual(getConfiguredProviders(), []);
   assert.equal(hasAvailableLlm(), false);
+});
+
+test('resolveLlmRequestPolicy prefers per-scenario timeout and retry env vars', () => {
+  process.env.LLM_TIMEOUT_MS = '12000';
+  process.env.LLM_RETRIES = '1';
+  process.env.LLM_CHAT_TIMEOUT_MS = '30000';
+  process.env.LLM_CHAT_RETRIES = '2';
+
+  assert.deepEqual(resolveLlmRequestPolicy('chat'), {
+    timeoutMs: 30000,
+    retries: 2,
+  });
+  assert.deepEqual(resolveLlmRequestPolicy('enhance'), {
+    timeoutMs: 12000,
+    retries: 1,
+  });
 });

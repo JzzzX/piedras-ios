@@ -47,6 +47,19 @@ export interface LlmGenerateOutput {
   content: string;
 }
 
+export interface LlmRequestPolicy {
+  timeoutMs: number;
+  retries: number;
+}
+
+export type LlmRequestPolicyScenario =
+  | 'default'
+  | 'title'
+  | 'chat'
+  | 'globalChat'
+  | 'enhance'
+  | 'audioEnhance';
+
 interface AiHubMixConfig {
   apiKey: string;
   model: string;
@@ -67,6 +80,14 @@ interface AiHubMixResponsePayload {
 const DEFAULT_TIMEOUT_MS = 18_000;
 const DEFAULT_RETRIES = 0;
 const AIHUBMIX_PROVIDER = 'aihubmix' as const;
+const REQUEST_POLICY_ENV_PREFIX: Record<LlmRequestPolicyScenario, string | null> = {
+  default: null,
+  title: 'TITLE',
+  chat: 'CHAT',
+  globalChat: 'GLOBAL_CHAT',
+  enhance: 'ENHANCE',
+  audioEnhance: 'AUDIO_ENHANCE',
+};
 
 function truncate(text: string, max = 320): string {
   return text.length <= max ? text : `${text.slice(0, max)}...`;
@@ -87,6 +108,46 @@ function formatHttpError(status: number, body: string): string {
 
 function readAiHubMixEnv(key: string, fallback = ''): string {
   return (process.env[key] || fallback).trim();
+}
+
+function parsePositiveInteger(
+  rawValue: string | number | undefined,
+  fallback: number
+): number {
+  const candidate =
+    typeof rawValue === 'number'
+      ? rawValue
+      : typeof rawValue === 'string'
+        ? Number(rawValue.trim())
+        : Number.NaN;
+
+  if (!Number.isFinite(candidate)) {
+    return fallback;
+  }
+
+  return Math.max(0, Math.floor(candidate));
+}
+
+export function resolveLlmRequestPolicy(
+  scenario: LlmRequestPolicyScenario = 'default'
+): LlmRequestPolicy {
+  const envPrefix = REQUEST_POLICY_ENV_PREFIX[scenario];
+  const timeoutMs =
+    envPrefix
+      ? parsePositiveInteger(
+          process.env[`LLM_${envPrefix}_TIMEOUT_MS`],
+          parsePositiveInteger(process.env.LLM_TIMEOUT_MS, DEFAULT_TIMEOUT_MS)
+        )
+      : parsePositiveInteger(process.env.LLM_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
+  const retries =
+    envPrefix
+      ? parsePositiveInteger(
+          process.env[`LLM_${envPrefix}_RETRIES`],
+          parsePositiveInteger(process.env.LLM_RETRIES, DEFAULT_RETRIES)
+        )
+      : parsePositiveInteger(process.env.LLM_RETRIES, DEFAULT_RETRIES);
+
+  return { timeoutMs, retries };
 }
 
 function isRuntimeConfigReady(runtimeConfig?: LlmRuntimeConfig): boolean {
@@ -314,8 +375,9 @@ function sleep(ms: number): Promise<void> {
 export async function generateTextWithFallback(
   input: LlmGenerateInput
 ): Promise<LlmGenerateOutput> {
-  const timeoutMs = Number(input.timeoutMs ?? process.env.LLM_TIMEOUT_MS ?? DEFAULT_TIMEOUT_MS);
-  const retries = Number(input.retries ?? process.env.LLM_RETRIES ?? DEFAULT_RETRIES);
+  const defaultPolicy = resolveLlmRequestPolicy('default');
+  const timeoutMs = parsePositiveInteger(input.timeoutMs, defaultPolicy.timeoutMs);
+  const retries = parsePositiveInteger(input.retries, defaultPolicy.retries);
   const providers = resolveProviderOrder(input.runtimeConfig, input.allowedProviders);
 
   if (providers.length === 0) {

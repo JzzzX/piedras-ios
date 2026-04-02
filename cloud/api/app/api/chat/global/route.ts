@@ -6,11 +6,14 @@ import {
   normalizePromptOptions,
 } from '@/lib/chat-prompts';
 import { buildGlobalChatContextMessage } from '@/lib/meeting-ai-context';
-import { generateTextWithFallback, hasAvailableLlm } from '@/lib/llm-provider';
+import {
+  generateTextWithFallback,
+  hasAvailableLlm,
+  resolveLlmRequestPolicy,
+} from '@/lib/llm-provider';
 import { retrieveGlobalMeetingContext, type GlobalChatFilters } from '@/lib/global-chat';
 import { selectRetrievalResult } from '@/lib/global-chat-selection';
 
-const GLOBAL_CHAT_TIMEOUT_MS = 18_000;
 const GLOBAL_CHAT_MAX_TOKENS = 1_536;
 
 function createTextStream(text: string): ReadableStream<Uint8Array> {
@@ -176,12 +179,14 @@ export async function POST(req: NextRequest) {
       })),
       { role: 'user', content: q },
     ];
+    const requestPolicy = resolveLlmRequestPolicy('globalChat');
 
     const { content, provider } = await generateTextWithFallback({
       messages,
       temperature: 0.4,
       maxTokens: GLOBAL_CHAT_MAX_TOKENS,
-      timeoutMs: GLOBAL_CHAT_TIMEOUT_MS,
+      timeoutMs: requestPolicy.timeoutMs,
+      retries: requestPolicy.retries,
       runtimeConfig: llmRuntimeConfig,
     });
 

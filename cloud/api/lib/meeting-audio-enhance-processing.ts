@@ -6,7 +6,11 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Meeting } from '@prisma/client';
 import { prisma } from './db.ts';
-import { generateTextWithFallback, hasAvailableLlm } from './llm-provider.ts';
+import {
+  generateTextWithFallback,
+  hasAvailableLlm,
+  resolveLlmRequestPolicy,
+} from './llm-provider.ts';
 import { getMeetingAudioPath, hasMeetingAudioFile } from './meeting-audio.ts';
 import { buildAudioMeetingMaterialContext } from './meeting-ai-context.ts';
 import type { PromptOptions } from './types.ts';
@@ -15,7 +19,6 @@ import {
   normalizeEnhancePromptOptions,
 } from '../app/api/enhance/prompt.ts';
 
-const AUDIO_ENHANCE_TIMEOUT_MS = 25_000;
 const AUDIO_ENHANCE_MAX_TOKENS = 1_400;
 const INLINE_AUDIO_MAX_BYTES = 18 * 1024 * 1024;
 const RECOVERY_INTERVAL_MS = 30_000;
@@ -388,6 +391,7 @@ async function generateAudioEnhancedNotes(
     noteAttachmentsContext: payload.noteAttachmentsContext,
     segmentCommentsContext: payload.segmentCommentsContext,
   });
+  const requestPolicy = resolveLlmRequestPolicy('audioEnhance');
 
   const { content, provider } = await generateTextWithFallback({
     messages: [
@@ -405,7 +409,8 @@ async function generateAudioEnhancedNotes(
     ],
     temperature: 0.2,
     maxTokens: AUDIO_ENHANCE_MAX_TOKENS,
-    timeoutMs: AUDIO_ENHANCE_TIMEOUT_MS,
+    timeoutMs: requestPolicy.timeoutMs,
+    retries: requestPolicy.retries,
     preferredProvider: 'aihubmix',
     allowedProviders: ['aihubmix'],
   });
