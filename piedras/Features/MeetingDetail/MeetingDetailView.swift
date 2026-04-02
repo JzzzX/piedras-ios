@@ -10,6 +10,14 @@ private enum MeetingDetailSheet: String, Identifiable {
     var id: String { rawValue }
 }
 
+private func isNoteAttachmentCameraAvailable() -> Bool {
+    guard !ProcessInfo.processInfo.arguments.contains("UITEST_DISABLE_CAMERA") else {
+        return false
+    }
+
+    return UIImagePickerController.isSourceTypeAvailable(.camera)
+}
+
 private struct MeetingActionItem: Identifiable {
     let id = UUID().uuidString
     let title: String
@@ -209,22 +217,13 @@ struct MeetingDetailView: View {
         .sheet(isPresented: $showsNotesDrawer) {
             if let meeting = meetingStore.meeting(withID: meetingID) {
                 MeetingNotesDrawer(
-                    meeting: meeting,
+                    meetingID: meeting.id,
                     initialText: currentNotesText(for: meeting),
                     onClose: {
                         closeNotesDrawer(for: meeting)
                     },
                     onTextChange: { newValue in
                         scheduleNoteSave(newValue, for: meeting)
-                    },
-                    onTakePhoto: {
-                        openNoteAttachmentCamera(for: meeting)
-                    },
-                    onSelectPhotos: {
-                        openNoteAttachmentPhotos(for: meeting)
-                    },
-                    onDeleteAttachment: { fileName in
-                        meetingStore.removeNoteAttachment(fileName: fileName, from: meeting)
                     }
                 )
             }
@@ -1287,7 +1286,7 @@ struct MeetingDetailView: View {
             return
         }
 
-        guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
+        guard isNoteAttachmentCameraAvailable() else {
             showToast(AppStrings.current.cameraUnavailable)
             return
         }
@@ -1765,32 +1764,30 @@ private struct MeetingDetailSurfaceSheet<Content: View>: View {
 }
 
 private struct MeetingNotesDrawer: View {
-    let meeting: Meeting
+    @Environment(MeetingStore.self) private var meetingStore
+
+    let meetingID: String
     let initialText: String
     let onClose: () -> Void
     let onTextChange: (String) -> Void
-    let onTakePhoto: () -> Void
-    let onSelectPhotos: () -> Void
-    let onDeleteAttachment: (String) -> Void
 
     @State private var draft: String
+    @State private var toastMessage: String?
+    @State private var toastTask: Task<Void, Never>?
+    @State private var showsNoteAttachmentCamera = false
+    @State private var showsNoteAttachmentPhotosPicker = false
+    @State private var selectedNoteAttachmentItems: [PhotosPickerItem] = []
 
     init(
-        meeting: Meeting,
+        meetingID: String,
         initialText: String,
         onClose: @escaping () -> Void,
-        onTextChange: @escaping (String) -> Void,
-        onTakePhoto: @escaping () -> Void,
-        onSelectPhotos: @escaping () -> Void,
-        onDeleteAttachment: @escaping (String) -> Void
+        onTextChange: @escaping (String) -> Void
     ) {
-        self.meeting = meeting
+        self.meetingID = meetingID
         self.initialText = initialText
         self.onClose = onClose
         self.onTextChange = onTextChange
-        self.onTakePhoto = onTakePhoto
-        self.onSelectPhotos = onSelectPhotos
-        self.onDeleteAttachment = onDeleteAttachment
         _draft = State(initialValue: initialText)
     }
 
@@ -1803,39 +1800,200 @@ private struct MeetingNotesDrawer: View {
             closeIdentifier: "MeetingNotesDrawerCloseButton",
             onClose: onClose
         ) {
-            ScrollView(showsIndicators: false) {
-                NoteEditorView(
-                    text: $draft,
-                    showsHeader: false,
-                    title: AppStrings.current.notes,
-                    placeholder: AppStrings.current.writeHere,
-                    minHeight: 320,
-                    usesBodyStyle: true,
-                    accessibilityIdentifier: "MeetingNotesEditor"
-                )
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
+            ZStack(alignment: .top) {
+                ScrollView(showsIndicators: false) {
+                    NoteEditorView(
+                        text: $draft,
+                        showsHeader: false,
+                        title: AppStrings.current.notes,
+                        placeholder: AppStrings.current.writeHere,
+                        minHeight: 240,
+                        usesBodyStyle: true,
+                        accessibilityIdentifier: "MeetingNotesEditor"
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
 
-                MeetingNoteAttachmentsSection(
-                    meeting: meeting,
-                    showsInlineAddActions: true,
-                    canAddMore: meeting.noteAttachmentFileNames.count < 10,
-                    showsRefreshHint: meeting.hasAttachmentNotesRefreshHint,
-                    onTakePhoto: onTakePhoto,
-                    onSelectPhotos: onSelectPhotos,
-                    onDelete: onDeleteAttachment
-                )
-                .padding(.horizontal, 20)
-                .padding(.top, 12)
-                .padding(.bottom, 36)
+                    if let meeting = liveMeeting {
+                        MeetingNoteAttachmentsSection(
+                            meeting: meeting,
+                            showsInlineAddActions: true,
+                            canAddMore: meetingStore.canAddNoteAttachment(to: meeting),
+                            showsRefreshHint: meeting.hasAttachmentNotesRefreshHint,
+                            onTakePhoto: openNoteAttachmentCamera,
+                            onSelectPhotos: openNoteAttachmentPhotos,
+                            onDelete: { fileName in
+                                meetingStore.removeNoteAttachment(fileName: fileName, from: meeting)
+                            }
+                        )
+                        .padding(.horizontal, 20)
+                        .padding(.top, 12)
+                        .padding(.bottom, 36)
+                    }
+                }
+                .scrollDismissesKeyboard(.interactively)
+
+                if let toastMessage {
+                    Text(toastMessage)
+                        .font(AppTheme.bodyFont(size: 13, weight: .semibold))
+                        .foregroundStyle(AppTheme.primaryActionForeground)
+                        .padding(.horizontal, 14)
+                        .frame(height: 36)
+                        .background(AppTheme.primaryActionFill)
+                        .overlay(
+                            Rectangle()
+                                .stroke(AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
+                        )
+                        .padding(.top, 14)
+                        .accessibilityIdentifier("MeetingNotesDrawerToast")
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                }
             }
-            .scrollDismissesKeyboard(.interactively)
         }
-        .presentationDetents([.fraction(0.55), .large])
+        .presentationDetents([.fraction(0.66), .large])
         .presentationDragIndicator(.hidden)
         .presentationBackground(AppTheme.surface)
         .onChange(of: draft) { _, newValue in
             onTextChange(newValue)
+        }
+        .onDisappear {
+            toastTask?.cancel()
+        }
+        .fullScreenCover(isPresented: $showsNoteAttachmentCamera) {
+            CameraImagePicker(onImageCaptured: handleCapturedNoteAttachment)
+                .ignoresSafeArea()
+        }
+        .photosPicker(
+            isPresented: $showsNoteAttachmentPhotosPicker,
+            selection: $selectedNoteAttachmentItems,
+            maxSelectionCount: max(noteAttachmentSelectionLimit, 1),
+            matching: .images
+        )
+        .onChange(of: selectedNoteAttachmentItems) { _, items in
+            handleSelectedNoteAttachments(items)
+        }
+    }
+
+    private var liveMeeting: Meeting? {
+        meetingStore.meeting(withID: meetingID)
+    }
+
+    private var noteAttachmentSelectionLimit: Int {
+        guard let meeting = liveMeeting else {
+            return 0
+        }
+
+        return meetingStore.noteAttachmentLimit(for: meeting)
+    }
+
+    private func openNoteAttachmentCamera() {
+        guard let meeting = liveMeeting else { return }
+
+        guard meetingStore.canAddNoteAttachment(to: meeting) else {
+            showToast(AppStrings.current.noteAttachmentLimitReached(10))
+            return
+        }
+
+        guard isNoteAttachmentCameraAvailable() else {
+            showToast(AppStrings.current.cameraUnavailable)
+            return
+        }
+
+        showsNoteAttachmentCamera = true
+    }
+
+    private func openNoteAttachmentPhotos() {
+        guard let meeting = liveMeeting else { return }
+
+        guard meetingStore.canAddNoteAttachment(to: meeting) else {
+            showToast(AppStrings.current.noteAttachmentLimitReached(10))
+            return
+        }
+
+        showsNoteAttachmentPhotosPicker = true
+    }
+
+    private func handleCapturedNoteAttachment(_ image: UIImage) {
+        guard let meeting = liveMeeting else { return }
+
+        let result = meetingStore.addNoteAttachment(image, to: meeting)
+        if result == .skippedDuplicate {
+            showToast(AppStrings.current.duplicateNoteAttachmentSkipped())
+        }
+    }
+
+    private func handleSelectedNoteAttachments(_ items: [PhotosPickerItem]) {
+        guard liveMeeting != nil else {
+            selectedNoteAttachmentItems = []
+            return
+        }
+
+        let allowedItems = Array(items.prefix(noteAttachmentSelectionLimit))
+        selectedNoteAttachmentItems = []
+
+        Task {
+            var addedCount = 0
+            var duplicateCount = 0
+
+            for item in allowedItems {
+                guard let data = try? await item.loadTransferable(type: Data.self),
+                      let image = UIImage(data: data) else { continue }
+
+                let result = await MainActor.run { () -> NoteAttachmentAddResult? in
+                    guard let meeting = liveMeeting else { return nil }
+                    return meetingStore.addNoteAttachment(
+                        image,
+                        to: meeting,
+                        assetIdentifier: item.itemIdentifier
+                    )
+                }
+
+                switch result {
+                case .added:
+                    addedCount += 1
+                case .skippedDuplicate:
+                    duplicateCount += 1
+                case nil:
+                    break
+                }
+            }
+
+            await MainActor.run {
+                showSelectionResultToast(addedCount: addedCount, duplicateCount: duplicateCount)
+            }
+        }
+    }
+
+    private func showSelectionResultToast(addedCount: Int, duplicateCount: Int) {
+        switch (addedCount, duplicateCount) {
+        case (0, let duplicates) where duplicates > 0:
+            showToast(AppStrings.current.noteAttachmentsSkippedDuplicates(duplicates))
+        case (let added, 0) where added > 0:
+            showToast(AppStrings.current.noteAttachmentsAdded(added))
+        case (let added, let duplicates) where added > 0 && duplicates > 0:
+            showToast(
+                AppStrings.current.noteAttachmentsAddedSkippingDuplicates(
+                    addedCount: added,
+                    duplicateCount: duplicates
+                )
+            )
+        default:
+            break
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toastTask?.cancel()
+        withAnimation(.easeOut(duration: 0.18)) {
+            toastMessage = message
+        }
+
+        toastTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.18)) {
+                toastMessage = nil
+            }
         }
     }
 }

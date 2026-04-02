@@ -237,14 +237,26 @@ final class RecordingFlowUITests: XCTestCase {
 
         let teaser = app.buttons["MeetingTranscriptNotesTeaser"]
         XCTAssertTrue(teaser.waitForExistence(timeout: 3), "详情页应显示我的笔记预览入口。")
-        XCTAssertTrue(app.staticTexts["MeetingTranscriptNotesTeaserGlyph"].exists, "我的笔记入口应展示简易符号。")
+        XCTAssertTrue(element(in: app, identifier: "MeetingTranscriptNotesTeaserGlyph").exists, "我的笔记入口应展示简易符号。")
         teaser.tap()
 
         let drawer = app.otherElements["MeetingNotesDrawer"]
         XCTAssertTrue(drawer.waitForExistence(timeout: 3), "点击 teaser 后应打开半屏笔记抽屉。")
-        XCTAssertTrue(app.staticTexts["MeetingNotesDrawerGlyph"].exists, "抽屉 header 应展示笔记符号。")
-        XCTAssertTrue(app.staticTexts["MeetingNotesDrawerTitle"].exists, "抽屉 header 应展示主标题。")
+        XCTAssertTrue(element(in: app, identifier: "MeetingNotesDrawerGlyph").exists, "抽屉 header 应展示笔记符号。")
+        XCTAssertTrue(element(in: app, identifier: "MeetingNotesDrawerTitle").exists, "抽屉 header 应展示主标题。")
         XCTAssertFalse(app.staticTexts["MeetingNotesMergeHint"].exists, "抽屉里不应再展示辅助提示语。")
+        XCTAssertTrue(
+            element(in: app, identifier: "MeetingNoteAttachmentsSection", fallbackLabel: "资料区").exists,
+            "抽屉默认应直接展示资料区。"
+        )
+        XCTAssertTrue(
+            element(in: app, identifier: "MeetingNoteAttachmentsCameraButton", fallbackLabel: "拍照").exists,
+            "资料区应直接展示拍照入口。"
+        )
+        XCTAssertTrue(
+            element(in: app, identifier: "MeetingNoteAttachmentsPhotoButton", fallbackLabel: "添加图片").exists,
+            "资料区应直接展示图片导入入口。"
+        )
 
         let editor = app.textViews["MeetingNotesEditor"]
         XCTAssertTrue(editor.waitForExistence(timeout: 2), "笔记抽屉缺少输入框。")
@@ -263,6 +275,35 @@ final class RecordingFlowUITests: XCTestCase {
         let editorRetainsDraft = NSPredicate(format: "value CONTAINS %@", "temp note")
         expectation(for: editorRetainsDraft, evaluatedWith: editor)
         waitForExpectations(timeout: 3)
+    }
+
+    @MainActor
+    func testNotesDrawerCameraActionKeepsDrawerContext() throws {
+        let app = XCUIApplication()
+        app.launchArguments.append("UITEST_IN_MEMORY")
+        app.launchArguments.append("UITEST_DISABLE_CAMERA")
+        app.launch()
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.tap()
+
+        let teaser = app.buttons["MeetingTranscriptNotesTeaser"]
+        XCTAssertTrue(teaser.waitForExistence(timeout: 3), "详情页应显示我的笔记预览入口。")
+        teaser.tap()
+
+        let drawer = app.otherElements["MeetingNotesDrawer"]
+        XCTAssertTrue(drawer.waitForExistence(timeout: 3), "点击 teaser 后应打开半屏笔记抽屉。")
+
+        let cameraButton = element(
+            in: app,
+            identifier: "MeetingNoteAttachmentsCameraButton",
+            fallbackLabel: "拍照"
+        )
+        XCTAssertTrue(cameraButton.waitForExistence(timeout: 2), "资料区缺少拍照入口。")
+        cameraButton.tap()
+
+        XCTAssertTrue(drawer.waitForExistence(timeout: 2), "触发拍照后，笔记抽屉不应丢失当前上下文。")
     }
 
     @MainActor

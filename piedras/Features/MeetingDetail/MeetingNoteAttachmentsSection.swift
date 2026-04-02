@@ -206,6 +206,8 @@ struct MeetingNoteAttachmentsSection: View {
             Rectangle()
                 .stroke(AppTheme.subtleBorderColor, lineWidth: AppTheme.subtleBorderWidth)
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("MeetingNoteAttachmentsSection")
         .fullScreenCover(item: $viewingImage) { item in
             AnnotationImageViewer(image: item.image)
         }
@@ -230,12 +232,14 @@ struct MeetingNoteAttachmentsSection: View {
                     attachmentActionButton(
                         systemName: "camera",
                         label: AppStrings.current.annotationTakePhoto,
+                        accessibilityIdentifier: "MeetingNoteAttachmentsCameraButton",
                         isDisabled: !canAddMore,
                         action: onTakePhoto
                     )
                     attachmentActionButton(
                         systemName: "photo.on.rectangle.angled",
                         label: AppStrings.current.annotationAddImage,
+                        accessibilityIdentifier: "MeetingNoteAttachmentsPhotoButton",
                         isDisabled: !canAddMore,
                         action: onSelectPhotos
                     )
@@ -247,6 +251,7 @@ struct MeetingNoteAttachmentsSection: View {
     private func attachmentActionButton(
         systemName: String,
         label: String,
+        accessibilityIdentifier: String,
         isDisabled: Bool,
         action: @escaping () -> Void
     ) -> some View {
@@ -265,6 +270,7 @@ struct MeetingNoteAttachmentsSection: View {
         .disabled(isDisabled)
         .opacity(isDisabled ? 0.4 : 1)
         .accessibilityLabel(label)
+        .accessibilityIdentifier(accessibilityIdentifier)
     }
 }
 
