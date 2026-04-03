@@ -10,7 +10,7 @@ struct EnhancedNotesView: View {
 
     var body: some View {
         Group {
-            if forceProcessingState || meetingStore.isEnhancing(meetingID: meetingID) {
+            if forceProcessingState || (meetingStore.isEnhancing(meetingID: meetingID) && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
                 processingState
             } else {
                 MarkdownDocumentView(

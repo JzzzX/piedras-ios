@@ -62,6 +62,13 @@ enum NoteAttachmentAddResult: Equatable {
     case skippedDuplicate
 }
 
+enum EnhancedNotesGenerationResult: Equatable {
+    case started
+    case alreadyRunning
+    case skippedNoMaterial
+    case failed(String)
+}
+
 @MainActor
 @Observable
 final class MeetingStore {
@@ -810,10 +817,20 @@ final class MeetingStore {
             updateKeepScreenAwake()
             loadMeetings()
             await Task.yield()
+            let stopTailText = recordingSessionStore.currentPartial.trimmingCharacters(in: .whitespacesAndNewlines)
+            let stopTailEndTimeMS = max(
+                meeting.orderedSegments.last?.endTime ?? 0,
+                Double(max(audioRecorderService.currentRecordingDurationSeconds(), recordingSessionStore.durationSeconds)) * 1000
+            )
             await asrService.stopStreaming()
             flushLiveTranscriptTailIfNeeded()
             let artifact = try audioRecorderService.stopRecording()
-            await finishStoppedRecording(meetingID: meeting.id, artifact: artifact)
+            await finishStoppedRecording(
+                meetingID: meeting.id,
+                artifact: artifact,
+                capturedStopTailText: stopTailText,
+                capturedStopTailEndTimeMS: stopTailEndTimeMS
+            )
         } catch {
             recordingSessionStore.errorBanner = error.localizedDescription
         }
@@ -993,13 +1010,29 @@ final class MeetingStore {
         scheduleSyncRecovery(trigger: .authRecovered, immediate: true)
     }
 
-    func generateEnhancedNotes(for meetingID: String) async {
-        guard let meeting = meeting(withID: meetingID) else { return }
-        guard !enhancingMeetingIDs.contains(meetingID) else { return }
-        guard meeting.hasEnhanceableMaterial else { return }
+    func canGenerateEnhancedNotes(for meeting: Meeting) -> Bool {
+        meeting.hasEnhanceableMaterial
+    }
+
+    func isRefreshingExistingEnhancedNotes(meetingID: String) -> Bool {
+        guard let meeting = meeting(withID: meetingID) else { return false }
+        return isEnhancing(meetingID: meetingID)
+            && !meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func generateEnhancedNotes(for meetingID: String) async -> EnhancedNotesGenerationResult {
+        guard let meeting = meeting(withID: meetingID) else {
+            return .failed("会议不存在。")
+        }
+        guard !enhancingMeetingIDs.contains(meetingID) else {
+            return .alreadyRunning
+        }
+        guard canGenerateEnhancedNotes(for: meeting) else {
+            return .skippedNoMaterial
+        }
         guard await ensureBackendReachable(force: false) else {
             lastErrorMessage = "\(AppEnvironment.cloudName) 暂时不可用。"
-            return
+            return .failed(lastErrorMessage ?? "\(AppEnvironment.cloudName) 暂时不可用。")
         }
 
         let transcriptFingerprint = meeting.transcriptFingerprint
@@ -1017,9 +1050,11 @@ final class MeetingStore {
             settingsStore.markLLMRequestSucceeded(provider: response.provider)
             loadMeetings()
             await syncMeetingIfPossible(meetingID: meetingID)
+            return .started
         } catch {
             lastErrorMessage = error.localizedDescription
             settingsStore.markLLMRequestFailed(message: error.localizedDescription)
+            return .failed(error.localizedDescription)
         }
     }
 
@@ -1350,7 +1385,16 @@ final class MeetingStore {
         switch meeting.transcriptPipelineState {
         case .idle, .ready:
             return nil
-        case .initializing, .refining:
+        case .initializing:
+            return FileTranscriptionStatusSnapshot(
+                phase: .finalizing,
+                errorMessage: nil
+            )
+        case .refining:
+            guard !meeting.hasDisplayableTranscript else {
+                return nil
+            }
+
             return FileTranscriptionStatusSnapshot(
                 phase: .finalizing,
                 errorMessage: nil
@@ -1382,7 +1426,12 @@ final class MeetingStore {
         }
     }
 
-    func finishStoppedRecording(meetingID: String, artifact: LocalAudioArtifact) async {
+    func finishStoppedRecording(
+        meetingID: String,
+        artifact: LocalAudioArtifact,
+        capturedStopTailText: String? = nil,
+        capturedStopTailEndTimeMS: Double? = nil
+    ) async {
         guard let meeting = meeting(withID: meetingID) else {
             lastPublishedLiveActivityDurationSeconds = nil
             recordingLiveActivityCoordinator.end()
@@ -1393,7 +1442,18 @@ final class MeetingStore {
         }
 
         lastErrorMessage = nil
+        let stopTailText = (capturedStopTailText ?? recordingSessionStore.currentPartial)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let stopTailEndTimeMS = capturedStopTailEndTimeMS ?? max(
+            meeting.orderedSegments.last?.endTime ?? 0,
+            Double(max(artifact.durationSeconds, recordingSessionStore.durationSeconds)) * 1000
+        )
         await finalizeBackgroundTranscriptBeforeStop(meetingID: meetingID)
+        appendStopTranscriptTailIfNeeded(
+            text: stopTailText,
+            endTimeMS: stopTailEndTimeMS,
+            to: meeting
+        )
         let needsTranscriptRepair = recordingSessionStore.needsTranscriptRepairAfterStop
             || recordingSessionStore.backgroundChunkFailureNeedsRepair
             || recordingSessionStore.hasBackgroundTranscriptGap
@@ -2335,6 +2395,38 @@ final class MeetingStore {
         } catch {
             lastErrorMessage = error.localizedDescription
         }
+    }
+
+    private func appendStopTranscriptTailIfNeeded(text: String, endTimeMS: Double, to meeting: Meeting) {
+        let normalizedText = normalizedTranscriptText(text)
+        guard !normalizedText.isEmpty else { return }
+
+        let orderedSegments = meeting.orderedSegments
+        if let lastSegment = orderedSegments.last {
+            let lastText = normalizedTranscriptText(lastSegment.text)
+            if lastText == normalizedText || lastSegment.endTime >= endTimeMS {
+                return
+            }
+        }
+
+        let startTimeMS = max(
+            orderedSegments.last?.endTime ?? 0,
+            max(0, endTimeMS - 1_500)
+        )
+        let speaker = meeting.recordingMode == .fileMix ? "混合音频" : "麦克风"
+        appendTranscriptSegment(
+            ASRFinalResult(
+                text: normalizedText,
+                startTime: startTimeMS,
+                endTime: max(endTimeMS, startTimeMS)
+            ),
+            to: meeting,
+            speaker: speaker
+        )
+    }
+
+    private func normalizedTranscriptText(_ text: String) -> String {
+        text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func makeTranscriptSegments(from results: [ASRFinalResult], speaker: String) -> [TranscriptSegment] {

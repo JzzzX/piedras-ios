@@ -110,6 +110,77 @@ struct MeetingAnnotationSyncTests {
         #expect(refreshedAnnotation.imageFileNames == ["photo-1.jpg"])
         #expect(refreshedAnnotation.imageTextContext == "白板上写着发布时间")
     }
+
+    @MainActor
+    @Test
+    func applyingRemoteMeetingWithEmptySegmentsPreservesLocalTranscript() throws {
+        let container = try ModelContainerFactory.makeContainer(inMemory: true)
+        let repository = MeetingRepository(modelContext: container.mainContext)
+
+        let meeting = Meeting(
+            title: "本地优先转写",
+            enhancedNotes: "旧 AI 笔记"
+        )
+        let segment = TranscriptSegment(
+            id: "segment-local-1",
+            speaker: "麦克风",
+            text: "这段本地转写不能被远端空数据抹掉",
+            startTime: 0,
+            endTime: 1_500,
+            orderIndex: 0
+        )
+        segment.meeting = meeting
+        meeting.segments = [segment]
+        repository.insert(meeting)
+        try repository.save()
+
+        let remote = RemoteMeetingDetail(
+            id: meeting.id,
+            title: meeting.title,
+            date: meeting.date,
+            status: meeting.status.rawValue,
+            duration: meeting.durationSeconds,
+            audioMimeType: nil,
+            audioDuration: nil,
+            audioUpdatedAt: nil,
+            userNotes: meeting.userNotesPlainText,
+            enhancedNotes: meeting.enhancedNotes,
+            audioEnhancedNotes: nil,
+            audioEnhancedNotesStatus: nil,
+            audioEnhancedNotesError: nil,
+            audioEnhancedNotesUpdatedAt: nil,
+            audioEnhancedNotesProvider: nil,
+            audioEnhancedNotesModel: nil,
+            noteAttachments: [],
+            noteAttachmentsTextContext: nil,
+            createdAt: meeting.createdAt,
+            updatedAt: meeting.updatedAt.addingTimeInterval(10),
+            workspaceId: meeting.hiddenWorkspaceId,
+            speakers: [:],
+            segments: [],
+            chatMessages: [],
+            audioCloudSyncEnabled: true,
+            hasAudio: true,
+            audioUrl: "/api/meetings/\(meeting.id)/audio?t=123",
+            audioProcessingState: "idle",
+            audioProcessingError: nil,
+            audioProcessingAttempts: 0,
+            audioProcessingRequestedAt: nil,
+            audioProcessingStartedAt: nil,
+            audioProcessingCompletedAt: nil
+        )
+
+        MeetingPayloadMapper.applyRemoteSyncState(
+            remote: remote,
+            to: meeting,
+            repository: repository,
+            baseURL: URL(string: "https://example.com")
+        )
+
+        let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.orderedSegments.map(\.text) == ["这段本地转写不能被远端空数据抹掉"])
+        #expect(refreshedMeeting.audioRemotePath == "https://example.com/api/meetings/\(meeting.id)/audio?t=123")
+    }
 }
 
 private extension Collection {

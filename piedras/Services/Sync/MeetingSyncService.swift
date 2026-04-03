@@ -166,19 +166,6 @@ final class MeetingSyncService: MeetingSyncServicing {
 
         let fallbackDuration = max(meeting.audioDuration, meeting.durationSeconds)
 
-        if meeting.speakerDiarizationState == .processing || meeting.speakerDiarizationState == .failed {
-            let uploadResponse = try await apiClient.uploadAudio(
-                meetingID: meeting.id,
-                fileURL: URL(fileURLWithPath: audioLocalPath),
-                duration: max(fallbackDuration, 0),
-                mimeType: meeting.audioMimeType ?? "audio/m4a",
-                requestTranscriptFinalization: true
-            )
-            apply(uploadResponse: uploadResponse, to: meeting, fallbackDuration: fallbackDuration)
-            try repository.save()
-            return try await pollForFinalizedMeetingIfNeeded(meetingID: meeting.id, meeting: meeting)
-        }
-
         let uploadResponse = try await apiClient.uploadAudio(
             meetingID: meeting.id,
             fileURL: URL(fileURLWithPath: audioLocalPath),
@@ -440,7 +427,10 @@ final class MeetingSyncService: MeetingSyncServicing {
         case .transcriptionFailed:
             meeting.transcriptPipelineState = .failed
         case .ended:
-            meeting.transcriptPipelineState = meeting.speakerDiarizationState == .processing ? .refining : .ready
+            meeting.transcriptPipelineState =
+                meeting.hasDisplayableTranscript
+                ? .ready
+                : (meeting.speakerDiarizationState == .processing ? .refining : .ready)
         case .idle, .recording, .paused:
             meeting.transcriptPipelineState = .idle
         }

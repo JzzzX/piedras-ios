@@ -309,7 +309,7 @@ struct MeetingDeletionSyncTests {
 
     @MainActor
     @Test
-    func syncMeetingFinalizesEndedAudioWithSpeakerDiarization() async throws {
+    func syncMeetingKeepsExistingTranscriptWhileUploadingEndedAudio() async throws {
         let fixture = try makeRepositoryFixture()
         let repository = fixture.repository
         let settingsStore = makeSettingsStore()
@@ -384,19 +384,11 @@ struct MeetingDeletionSyncTests {
                 return (response, try JSONSerialization.data(withJSONObject: payload))
 
             case "/api/meetings/\(meeting.id)/audio":
-                #expect(url.query?.contains("finalizeTranscript=true") == true)
+                #expect(url.query?.contains("finalizeTranscript=true") != true)
                 return (
                     response,
                     Data(
-                        #"{"hasAudio":true,"audioMimeType":"audio/m4a","audioDuration":24,"audioUpdatedAt":"2026-03-24T04:00:00.000Z","audioUrl":"/api/meetings/meeting-upload-diarized/audio?t=123","audioCloudSyncEnabled":true,"audioProcessingState":"queued","audioProcessingError":"","audioProcessingAttempts":0,"audioProcessingRequestedAt":"2026-03-24T04:00:00.000Z","audioProcessingStartedAt":null,"audioProcessingCompletedAt":null}"#.utf8
-                    )
-                )
-
-            case "/api/meetings/\(meeting.id)/processing-status":
-                return (
-                    response,
-                    Data(
-                        #"{"meetingId":"meeting-upload-diarized","hasAudio":true,"audioProcessingState":"completed","audioProcessingError":"","audioProcessingAttempts":1,"audioProcessingRequestedAt":"2026-03-24T04:00:00.000Z","audioProcessingStartedAt":"2026-03-24T04:00:01.000Z","audioProcessingCompletedAt":"2026-03-24T04:00:02.000Z"}"#.utf8
+                        #"{"hasAudio":true,"audioMimeType":"audio/m4a","audioDuration":24,"audioUpdatedAt":"2026-03-24T04:00:00.000Z","audioUrl":"/api/meetings/meeting-upload-diarized/audio?t=123","audioCloudSyncEnabled":true,"audioProcessingState":"idle","audioProcessingError":"","audioProcessingAttempts":0,"audioProcessingRequestedAt":null,"audioProcessingStartedAt":null,"audioProcessingCompletedAt":null}"#.utf8
                     )
                 )
 
@@ -464,7 +456,7 @@ struct MeetingDeletionSyncTests {
         #expect(refreshedMeeting.orderedSegments.map { $0.speaker } == ["spk_1"])
         #expect(refreshedMeeting.orderedSegments.map { $0.text } == ["请做个自我介绍。"])
         #expect(FileManager.default.fileExists(atPath: audioURL.path))
-        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings/\(meeting.id)", "/api/meetings", "/api/meetings/\(meeting.id)/audio", "/api/meetings/\(meeting.id)/processing-status", "/api/meetings/\(meeting.id)"])
+        #expect(MockURLProtocol.requests.map { $0.url?.path ?? "" } == ["/api/meetings/\(meeting.id)", "/api/meetings", "/api/meetings/\(meeting.id)/audio"])
     }
 
     @MainActor
@@ -562,7 +554,7 @@ struct MeetingDeletionSyncTests {
 
     @MainActor
     @Test
-    func failedFinalizeUploadRemainsRetryableOnNextSyncPass() async throws {
+    func failedAudioUploadRemainsRetryableOnNextSyncPass() async throws {
         let fixture = try makeRepositoryFixture()
         let repository = fixture.repository
         let settingsStore = makeSettingsStore()
@@ -643,15 +635,7 @@ struct MeetingDeletionSyncTests {
                 return (
                     response,
                     Data(
-                        #"{"hasAudio":true,"audioMimeType":"audio/m4a","audioDuration":22,"audioUpdatedAt":"2026-03-24T04:00:00.000Z","audioUrl":"/api/meetings/meeting-finalize-retry/audio?t=123","audioCloudSyncEnabled":true,"audioProcessingState":"queued","audioProcessingError":"","audioProcessingAttempts":0,"audioProcessingRequestedAt":"2026-03-24T04:00:00.000Z","audioProcessingStartedAt":null,"audioProcessingCompletedAt":null}"#.utf8
-                    )
-                )
-
-            case "/api/meetings/\(meeting.id)/processing-status":
-                return (
-                    response,
-                    Data(
-                        #"{"meetingId":"meeting-finalize-retry","hasAudio":true,"audioProcessingState":"completed","audioProcessingError":"","audioProcessingAttempts":1,"audioProcessingRequestedAt":"2026-03-24T04:00:00.000Z","audioProcessingStartedAt":"2026-03-24T04:00:01.000Z","audioProcessingCompletedAt":"2026-03-24T04:00:02.000Z"}"#.utf8
+                        #"{"hasAudio":true,"audioMimeType":"audio/m4a","audioDuration":22,"audioUpdatedAt":"2026-03-24T04:00:00.000Z","audioUrl":"/api/meetings/meeting-finalize-retry/audio?t=123","audioCloudSyncEnabled":true,"audioProcessingState":"idle","audioProcessingError":"","audioProcessingAttempts":0,"audioProcessingRequestedAt":null,"audioProcessingStartedAt":null,"audioProcessingCompletedAt":null}"#.utf8
                     )
                 )
 

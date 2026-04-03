@@ -11,7 +11,8 @@ struct MeetingDetailPresentationStateTests {
             postStopProcessingStage: .idle,
             transcriptionStatus: nil,
             isEnhancing: false,
-            hasEnhancedNotes: false
+            hasEnhancedNotes: false,
+            hasDisplayableTranscript: false
         )
 
         #expect(state.usesRecordingWorkspace == false)
@@ -26,7 +27,8 @@ struct MeetingDetailPresentationStateTests {
             postStopProcessingStage: .idle,
             transcriptionStatus: nil,
             isEnhancing: false,
-            hasEnhancedNotes: false
+            hasEnhancedNotes: false,
+            hasDisplayableTranscript: false
         )
 
         #expect(state.transcriptionStatus?.phase == .finalizing)
@@ -42,7 +44,8 @@ struct MeetingDetailPresentationStateTests {
             postStopProcessingStage: .idle,
             transcriptionStatus: nil,
             isEnhancing: false,
-            hasEnhancedNotes: false
+            hasEnhancedNotes: false,
+            hasDisplayableTranscript: false
         )
 
         #expect(state.showsEnhancedNotesProcessing == true)
@@ -60,7 +63,8 @@ struct MeetingDetailPresentationStateTests {
                 errorMessage: nil
             ),
             isEnhancing: false,
-            hasEnhancedNotes: false
+            hasEnhancedNotes: false,
+            hasDisplayableTranscript: false
         )
 
         #expect(state.transcriptionStatus?.phase == .connecting)
@@ -75,11 +79,46 @@ struct MeetingDetailPresentationStateTests {
             postStopProcessingStage: .finalizing,
             transcriptionStatus: nil,
             isEnhancing: false,
-            hasEnhancedNotes: false
+            hasEnhancedNotes: false,
+            hasDisplayableTranscript: false
         )
 
         #expect(state.usesRecordingWorkspace == false)
         #expect(state.showsEnhancedNotesProcessing == true)
-        #expect(state.transcriptionStatus?.phase == .finalizing)
+        #expect(state.transcriptionStatus == nil)
+    }
+
+    @Test
+    func enhancingExistingNotesShowsRefreshHintInsteadOfProcessingPlaceholder() {
+        let state = MeetingDetailPresentationState(
+            meetingID: "meeting-1",
+            recordingSessionMeetingID: nil,
+            recordingPhase: .idle,
+            postStopProcessingStage: .idle,
+            transcriptionStatus: nil,
+            isEnhancing: true,
+            hasEnhancedNotes: true,
+            hasDisplayableTranscript: true
+        )
+
+        #expect(state.showsEnhancedNotesProcessing == false)
+        #expect(state.showsEnhancedNotesRefreshHint == true)
+        #expect(state.transcriptionStatus == nil)
+    }
+
+    @Test
+    func existingTranscriptSuppressesSyntheticFinalizingStatusAfterStop() {
+        let state = MeetingDetailPresentationState(
+            meetingID: "meeting-1",
+            recordingSessionMeetingID: nil,
+            recordingPhase: .idle,
+            postStopProcessingStage: .finalizing,
+            transcriptionStatus: nil,
+            isEnhancing: false,
+            hasEnhancedNotes: true,
+            hasDisplayableTranscript: true
+        )
+
+        #expect(state.transcriptionStatus == nil)
     }
 }

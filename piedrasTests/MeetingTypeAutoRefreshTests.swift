@@ -279,6 +279,69 @@ struct MeetingTypeAutoRefreshTests {
     }
 
     @MainActor
+    @Test
+    func generateEnhancedNotesWithoutAnyMaterialReturnsSkippedResult() async throws {
+        MeetingTypeAutoRefreshMockURLProtocol.reset()
+        defer { MeetingTypeAutoRefreshMockURLProtocol.reset() }
+
+        let container = try ModelContainerFactory.makeContainer(inMemory: true)
+        let repository = MeetingRepository(modelContext: container.mainContext)
+        let chatRepository = ChatSessionRepository(modelContext: container.mainContext)
+        let settingsStore = makeSettingsStore()
+        settingsStore.hiddenWorkspaceID = "workspace-1"
+        settingsStore.workspaceBootstrapState = .success
+        settingsStore.markBackendReachable()
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let syncService = StubMeetingTypeSyncService()
+
+        let store = MeetingStore(
+            repository: repository,
+            chatSessionRepository: chatRepository,
+            settingsStore: settingsStore,
+            recordingSessionStore: RecordingSessionStore(),
+            appActivityCoordinator: AppActivityCoordinator(),
+            recordingLiveActivityCoordinator: NoopMeetingTypeRecordingLiveActivityCoordinator(),
+            audioRecorderService: NoopMeetingTypeAudioRecorderService(),
+            audioFileTranscriptionService: NoopMeetingTypeAudioFileTranscriptionService(),
+            apiClient: apiClient,
+            asrService: NoopMeetingTypeASRService(),
+            workspaceBootstrapService: WorkspaceBootstrapService(
+                apiClient: apiClient,
+                settingsStore: settingsStore
+            ),
+            meetingSyncService: syncService
+        )
+
+        let meeting = try repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "空会议"
+        try repository.save()
+
+        var enhanceCalls = 0
+        MeetingTypeAutoRefreshMockURLProtocol.requestHandler = { request in
+            enhanceCalls += 1
+            let response = try #require(
+                HTTPURLResponse(
+                    url: request.url ?? URL(string: "https://example.com/api/enhance")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+            let payload: [String: Any] = [
+                "content": "不应该被调用",
+                "provider": "test"
+            ]
+            return (response, try JSONSerialization.data(withJSONObject: payload))
+        }
+
+        let result = await store.generateEnhancedNotes(for: meeting.id)
+
+        #expect(result == .skippedNoMaterial)
+        #expect(enhanceCalls == 0)
+        #expect(syncService.syncedMeetingIDs.isEmpty)
+    }
+
+    @MainActor
     private func makeSettingsStore() -> SettingsStore {
         let suiteName = "piedras.tests.meeting-type.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

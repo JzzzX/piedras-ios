@@ -269,7 +269,7 @@ struct MeetingDetailView: View {
                         fileTranscriptionStatusView(transcriptionStatus, meetingID: meeting.id)
                     }
 
-                    titleBlock(meeting: meeting)
+                    titleBlock(meeting: meeting, presentation: presentation)
                     documentPage(meeting: meeting, presentation: presentation)
                 }
                 .padding(.horizontal, 24)
@@ -472,7 +472,10 @@ struct MeetingDetailView: View {
         }
     }
 
-    private func titleBlock(meeting: Meeting) -> some View {
+    private func titleBlock(
+        meeting: Meeting,
+        presentation: MeetingDetailPresentationState
+    ) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Button {
                 openTitleRenameDialog(for: meeting)
@@ -495,6 +498,13 @@ struct MeetingDetailView: View {
             .accessibilityIdentifier("MeetingDetailTitleButton")
 
             VStack(alignment: .leading, spacing: 8) {
+                if presentation.showsEnhancedNotesRefreshHint {
+                    Text(AppStrings.current.generatingUpdatedNotesHint)
+                        .font(AppTheme.dataFont(size: 12))
+                        .foregroundStyle(AppTheme.subtleInk)
+                        .accessibilityIdentifier("MeetingDetailNotesRefreshHint")
+                }
+
                 Text(metaLine(for: meeting))
                     .font(AppTheme.dataFont(size: 14))
                     .foregroundStyle(AppTheme.subtleInk)
@@ -1003,7 +1013,8 @@ struct MeetingDetailView: View {
                 ) {
                     closeActionMenu()
                     Task {
-                        await meetingStore.generateEnhancedNotes(for: meeting.id)
+                        let result = await meetingStore.generateEnhancedNotes(for: meeting.id)
+                        handleEnhancedNotesGenerationResult(result)
                     }
                 }
 
@@ -1090,7 +1101,8 @@ struct MeetingDetailView: View {
             postStopProcessingStage: meeting.postStopProcessingStage,
             transcriptionStatus: meetingStore.fileTranscriptionStatus(meetingID: meeting.id),
             isEnhancing: meetingStore.isEnhancing(meetingID: meeting.id),
-            hasEnhancedNotes: !meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            hasEnhancedNotes: !meeting.enhancedNotes.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            hasDisplayableTranscript: meeting.hasDisplayableTranscript
         )
     }
 
@@ -1217,7 +1229,18 @@ struct MeetingDetailView: View {
     }
 
     private func canRefreshSummary(for meeting: Meeting) -> Bool {
-        meeting.hasEnhanceableMaterial
+        meetingStore.canGenerateEnhancedNotes(for: meeting)
+    }
+
+    private func handleEnhancedNotesGenerationResult(_ result: EnhancedNotesGenerationResult) {
+        switch result {
+        case .started, .alreadyRunning:
+            return
+        case .skippedNoMaterial:
+            showToast(AppStrings.current.cannotRefreshNotesWithoutMaterial)
+        case let .failed(message):
+            showToast(message)
+        }
     }
 
     private func canGenerateAudioSummary(for meeting: Meeting) -> Bool {

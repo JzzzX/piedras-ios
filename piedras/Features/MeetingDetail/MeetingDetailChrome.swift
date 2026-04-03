@@ -4,6 +4,7 @@ struct MeetingDetailPresentationState: Equatable {
     let usesRecordingWorkspace: Bool
     let transcriptionStatus: FileTranscriptionStatusSnapshot?
     let showsEnhancedNotesProcessing: Bool
+    let showsEnhancedNotesRefreshHint: Bool
 
     init(
         meetingID: String,
@@ -12,11 +13,16 @@ struct MeetingDetailPresentationState: Equatable {
         postStopProcessingStage: MeetingPostStopProcessingStage,
         transcriptionStatus: FileTranscriptionStatusSnapshot?,
         isEnhancing: Bool,
-        hasEnhancedNotes: Bool
+        hasEnhancedNotes: Bool,
+        hasDisplayableTranscript: Bool
     ) {
         let isCurrentRecordingMeeting = recordingSessionMeetingID == meetingID
         let isStoppingCurrentMeeting = isCurrentRecordingMeeting && recordingPhase == .stopping
         let hasPendingPostStopProcessing = postStopProcessingStage != .idle
+        let shouldSynthesizeTranscriptionStatus = (
+            isStoppingCurrentMeeting
+                || postStopProcessingStage == .repairingTranscript
+        ) && !hasDisplayableTranscript
 
         usesRecordingWorkspace = isCurrentRecordingMeeting
             && recordingPhase != .idle
@@ -24,7 +30,7 @@ struct MeetingDetailPresentationState: Equatable {
 
         if let transcriptionStatus {
             self.transcriptionStatus = transcriptionStatus
-        } else if isStoppingCurrentMeeting || hasPendingPostStopProcessing {
+        } else if shouldSynthesizeTranscriptionStatus {
             self.transcriptionStatus = FileTranscriptionStatusSnapshot(
                 phase: .finalizing,
                 errorMessage: nil
@@ -33,7 +39,9 @@ struct MeetingDetailPresentationState: Equatable {
             self.transcriptionStatus = nil
         }
 
-        showsEnhancedNotesProcessing = isEnhancing || ((isStoppingCurrentMeeting || hasPendingPostStopProcessing) && !hasEnhancedNotes)
+        showsEnhancedNotesRefreshHint = isEnhancing && hasEnhancedNotes
+        showsEnhancedNotesProcessing = !showsEnhancedNotesRefreshHint
+            && (isEnhancing || ((isStoppingCurrentMeeting || hasPendingPostStopProcessing) && !hasEnhancedNotes))
     }
 }
 

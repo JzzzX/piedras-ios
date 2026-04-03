@@ -310,6 +310,90 @@ struct MeetingRecordingRepairTests {
 
     @MainActor
     @Test
+    func stopRecordingCapturesVisiblePartialBeforeLiveTailFlushClearsIt() async throws {
+        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "已有标题"
+        meeting.enhancedNotes = "已有 AI 笔记"
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.durationSeconds = 9
+        fixture.recordingSessionStore.currentPartial = "这一句结束前还看得到"
+        fixture.recorder.currentDurationSecondsValue = 9
+
+        let audioURL = try makeTemporaryAudioFile(named: "stop-recording-captures-partial-tail.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+        fixture.recorder.stopArtifact = LocalAudioArtifact(
+            fileURL: audioURL,
+            durationSeconds: 9,
+            mimeType: "audio/m4a"
+        )
+
+        await fixture.meetingStore.stopRecording()
+
+        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.status == .ended)
+        #expect(refreshedMeeting.transcriptPipelineState == .ready)
+        #expect(refreshedMeeting.speakerDiarizationState == .idle)
+        #expect(refreshedMeeting.orderedSegments.map(\.text) == ["这一句结束前还看得到"])
+        #expect(refreshedMeeting.orderedSegments.map(\.speaker) == ["麦克风"])
+        #expect(refreshedMeeting.orderedSegments.first?.startTime == 7_500)
+        #expect(refreshedMeeting.orderedSegments.first?.endTime == 9_000)
+        #expect(fixture.asrService.stopCalls == 1)
+        #expect(fixture.transcriber.transcribeCalls == 0)
+        #expect(fixture.syncService.transcriptSnapshotsAtSync == ["这一句结束前还看得到"])
+        #expect(fixture.meetingStore.fileTranscriptionStatus(meetingID: meeting.id) == nil)
+    }
+
+    @MainActor
+    @Test
+    func stopRecordingPersistsVisiblePartialTailWhenNoFinalTranscriptArrives() async throws {
+        let fixture = try makeFixture(transcriptionBehavior: .succeed([]))
+        let meeting = try fixture.repository.createDraftMeeting(hiddenWorkspaceID: "workspace-1")
+        meeting.title = "已有标题"
+        meeting.enhancedNotes = "已有 AI 笔记"
+        meeting.recordingMode = .microphone
+        meeting.status = .recording
+        try fixture.repository.save()
+        fixture.meetingStore.loadMeetings()
+
+        fixture.recordingSessionStore.meetingID = meeting.id
+        fixture.recordingSessionStore.phase = .recording
+        fixture.recordingSessionStore.durationSeconds = 9
+        fixture.recordingSessionStore.currentPartial = "这一句结束前还看得到"
+
+        let audioURL = try makeTemporaryAudioFile(named: "stop-persists-partial-tail.m4a")
+        defer { try? FileManager.default.removeItem(at: audioURL) }
+
+        await fixture.meetingStore.finishStoppedRecording(
+            meetingID: meeting.id,
+            artifact: LocalAudioArtifact(
+                fileURL: audioURL,
+                durationSeconds: 9,
+                mimeType: "audio/m4a"
+            )
+        )
+
+        let refreshedMeeting = try #require(try fixture.repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.status == .ended)
+        #expect(refreshedMeeting.transcriptPipelineState == .ready)
+        #expect(refreshedMeeting.speakerDiarizationState == .idle)
+        #expect(refreshedMeeting.orderedSegments.map(\.text) == ["这一句结束前还看得到"])
+        #expect(refreshedMeeting.orderedSegments.map(\.speaker) == ["麦克风"])
+        #expect(refreshedMeeting.orderedSegments.first?.startTime == 7_500)
+        #expect(refreshedMeeting.orderedSegments.first?.endTime == 9_000)
+        #expect(fixture.transcriber.transcribeCalls == 0)
+        #expect(fixture.syncService.transcriptSnapshotsAtSync == ["这一句结束前还看得到"])
+        #expect(fixture.meetingStore.fileTranscriptionStatus(meetingID: meeting.id) == nil)
+    }
+
+    @MainActor
+    @Test
     func emptyRepairTranscriptFallsBackToNotesOnlyFinalizationWhenNoTranscriptExists() async throws {
         MeetingRecordingRepairMockURLProtocol.reset()
         defer { MeetingRecordingRepairMockURLProtocol.reset() }

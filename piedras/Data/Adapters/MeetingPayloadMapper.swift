@@ -557,14 +557,17 @@ enum MeetingPayloadMapper {
         meeting.audioDuration = remote.audioDuration ?? meeting.audioDuration
         meeting.audioUpdatedAt = remote.audioUpdatedAt ?? meeting.audioUpdatedAt
         meeting.hiddenWorkspaceId = remote.workspaceId ?? meeting.hiddenWorkspaceId
-        meeting.speakers = remote.speakers ?? meeting.speakers
+        if let remoteSpeakers = remote.speakers,
+           !remoteSpeakers.isEmpty || meeting.speakers.isEmpty {
+            meeting.speakers = remoteSpeakers
+        }
         meeting.syncState = .synced
         meeting.lastSyncedAt = .now
         meeting.createdAt = remote.createdAt ?? meeting.createdAt
         meeting.updatedAt = remote.updatedAt ?? .now
         applyRemoteAudioProcessing(remote, to: meeting)
 
-        repository.replaceSegments(for: meeting, with: makeSegments(from: remote.segments))
+        applyRemoteSegments(remote.segments, to: meeting, repository: repository)
         let remoteChatMessages = makeChatMessages(from: remote.chatMessages)
 
         if meeting.chatSessions.isEmpty {
@@ -628,11 +631,14 @@ enum MeetingPayloadMapper {
         meeting.audioDuration = remote.audioDuration ?? meeting.audioDuration
         meeting.audioUpdatedAt = remote.audioUpdatedAt ?? meeting.audioUpdatedAt
         meeting.hiddenWorkspaceId = remote.workspaceId ?? meeting.hiddenWorkspaceId
-        meeting.speakers = remote.speakers ?? meeting.speakers
+        if let remoteSpeakers = remote.speakers,
+           !remoteSpeakers.isEmpty || meeting.speakers.isEmpty {
+            meeting.speakers = remoteSpeakers
+        }
         meeting.createdAt = remote.createdAt ?? meeting.createdAt
         applyRemoteAudioProcessing(remote, to: meeting)
 
-        repository.replaceSegments(for: meeting, with: makeSegments(from: remote.segments))
+        applyRemoteSegments(remote.segments, to: meeting, repository: repository)
         let remoteChatMessages = makeChatMessages(from: remote.chatMessages)
         if meeting.chatSessions.isEmpty {
             repository.mergeChatMessages(for: meeting, with: remoteChatMessages)
@@ -674,7 +680,7 @@ enum MeetingPayloadMapper {
         case "queued", "processing":
             meeting.speakerDiarizationState = .processing
             meeting.speakerDiarizationErrorMessage = nil
-            if meeting.status == .ended {
+            if meeting.status == .ended && !meeting.hasDisplayableTranscript {
                 meeting.transcriptPipelineState = .refining
             }
         case "failed":
@@ -705,6 +711,18 @@ enum MeetingPayloadMapper {
                 orderIndex: remoteSegment.order ?? index
             )
         }
+    }
+
+    private static func applyRemoteSegments(
+        _ remoteSegments: [RemoteTranscriptSegment],
+        to meeting: Meeting,
+        repository: MeetingRepository
+    ) {
+        guard !remoteSegments.isEmpty || meeting.orderedSegments.isEmpty else {
+            return
+        }
+
+        repository.replaceSegments(for: meeting, with: makeSegments(from: remoteSegments))
     }
 
     private static func makeChatMessages(from remoteMessages: [RemoteChatMessage]) -> [ChatMessage] {
