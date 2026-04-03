@@ -81,7 +81,7 @@ struct APIClientDecodingTests {
         let payload = """
         {
           "id": "collection-notes",
-          "name": "Notes",
+          "name": "Default Folder",
           "isDefault": true
         }
         """
@@ -92,7 +92,7 @@ struct APIClientDecodingTests {
         )
 
         #expect(collection.id == "collection-notes")
-        #expect(collection.name == "Notes")
+        #expect(collection.name == "Default Folder")
         #expect(collection.isDefault == true)
     }
 

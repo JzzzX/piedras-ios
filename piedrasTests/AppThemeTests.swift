@@ -14,6 +14,15 @@ struct AppThemeTests {
     }
 
     @Test
+    func deleteNoteActionAccessibilityLabelUsesSpecificCopy() {
+        let chinese = AppStringTable(language: .chinese)
+        let english = AppStringTable(language: .english)
+
+        #expect(chinese.deleteNoteAction == "删除笔记")
+        #expect(english.deleteNoteAction == "Delete note")
+    }
+
+    @Test
     func bodyUIFontUsesProportionalSystemFont() {
         let font = AppTheme.bodyUIFont(size: 16, weight: .semibold)
 
@@ -61,6 +70,14 @@ struct AppThemeTests {
         #expect(UIColor(AppTheme.primaryActionPressedFill).hexRGB == 0x24372F)
         #expect(UIColor(AppTheme.primaryActionForeground).hexRGB == 0xFAF5EB)
         #expect(UIColor(AppTheme.selectedChromeFill).hexRGB == 0xDFE7E1)
+    }
+
+    @Test
+    func themeAddsDarkWineDestructiveChromeForHomeSwipeDelete() {
+        #expect(UIColor(AppTheme.destructiveActionFill).hexRGB == 0x8E3E43)
+        #expect(UIColor(AppTheme.destructiveActionPressedFill).hexRGB == 0x6F2E33)
+        #expect(UIColor(AppTheme.destructiveActionBorder).hexRGB == 0x6F2E33)
+        #expect(UIColor(AppTheme.destructiveActionShadow).hexRGB == 0xC9B8A3)
     }
 
     @Test

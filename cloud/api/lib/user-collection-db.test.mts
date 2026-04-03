@@ -8,7 +8,7 @@ import {
   serializeCollection,
 } from './user-collection-db.ts';
 
-test('ensureDefaultCollectionForWorkspace creates the default Notes collection when missing', async () => {
+test('ensureDefaultCollectionForWorkspace creates the default Default Folder collection when missing', async () => {
   const calls: string[] = [];
   const fakeDb = {
     collection: {
@@ -41,8 +41,8 @@ test('ensureDefaultCollectionForWorkspace creates the default Notes collection w
   });
 
   assert.equal(collection.id, 'collection-notes');
-  assert.equal(collection.name, 'Notes');
-  assert.ok(calls.some((entry) => entry.startsWith('create:workspace-1:Notes:0')));
+  assert.equal(collection.name, 'Default Folder');
+  assert.ok(calls.some((entry) => entry.startsWith('create:workspace-1:Default Folder:0')));
 });
 
 test('ensureWorkspaceCollectionsHydrated backfills legacy ungrouped meetings into the default collection', async () => {
@@ -52,7 +52,7 @@ test('ensureWorkspaceCollectionsHydrated backfills legacy ungrouped meetings int
       findFirst: async () => ({
         id: 'collection-notes',
         workspaceId: 'workspace-1',
-        name: 'Notes',
+        name: 'Default Folder',
         description: 'Piedras default notes collection',
         icon: 'tray.full',
         color: '#0f766e',
@@ -68,7 +68,7 @@ test('ensureWorkspaceCollectionsHydrated backfills legacy ungrouped meetings int
           {
             id: 'collection-notes',
             workspaceId: 'workspace-1',
-            name: 'Notes',
+            name: 'Default Folder',
             description: 'Piedras default notes collection',
             icon: 'tray.full',
             color: '#0f766e',
@@ -111,6 +111,54 @@ test('ensureWorkspaceCollectionsHydrated backfills legacy ungrouped meetings int
   assert.ok(calls.includes('updateMany:workspace-1:collection-notes'));
 });
 
+test('ensureDefaultCollectionForWorkspace reuses and normalizes a legacy Notes default collection', async () => {
+  const calls: string[] = [];
+  const fakeDb = {
+    collection: {
+      findFirst: async () => ({
+        id: 'collection-notes',
+        workspaceId: 'workspace-1',
+        name: 'Notes',
+        description: 'Piedras default notes collection',
+        icon: 'tray.full',
+        color: '#0f766e',
+        handoffSummary: '',
+        candidateStatus: 'new',
+        nextInterviewer: '',
+        nextFocus: '',
+        sortOrder: 0,
+      }),
+      update: async ({ where, data }: any) => {
+        calls.push(`update:${where.id}:${data.name}`);
+        return {
+          id: where.id,
+          workspaceId: 'workspace-1',
+          name: data.name,
+          description: data.description,
+          icon: data.icon,
+          color: data.color,
+          handoffSummary: '',
+          candidateStatus: 'new',
+          nextInterviewer: '',
+          nextFocus: '',
+          sortOrder: data.sortOrder,
+        };
+      },
+      create: async () => {
+        throw new Error('should not create a second default collection');
+      },
+    },
+  };
+
+  const collection = await ensureDefaultCollectionForWorkspace(fakeDb as any, {
+    workspaceId: 'workspace-1',
+  });
+
+  assert.equal(collection.id, 'collection-notes');
+  assert.equal(collection.name, 'Default Folder');
+  assert.ok(calls.includes('update:collection-notes:Default Folder'));
+});
+
 test('createCollectionForWorkspace appends after the existing collections for the same workspace', async () => {
   const fakeDb = {
     collection: {
@@ -148,7 +196,7 @@ test('serializeCollection marks the default collection explicitly', () => {
     {
       id: 'collection-notes',
       workspaceId: 'workspace-1',
-      name: 'Notes',
+      name: 'Default Folder',
       description: 'Piedras default notes collection',
       icon: 'tray.full',
       color: '#0f766e',
@@ -163,7 +211,7 @@ test('serializeCollection marks the default collection explicitly', () => {
 
   assert.deepEqual(payload, {
     id: 'collection-notes',
-    name: 'Notes',
+    name: 'Default Folder',
     isDefault: true,
   });
 });

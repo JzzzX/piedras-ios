@@ -72,6 +72,28 @@ struct AccountIsolationTests {
     }
 
     @MainActor
+    @Test
+    func loadMeetingsBackfillsLegacyMeetingsWithoutCollectionIntoDefaultFolder() throws {
+        let appContainer = try makeAppContainer()
+        try resetLocalState(in: appContainer)
+
+        appContainer.settingsStore.hiddenWorkspaceID = "workspace-notes"
+        appContainer.settingsStore.defaultCollectionID = "collection-notes"
+        appContainer.settingsStore.selectedCollectionID = "collection-notes"
+
+        let legacyMeeting = try appContainer.meetingRepository.createDraftMeeting(
+            hiddenWorkspaceID: "workspace-notes",
+            collectionID: nil
+        )
+        legacyMeeting.title = "Legacy note"
+
+        appContainer.meetingStore.loadMeetings()
+
+        #expect(legacyMeeting.collectionId == "collection-notes")
+        #expect(appContainer.meetingStore.meetings.map(\.id) == [legacyMeeting.id])
+    }
+
+    @MainActor
     private func makeAppContainer() throws -> AppContainer {
         if let container = AppContainer.currentXCTestInstance {
             return container

@@ -332,6 +332,12 @@ final class MeetingStore {
         defer { isLoading = false }
 
         do {
+            if let defaultCollectionID = settingsStore.defaultCollectionID {
+                try repository.assignMeetingsWithoutCollection(
+                    to: defaultCollectionID,
+                    workspaceID: settingsStore.hiddenWorkspaceID
+                )
+            }
             meetings = try repository.fetchMeetings(
                 matching: searchText,
                 collectionID: settingsStore.activeCollectionID

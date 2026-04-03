@@ -38,6 +38,35 @@ final class MeetingRepository {
     }
 
     @discardableResult
+    func assignMeetingsWithoutCollection(to collectionID: String, workspaceID: String?) throws -> Int {
+        let descriptor = FetchDescriptor<Meeting>(
+            sortBy: [SortDescriptor(\Meeting.updatedAt, order: .reverse)]
+        )
+        let meetings = try modelContext.fetch(descriptor)
+        let candidates = meetings.filter { meeting in
+            guard meeting.collectionId == nil else { return false }
+            guard meeting.syncState != .deleted else { return false }
+
+            guard let workspaceID else {
+                return true
+            }
+
+            return meeting.hiddenWorkspaceId == nil || meeting.hiddenWorkspaceId == workspaceID
+        }
+
+        guard !candidates.isEmpty else {
+            return 0
+        }
+
+        for meeting in candidates {
+            meeting.collectionId = collectionID
+        }
+
+        try save()
+        return candidates.count
+    }
+
+    @discardableResult
     func createDraftMeeting(hiddenWorkspaceID: String?, collectionID: String? = nil) throws -> Meeting {
         let meeting = Meeting(
             status: .idle,

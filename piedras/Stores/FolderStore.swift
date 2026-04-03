@@ -98,7 +98,7 @@ final class FolderStore {
 
     func seedPreviewFolders(defaultID: String = "preview-notes") {
         folders = [
-            FolderSummary(id: defaultID, name: "Notes", isDefault: true)
+            FolderSummary(id: defaultID, name: "Default Folder", isDefault: true)
         ]
         settingsStore.defaultCollectionID = defaultID
         settingsStore.selectedCollectionID = defaultID

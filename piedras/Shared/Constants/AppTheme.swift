@@ -55,6 +55,14 @@ enum AppTheme {
     static var highlightSoft: Color { Color(hex: 0xF1E2DA) }
     /// Danger remains red so destructive/error states stay distinct from the recording CTA
     static var danger: Color { Color(hex: 0xD9423E) }
+    /// Dark wine red for swipe-to-delete controls on note rows
+    static var destructiveActionFill: Color { Color(hex: 0x8E3E43) }
+    /// Pressed state for swipe-to-delete controls
+    static var destructiveActionPressedFill: Color { Color(hex: 0x6F2E33) }
+    /// Border used by swipe-to-delete controls
+    static var destructiveActionBorder: Color { Color(hex: 0x6F2E33) }
+    /// Soft warm shadow so destructive controls stay in the paper system
+    static var destructiveActionShadow: Color { Color(hex: 0xC9B8A3) }
     /// Success – typewriter green
     static var success: Color { Color(hex: 0x5F824D) }
     /// Ballpoint pen blue

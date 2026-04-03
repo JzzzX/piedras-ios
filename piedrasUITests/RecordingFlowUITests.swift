@@ -106,8 +106,9 @@ final class RecordingFlowUITests: XCTestCase {
         XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
         firstRow.swipeLeft()
 
-        let deleteButton = app.buttons["删除"]
-        XCTAssertTrue(deleteButton.waitForExistence(timeout: 3), "左滑后删除按钮未出现。")
+        let deleteButton = app.buttons["MeetingRowDeleteButton"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 3), "左滑后自定义垃圾桶按钮未出现。")
+        XCTAssertFalse(app.buttons["删除"].exists, "不应再展示系统原生删除文案按钮。")
         deleteButton.tap()
 
         let deletedTitle = app.staticTexts[seededTitle]

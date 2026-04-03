@@ -33,9 +33,10 @@ struct AppStringTable {
     var newRecording: String { isChinese ? "新录音" : "New recording" }
     var stop: String { isChinese ? "停止" : "Stop" }
     var deleteAction: String { isChinese ? "删除" : "Delete" }
+    var deleteNoteAction: String { isChinese ? "删除笔记" : "Delete note" }
     var folders: String { isChinese ? "文件夹" : "Folders" }
     var foldersComingSoon: String { isChinese ? "文件夹功能即将上线" : "Folders are coming soon" }
-    var defaultFolderName: String { isChinese ? "笔记" : "Notes" }
+    var defaultFolderName: String { isChinese ? "默认文件栏" : "Default Folder" }
     var folderDrawerTitle: String { isChinese ? "文件夹" : "Folders" }
     var newFolder: String { isChinese ? "新建文件夹" : "New Folder" }
     var createFolderAction: String { isChinese ? "创建" : "Create" }

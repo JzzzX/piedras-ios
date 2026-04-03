@@ -75,7 +75,7 @@ struct FolderStoreTests {
             #expect(request.url?.path == "/api/collections")
             let payload = """
             [
-              { "id": "collection-notes", "name": "Notes", "isDefault": true },
+              { "id": "collection-notes", "name": "Default Folder", "isDefault": true },
               { "id": "collection-projects", "name": "项目资料", "isDefault": false }
             ]
             """
@@ -85,7 +85,7 @@ struct FolderStoreTests {
         await store.loadFolders()
 
         #expect(store.folders.count == 2)
-        #expect(store.folders.map(\.displayName) == ["笔记", "项目资料"])
+        #expect(store.folders.map(\.displayName) == ["默认文件栏", "项目资料"])
         #expect(store.folders.first?.isDefault == true)
         #expect(settingsStore.defaultCollectionID == "collection-notes")
         #expect(settingsStore.selectedCollectionID == "collection-notes")
@@ -129,7 +129,7 @@ struct FolderStoreTests {
                 #expect(request.httpMethod == "GET")
                 let payload = """
                 [
-                  { "id": "collection-notes", "name": "Notes", "isDefault": true }
+                  { "id": "collection-notes", "name": "Default Folder", "isDefault": true }
                 ]
                 """
                 return (response, Data(payload.utf8))
@@ -152,7 +152,7 @@ struct FolderStoreTests {
         let created = await store.createFolder()
 
         #expect(created == true)
-        #expect(store.folders.map(\.displayName) == ["笔记", "项目归档"])
+        #expect(store.folders.map(\.displayName) == ["默认文件栏", "项目归档"])
         #expect(settingsStore.selectedCollectionID == "collection-archive")
         #expect(settingsStore.activeCollectionID == "collection-archive")
         #expect(store.draftFolderName.isEmpty)

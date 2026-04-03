@@ -103,6 +103,7 @@ struct MeetingListView: View {
     @State private var currentSectionTitle: String = ""
     @State private var isFolderDrawerPresented = false
     @State private var isCreateFolderPromptPresented = false
+    @State private var openSwipeRowID: String?
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -170,6 +171,7 @@ struct MeetingListView: View {
         }
         .onChange(of: settingsStore.activeCollectionID, initial: false) { oldValue, newValue in
             guard oldValue != newValue else { return }
+            openSwipeRowID = nil
             meetingStore.loadMeetings()
             globalChatStore.startNewDraft()
         }
@@ -231,17 +233,26 @@ struct MeetingListView: View {
                 ForEach(homeSections) { section in
                     Section {
                         ForEach(section.rows) { row in
-                            MeetingRowView(
+                            HomeSwipeToDeleteRow(
                                 snapshot: row,
+                                isOpen: openSwipeRowID == row.id,
                                 onOpen: {
-                                    router.showMeeting(id: row.id)
+                                    if openSwipeRowID == row.id {
+                                        openSwipeRowID = nil
+                                    } else {
+                                        router.showMeeting(id: row.id)
+                                    }
+                                },
+                                onDelete: {
+                                    openSwipeRowID = nil
+                                    meetingStore.deleteMeeting(id: row.id)
+                                },
+                                onOpenChanged: { shouldOpen in
+                                    withAnimation(.easeOut(duration: 0.18)) {
+                                        openSwipeRowID = shouldOpen ? row.id : nil
+                                    }
                                 }
                             )
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(AppStrings.current.deleteAction, role: .destructive) {
-                                    meetingStore.deleteMeeting(id: row.id)
-                                }
-                            }
                             .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
                             .listRowBackground(Color.clear)
                             .listRowSeparator(.hidden)
@@ -266,6 +277,21 @@ struct MeetingListView: View {
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
+        .simultaneousGesture(
+            TapGesture().onEnded {
+                guard openSwipeRowID != nil else { return }
+                withAnimation(.easeOut(duration: 0.18)) {
+                    openSwipeRowID = nil
+                }
+            }
+        )
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 2, coordinateSpace: .local).onChanged { value in
+                guard openSwipeRowID != nil else { return }
+                guard abs(value.translation.height) > abs(value.translation.width) else { return }
+                openSwipeRowID = nil
+            }
+        )
         .contentMargins(.horizontal, 16, for: .scrollContent)
         .contentMargins(.bottom, MeetingHomeLayout.listBottomInset, for: .scrollContent)
         .refreshable {
