@@ -92,54 +92,86 @@ private struct HomeChatDockButtonStyle: ButtonStyle {
 }
 
 struct MeetingListView: View {
+    @Environment(FolderStore.self) private var folderStore
     @Environment(MeetingStore.self) private var meetingStore
+    @Environment(GlobalChatStore.self) private var globalChatStore
     @Environment(AppRouter.self) private var router
     @Environment(RecordingSessionStore.self) private var recordingSessionStore
     @Environment(SettingsStore.self) private var settingsStore
 
     @State private var scrollOffset: CGFloat = 0
     @State private var currentSectionTitle: String = ""
-    @State private var toastMessage: String?
-    @State private var toastTask: Task<Void, Never>?
+    @State private var isFolderDrawerPresented = false
+    @State private var isCreateFolderPromptPresented = false
 
     var body: some View {
-        ZStack(alignment: .top) {
-            AppGlassBackdrop()
+        ZStack(alignment: .leading) {
+            ZStack(alignment: .top) {
+                AppGlassBackdrop()
 
-            VStack(spacing: 0) {
-                // 折叠后的紧凑型顶栏
-                compactHeader
-                    .padding(.horizontal, 18)
-                    .padding(.top, 6)
-                    .padding(.bottom, 6)
-                    .background(AppTheme.background.opacity(scrollOffset > 30 ? 0.9 : 0))
-                    .opacity(scrollOffset > 30 ? 1 : 0)
-                    .allowsHitTesting(scrollOffset > 30)
-                    .accessibilityHidden(scrollOffset <= 30)
-                    .zIndex(2)
+                VStack(spacing: 0) {
+                    compactHeader
+                        .padding(.horizontal, 18)
+                        .padding(.top, 6)
+                        .padding(.bottom, 6)
+                        .background(AppTheme.background.opacity(scrollOffset > 30 ? 0.9 : 0))
+                        .opacity(scrollOffset > 30 ? 1 : 0)
+                        .allowsHitTesting(scrollOffset > 30)
+                        .accessibilityHidden(scrollOffset <= 30)
+                        .zIndex(2)
 
-                feedList
+                    feedList
+                }
             }
+
+            FolderDrawerView(
+                isPresented: $isFolderDrawerPresented,
+                folders: folderStore.folders,
+                activeFolderID: folderStore.activeFolderID,
+                isLoading: folderStore.isLoading,
+                onSelect: handleFolderSelection(_:),
+                onCreateFolder: presentCreateFolderPrompt
+            )
         }
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
-            bottomDock
+            if !isFolderDrawerPresented {
+                bottomDock
+            }
         }
         .overlay(alignment: .top) {
-            VStack(spacing: 10) {
-                if let error = meetingStore.lastErrorMessage {
-                    errorBanner(error)
-                }
-
-                if let toastMessage {
-                    homeToast(toastMessage)
+            if let error = homeErrorMessage {
+                errorBanner(error)
+                    .padding(.top, 10)
+                    .padding(.horizontal, 16)
+            }
+        }
+        .alert(AppStrings.current.newFolderPromptTitle, isPresented: $isCreateFolderPromptPresented) {
+            TextField(
+                AppStrings.current.newFolderPlaceholder,
+                text: Binding(
+                    get: { folderStore.draftFolderName },
+                    set: { folderStore.draftFolderName = $0 }
+                )
+            )
+            Button(AppStrings.current.cancel, role: .cancel) {
+                folderStore.draftFolderName = ""
+            }
+            Button(AppStrings.current.createFolderAction) {
+                Task {
+                    let created = await folderStore.createFolder()
+                    if created {
+                        finalizeFolderMutation()
+                    }
                 }
             }
-            .padding(.top, 10)
-            .padding(.horizontal, 16)
+        } message: {
+            Text(AppStrings.current.newFolderPlaceholder)
         }
-        .onDisappear {
-            toastTask?.cancel()
+        .onChange(of: settingsStore.activeCollectionID, initial: false) { oldValue, newValue in
+            guard oldValue != newValue else { return }
+            meetingStore.loadMeetings()
+            globalChatStore.startNewDraft()
         }
         .id(settingsStore.appLanguage)
     }
@@ -404,9 +436,7 @@ struct MeetingListView: View {
             identifier: identifier,
             size: size,
             iconSize: iconSize,
-            action: {
-                showToast(AppStrings.current.foldersComingSoon)
-            }
+            action: toggleFolderDrawer
         )
     }
 
@@ -435,26 +465,6 @@ struct MeetingListView: View {
         .accessibilityIdentifier(identifier)
     }
 
-    private func homeToast(_ message: String) -> some View {
-        HStack {
-            Text(message)
-                .font(AppTheme.bodyFont(size: 13, weight: .semibold))
-                .foregroundStyle(AppTheme.primaryActionForeground)
-                .lineLimit(1)
-        }
-            .padding(.horizontal, 14)
-            .frame(height: 36)
-            .background(AppTheme.primaryActionFill)
-            .overlay(
-                Rectangle()
-                    .stroke(AppTheme.brandInk, lineWidth: AppTheme.retroBorderWidth)
-            )
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(message)
-            .accessibilityIdentifier("HomeFolderPlaceholderToast")
-            .transition(.opacity.combined(with: .move(edge: .top)))
-    }
-
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -468,6 +478,7 @@ struct MeetingListView: View {
 
             Button {
                 meetingStore.clearLastError()
+                folderStore.clearLastError()
             } label: {
                 Image(systemName: "xmark")
                     .foregroundStyle(.white.opacity(0.84))
@@ -582,6 +593,10 @@ struct MeetingListView: View {
         router.showGlobalChat()
     }
 
+    private var homeErrorMessage: String? {
+        meetingStore.lastErrorMessage ?? folderStore.lastErrorMessage
+    }
+
     private func startMicrophoneRecording() {
         guard let meeting = meetingStore.createMeeting(startingRecording: true) else { return }
         router.showMeeting(id: meeting.id)
@@ -590,18 +605,25 @@ struct MeetingListView: View {
         }
     }
 
-    private func showToast(_ message: String) {
-        toastTask?.cancel()
-        withAnimation(.easeOut(duration: 0.18)) {
-            toastMessage = message
+    private func toggleFolderDrawer() {
+        hideKeyboard()
+        withAnimation(.easeOut(duration: 0.24)) {
+            isFolderDrawerPresented.toggle()
         }
+    }
 
-        toastTask = Task { @MainActor in
-            try? await Task.sleep(for: .seconds(1.4))
-            guard !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.18)) {
-                toastMessage = nil
-            }
+    private func handleFolderSelection(_ folderID: String) {
+        folderStore.selectFolder(id: folderID)
+    }
+
+    private func presentCreateFolderPrompt() {
+        hideKeyboard()
+        isCreateFolderPromptPresented = true
+    }
+
+    private func finalizeFolderMutation() {
+        withAnimation(.easeOut(duration: 0.24)) {
+            isFolderDrawerPresented = false
         }
     }
 

@@ -32,6 +32,7 @@ struct APIClientDecodingTests {
           "createdAt": "2026-03-19T08:40:00.000Z",
           "updatedAt": "2026-03-19T08:47:00.000Z",
           "workspaceId": "workspace-1",
+          "collectionId": "collection-notes",
           "audioCloudSyncEnabled": false,
           "noteAttachments": [
             {
@@ -69,9 +70,30 @@ struct APIClientDecodingTests {
         #expect(meeting.audioEnhancedNotes == "audio summary")
         #expect(meeting.audioEnhancedNotesStatus == "ready")
         #expect(meeting.audioEnhancedNotesProvider == "openai")
+        #expect(meeting.collectionId == "collection-notes")
         #expect(meeting.audioCloudSyncEnabled == false)
         #expect(meeting.noteAttachments?.count == 1)
         #expect(meeting.noteAttachmentsTextContext == "白板重点")
+    }
+
+    @Test
+    func decodesRemoteCollectionPayload() throws {
+        let payload = """
+        {
+          "id": "collection-notes",
+          "name": "Notes",
+          "isDefault": true
+        }
+        """
+
+        let collection = try APIClient.makeJSONDecoder().decode(
+            RemoteCollection.self,
+            from: Data(payload.utf8)
+        )
+
+        #expect(collection.id == "collection-notes")
+        #expect(collection.name == "Notes")
+        #expect(collection.isDefault == true)
     }
 
     @Test

@@ -41,6 +41,37 @@ struct AccountIsolationTests {
     }
 
     @MainActor
+    @Test
+    func loadMeetingsOnlyShowsCurrentWorkspace() throws {
+        let appContainer = try makeAppContainer()
+        try resetLocalState(in: appContainer)
+
+        appContainer.settingsStore.hiddenWorkspaceID = "workspace-notes"
+        appContainer.settingsStore.defaultCollectionID = "collection-notes"
+        appContainer.settingsStore.selectedCollectionID = "collection-notes"
+
+        let notesMeeting = try appContainer.meetingRepository.createDraftMeeting(
+            hiddenWorkspaceID: "workspace-notes",
+            collectionID: "collection-notes"
+        )
+        notesMeeting.title = "Notes"
+        let projectMeeting = try appContainer.meetingRepository.createDraftMeeting(
+            hiddenWorkspaceID: "workspace-notes",
+            collectionID: "collection-project"
+        )
+        projectMeeting.title = "Project"
+
+        appContainer.meetingStore.loadMeetings()
+
+        #expect(appContainer.meetingStore.meetings.map(\.id) == [notesMeeting.id])
+
+        appContainer.settingsStore.selectedCollectionID = "collection-project"
+        appContainer.meetingStore.loadMeetings()
+
+        #expect(appContainer.meetingStore.meetings.map(\.id) == [projectMeeting.id])
+    }
+
+    @MainActor
     private func makeAppContainer() throws -> AppContainer {
         if let container = AppContainer.currentXCTestInstance {
             return container
@@ -63,6 +94,8 @@ struct AccountIsolationTests {
         }
 
         appContainer.settingsStore.hiddenWorkspaceID = nil
+        appContainer.settingsStore.defaultCollectionID = nil
+        appContainer.settingsStore.selectedCollectionID = nil
         appContainer.meetingStore.loadMeetings()
     }
 }

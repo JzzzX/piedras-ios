@@ -11,6 +11,7 @@ final class MeetingRepository {
 
     func fetchMeetings(
         matching query: String = "",
+        collectionID: String? = nil,
         includeDeleted: Bool = false
     ) throws -> [Meeting] {
         let descriptor = FetchDescriptor<Meeting>(
@@ -18,6 +19,7 @@ final class MeetingRepository {
         )
         let meetings = try modelContext.fetch(descriptor)
             .filter { includeDeleted || $0.syncState != .deleted }
+            .filter { collectionID == nil || $0.collectionId == collectionID }
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         guard !trimmedQuery.isEmpty else {
@@ -36,10 +38,11 @@ final class MeetingRepository {
     }
 
     @discardableResult
-    func createDraftMeeting(hiddenWorkspaceID: String?) throws -> Meeting {
+    func createDraftMeeting(hiddenWorkspaceID: String?, collectionID: String? = nil) throws -> Meeting {
         let meeting = Meeting(
             status: .idle,
             hiddenWorkspaceId: hiddenWorkspaceID,
+            collectionId: collectionID,
             syncState: .pending
         )
         modelContext.insert(meeting)
@@ -202,6 +205,7 @@ final class MeetingRepository {
             - [ ] 收紧详情页信息层级
             """,
             hiddenWorkspaceId: workspaceID,
+            collectionId: "preview-notes",
             syncState: preferLocalOnly ? .pending : .synced,
             lastSyncedAt: preferLocalOnly ? nil : .now.addingTimeInterval(-3_600),
             createdAt: .now.addingTimeInterval(-7_200),
@@ -233,6 +237,7 @@ final class MeetingRepository {
             userNotesPlainText: "需要更快打开录音，详情页结构要简单。",
             enhancedNotes: "",
             hiddenWorkspaceId: workspaceID,
+            collectionId: "preview-notes",
             syncState: .failed,
             createdAt: .now.addingTimeInterval(-86_400),
             updatedAt: .now.addingTimeInterval(-76_000)

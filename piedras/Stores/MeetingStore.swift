@@ -306,6 +306,8 @@ final class MeetingStore {
         fileTranscriptionStatuses.removeAll()
         fileTranscriptionPartials.removeAll()
         settingsStore.hiddenWorkspaceID = nil
+        settingsStore.defaultCollectionID = nil
+        settingsStore.selectedCollectionID = nil
         settingsStore.workspaceBootstrapState = .idle
         settingsStore.workspaceStatusMessage = "等待登录"
         settingsStore.clearSyncStatus()
@@ -330,7 +332,10 @@ final class MeetingStore {
         defer { isLoading = false }
 
         do {
-            meetings = try repository.fetchMeetings(matching: searchText)
+            meetings = try repository.fetchMeetings(
+                matching: searchText,
+                collectionID: settingsStore.activeCollectionID
+            )
             if let selectedMeetingID,
                meetings.contains(where: { $0.id == selectedMeetingID }) {
                 return
@@ -351,7 +356,10 @@ final class MeetingStore {
         }
 
         do {
-            let meeting = try repository.createDraftMeeting(hiddenWorkspaceID: settingsStore.hiddenWorkspaceID)
+            let meeting = try repository.createDraftMeeting(
+                hiddenWorkspaceID: settingsStore.hiddenWorkspaceID,
+                collectionID: settingsStore.activeCollectionID
+            )
             if startingRecording {
                 _ = primeRecordingSession(
                     meetingID: meeting.id,
@@ -377,7 +385,10 @@ final class MeetingStore {
     }
 
     func searchMeetings(matching query: String) -> [Meeting] {
-        (try? repository.fetchMeetings(matching: query)) ?? []
+        (try? repository.fetchMeetings(
+            matching: query,
+            collectionID: settingsStore.activeCollectionID
+        )) ?? []
     }
 
     func searchMeetingResults(matching query: String) -> [MeetingSearchResult] {
@@ -1077,7 +1088,8 @@ final class MeetingStore {
             try await ensureAudioUploadedForAudioNotes(meeting)
             let response = try await apiClient.requestAudioEnhancedNotes(
                 meetingID: meetingID,
-                payload: MeetingPayloadMapper.makeAudioEnhancePayload(from: meeting)
+                payload: MeetingPayloadMapper.makeAudioEnhancePayload(from: meeting),
+                workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
             )
             MeetingPayloadMapper.apply(audioEnhanceStatus: response, to: meeting)
             try repository.save()
@@ -1195,7 +1207,8 @@ final class MeetingStore {
             meetingID: meeting.id,
             fileURL: URL(fileURLWithPath: audioLocalPath),
             duration: max(fallbackDuration, 0),
-            mimeType: meeting.audioMimeType ?? "audio/m4a"
+            mimeType: meeting.audioMimeType ?? "audio/m4a",
+            workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
         )
 
         meeting.audioRemotePath = apiClient.resolveAbsoluteURLString(uploadResponse.audioUrl) ?? meeting.audioRemotePath
@@ -1211,7 +1224,10 @@ final class MeetingStore {
     ) async throws -> RemoteAudioEnhanceStatusResponse? {
         for _ in 0 ..< 15 {
             try await Task.sleep(nanoseconds: 2_000_000_000)
-            let status = try await apiClient.fetchAudioEnhancedNotesStatus(meetingID: meetingID)
+            let status = try await apiClient.fetchAudioEnhancedNotesStatus(
+                meetingID: meetingID,
+                workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+            )
             MeetingPayloadMapper.apply(audioEnhanceStatus: status, to: meeting)
             try repository.save()
 

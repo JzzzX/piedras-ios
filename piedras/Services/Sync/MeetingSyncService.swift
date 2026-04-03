@@ -59,7 +59,10 @@ final class MeetingSyncService: MeetingSyncServicing {
         }
 
         if meeting.syncState == .deleted {
-            try await deleteRemoteMeeting(id: id)
+            try await deleteRemoteMeeting(
+                id: id,
+                workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+            )
             try repository.delete(meeting)
             return
         }
@@ -78,7 +81,10 @@ final class MeetingSyncService: MeetingSyncServicing {
         try repository.save()
 
         do {
-            if let remoteBeforeSync = try await fetchRemoteMeetingIfExists(id: meeting.id) {
+            if let remoteBeforeSync = try await fetchRemoteMeetingIfExists(
+                id: meeting.id,
+                workspaceID: workspaceID
+            ) {
                 MeetingPayloadMapper.applyRemoteSyncState(
                     remote: remoteBeforeSync,
                     to: meeting,
@@ -90,7 +96,8 @@ final class MeetingSyncService: MeetingSyncServicing {
             }
 
             let remoteMeeting = try await apiClient.upsertMeeting(
-                MeetingPayloadMapper.makeMeetingUpsertPayload(from: meeting, workspaceID: workspaceID)
+                MeetingPayloadMapper.makeMeetingUpsertPayload(from: meeting, workspaceID: workspaceID),
+                workspaceID: workspaceID
             )
             MeetingPayloadMapper.apply(remote: remoteMeeting, to: meeting, repository: repository, baseURL: apiClient.baseURL)
             try await syncRemoteNoteAttachments(for: meeting, remote: remoteMeeting)
@@ -134,9 +141,12 @@ final class MeetingSyncService: MeetingSyncServicing {
         }
     }
 
-    private func fetchRemoteMeetingIfExists(id: String) async throws -> RemoteMeetingDetail? {
+    private func fetchRemoteMeetingIfExists(
+        id: String,
+        workspaceID: String
+    ) async throws -> RemoteMeetingDetail? {
         do {
-            return try await apiClient.getMeeting(id: id)
+            return try await apiClient.getMeeting(id: id, workspaceID: workspaceID)
         } catch {
             guard isRemoteMeetingMissing(error) else {
                 throw error
@@ -170,7 +180,8 @@ final class MeetingSyncService: MeetingSyncServicing {
             meetingID: meeting.id,
             fileURL: URL(fileURLWithPath: audioLocalPath),
             duration: max(fallbackDuration, 0),
-            mimeType: meeting.audioMimeType ?? "audio/m4a"
+            mimeType: meeting.audioMimeType ?? "audio/m4a",
+            workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
         )
 
         apply(uploadResponse: uploadResponse, to: meeting, fallbackDuration: fallbackDuration)
@@ -186,7 +197,10 @@ final class MeetingSyncService: MeetingSyncServicing {
         }
 
         guard !pendingUploads.isEmpty else {
-            return meeting.noteAttachmentPendingDeleteIDs.isEmpty ? nil : try await apiClient.getMeeting(id: meeting.id)
+            return meeting.noteAttachmentPendingDeleteIDs.isEmpty ? nil : try await apiClient.getMeeting(
+                id: meeting.id,
+                workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+            )
         }
 
         for fileName in pendingUploads {
@@ -197,6 +211,7 @@ final class MeetingSyncService: MeetingSyncServicing {
                 meetingID: meeting.id,
                 fileURL: fileURL,
                 mimeType: mimeType(forAttachmentFileName: fileName),
+                workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID,
                 extractedText: meeting.noteAttachmentExtractedTextByFileName[fileName] ?? ""
             )
 
@@ -213,7 +228,10 @@ final class MeetingSyncService: MeetingSyncServicing {
             try repository.save()
         }
 
-        return try await apiClient.getMeeting(id: meeting.id)
+        return try await apiClient.getMeeting(
+            id: meeting.id,
+            workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+        )
     }
 
     private func deletePendingRemoteNoteAttachments(for meeting: Meeting) async throws {
@@ -223,7 +241,11 @@ final class MeetingSyncService: MeetingSyncServicing {
         var remainingDeleteIDs: [String] = []
         for attachmentID in pendingDeleteIDs {
             do {
-                try await apiClient.deleteNoteAttachment(meetingID: meeting.id, attachmentID: attachmentID)
+                try await apiClient.deleteNoteAttachment(
+                    meetingID: meeting.id,
+                    attachmentID: attachmentID,
+                    workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+                )
             } catch {
                 remainingDeleteIDs.append(attachmentID)
             }
@@ -313,13 +335,19 @@ final class MeetingSyncService: MeetingSyncServicing {
     ) async throws -> RemoteMeetingDetail? {
         for _ in 0 ..< 10 {
             try await Task.sleep(nanoseconds: 2_000_000_000)
-            let status = try await apiClient.fetchMeetingProcessingStatus(meetingID: meetingID)
+            let status = try await apiClient.fetchMeetingProcessingStatus(
+                meetingID: meetingID,
+                workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+            )
             MeetingPayloadMapper.apply(processingStatus: status, to: meeting)
             try repository.save()
 
             switch status.audioProcessingState {
             case "completed":
-                return try await apiClient.getMeeting(id: meetingID)
+                return try await apiClient.getMeeting(
+                    id: meetingID,
+                    workspaceID: meeting.hiddenWorkspaceId ?? settingsStore.hiddenWorkspaceID
+                )
             case "failed":
                 return nil
             default:
@@ -372,7 +400,7 @@ final class MeetingSyncService: MeetingSyncServicing {
                 continue
             }
 
-            let remoteDetail = try await apiClient.getMeeting(id: summary.id)
+            let remoteDetail = try await apiClient.getMeeting(id: summary.id, workspaceID: workspaceID)
             if let localMeeting {
                 if localMeeting.syncState == .pending || localMeeting.syncState == .failed {
                     MeetingPayloadMapper.applyRemoteSyncState(
@@ -399,8 +427,8 @@ final class MeetingSyncService: MeetingSyncServicing {
         return summaries.count
     }
 
-    func deleteRemoteMeeting(id: String) async throws {
-        try await apiClient.deleteMeeting(id: id)
+    func deleteRemoteMeeting(id: String, workspaceID: String? = nil) async throws {
+        try await apiClient.deleteMeeting(id: id, workspaceID: workspaceID)
     }
 
     private func pruneLocalAudioIfNeeded(for meeting: Meeting) throws {

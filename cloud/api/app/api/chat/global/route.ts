@@ -34,8 +34,8 @@ function buildNoResultMessage(filters: GlobalChatFilters): string {
   if (filters.collectionId) {
     conditions.push(
       filters.collectionId === '__ungrouped'
-        ? '仅未归类会议'
-        : `Collection = ${filters.collectionId}`
+        ? '仅未归类笔记'
+        : `文件夹 = ${filters.collectionId}`
     );
   }
 

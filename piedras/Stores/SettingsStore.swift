@@ -60,6 +60,8 @@ final class SettingsStore {
 
     private enum Key {
         static let hiddenWorkspaceID = "piedras.settings.hiddenWorkspaceID"
+        static let defaultCollectionID = "piedras.settings.defaultCollectionID"
+        static let selectedCollectionID = "piedras.settings.selectedCollectionID"
         static let appLanguage = "piedras.settings.appLanguage"
         static let experimentalAudioAINotesEnabled = "piedras.settings.experimentalAudioAINotesEnabled"
         static let remoteStatusSnapshot = "piedras.settings.remoteStatusSnapshot"
@@ -93,6 +95,8 @@ final class SettingsStore {
             }
 
             hiddenWorkspaceID = nil
+            defaultCollectionID = nil
+            selectedCollectionID = nil
             workspaceBootstrapState = .idle
             workspaceStatusMessage = "等待连接云端"
             resetRemoteStatus()
@@ -105,6 +109,22 @@ final class SettingsStore {
         didSet {
             defaults.set(hiddenWorkspaceID, forKey: Key.hiddenWorkspaceID)
         }
+    }
+
+    var defaultCollectionID: String? {
+        didSet {
+            defaults.set(defaultCollectionID, forKey: Key.defaultCollectionID)
+        }
+    }
+
+    var selectedCollectionID: String? {
+        didSet {
+            defaults.set(selectedCollectionID, forKey: Key.selectedCollectionID)
+        }
+    }
+
+    var activeCollectionID: String? {
+        selectedCollectionID ?? defaultCollectionID
     }
 
     var isExperimentalAudioAINotesEnabled: Bool {
@@ -143,6 +163,9 @@ final class SettingsStore {
         self.appLanguage = defaults.string(forKey: Key.appLanguage)
             .flatMap { AppLanguage(rawValue: $0) } ?? .chinese
         hiddenWorkspaceID = defaults.string(forKey: Key.hiddenWorkspaceID)
+        defaultCollectionID = defaults.string(forKey: Key.defaultCollectionID)
+        selectedCollectionID = defaults.string(forKey: Key.selectedCollectionID)
+            ?? defaults.string(forKey: Key.defaultCollectionID)
         isExperimentalAudioAINotesEnabled = defaults.bool(forKey: Key.experimentalAudioAINotesEnabled)
 #if DEBUG
         debugBackendBaseURLString = defaults.string(forKey: Key.debugBackendBaseURLString)

@@ -9,6 +9,7 @@ test('serializeMeetingDetail includes cloud audio state and note attachments met
   const payload = serializeMeetingDetail(
     {
       id: 'meeting-1',
+      collectionId: 'collection-notes',
       speakers: '{"spk_1":"主持人"}',
       audioUpdatedAt: updatedAt,
       audioProcessingState: 'idle',
@@ -33,6 +34,7 @@ test('serializeMeetingDetail includes cloud audio state and note attachments met
   );
 
   assert.equal(payload.audioCloudSyncEnabled, false);
+  assert.equal(payload.collectionId, 'collection-notes');
   assert.equal(payload.hasAudio, false);
   assert.equal(payload.audioUrl, null);
   assert.equal(payload.noteAttachmentsTextContext, '白板重点');

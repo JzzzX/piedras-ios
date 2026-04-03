@@ -5,6 +5,12 @@ struct RemoteWorkspace: Codable, Equatable {
     let name: String
 }
 
+struct RemoteCollection: Codable, Equatable {
+    let id: String
+    let name: String
+    let isDefault: Bool
+}
+
 struct RemoteASRStatus: Decodable {
     let mode: String
     let provider: String
@@ -132,6 +138,7 @@ struct RemoteMeetingDetail: Decodable {
     let createdAt: Date?
     let updatedAt: Date?
     let workspaceId: String?
+    let collectionId: String?
     let speakers: [String: String]?
     let segments: [RemoteTranscriptSegment]
     let chatMessages: [RemoteChatMessage]
@@ -167,6 +174,7 @@ struct RemoteMeetingDetail: Decodable {
         createdAt: Date?,
         updatedAt: Date?,
         workspaceId: String?,
+        collectionId: String? = nil,
         speakers: [String: String]? = nil,
         segments: [RemoteTranscriptSegment],
         chatMessages: [RemoteChatMessage],
@@ -201,6 +209,7 @@ struct RemoteMeetingDetail: Decodable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.workspaceId = workspaceId
+        self.collectionId = collectionId
         self.speakers = speakers
         self.segments = segments
         self.chatMessages = chatMessages
@@ -293,6 +302,10 @@ struct WorkspaceCreatePayload: Encodable {
     let modeLabel: String
 }
 
+struct CollectionCreatePayload: Encodable {
+    let name: String
+}
+
 struct MeetingSegmentPayload: Encodable {
     let id: String
     let speaker: String
@@ -317,6 +330,7 @@ struct MeetingUpsertPayload: Encodable {
     let duration: Int
     let audioCloudSyncEnabled: Bool
     let workspaceId: String
+    let collectionId: String?
     let userNotes: String
     let enhancedNotes: String
     let speakers: [String: String]?
@@ -362,7 +376,7 @@ struct ChatRequestPayload: Encodable {
 }
 
 struct GlobalChatFiltersPayload: Encodable {
-    let workspaceId: String?
+    let collectionId: String?
 }
 
 struct GlobalChatRequestPayload: Encodable {
@@ -396,6 +410,7 @@ enum MeetingPayloadMapper {
             duration: meeting.durationSeconds,
             audioCloudSyncEnabled: meeting.audioCloudSyncEnabled,
             workspaceId: workspaceID,
+            collectionId: meeting.collectionId,
             userNotes: PlainTextHTMLAdapter.html(from: meeting.userNotesPlainText),
             enhancedNotes: meeting.enhancedNotes,
             speakers: includeSpeakers ? meeting.speakers : nil,
@@ -509,6 +524,7 @@ enum MeetingPayloadMapper {
             audioDuration: remote.audioDuration ?? 0,
             audioUpdatedAt: remote.audioUpdatedAt,
             hiddenWorkspaceId: remote.workspaceId,
+            collectionId: remote.collectionId,
             speakers: remote.speakers ?? [:],
             transcriptPipelineState: status == .ended ? .ready : (status == .transcriptionFailed ? .failed : .idle),
             syncState: .synced,
@@ -557,6 +573,7 @@ enum MeetingPayloadMapper {
         meeting.audioDuration = remote.audioDuration ?? meeting.audioDuration
         meeting.audioUpdatedAt = remote.audioUpdatedAt ?? meeting.audioUpdatedAt
         meeting.hiddenWorkspaceId = remote.workspaceId ?? meeting.hiddenWorkspaceId
+        meeting.collectionId = remote.collectionId ?? meeting.collectionId
         if let remoteSpeakers = remote.speakers,
            !remoteSpeakers.isEmpty || meeting.speakers.isEmpty {
             meeting.speakers = remoteSpeakers
@@ -631,6 +648,7 @@ enum MeetingPayloadMapper {
         meeting.audioDuration = remote.audioDuration ?? meeting.audioDuration
         meeting.audioUpdatedAt = remote.audioUpdatedAt ?? meeting.audioUpdatedAt
         meeting.hiddenWorkspaceId = remote.workspaceId ?? meeting.hiddenWorkspaceId
+        meeting.collectionId = remote.collectionId ?? meeting.collectionId
         if let remoteSpeakers = remote.speakers,
            !remoteSpeakers.isEmpty || meeting.speakers.isEmpty {
             meeting.speakers = remoteSpeakers

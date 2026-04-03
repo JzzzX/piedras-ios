@@ -77,15 +77,23 @@ final class RecordingFlowUITests: XCTestCase {
     }
 
     @MainActor
-    func testHomeFolderPlaceholderButtonDoesNotNavigateAway() throws {
+    func testHomeFolderButtonOpensDrawerAndHidesBottomDock() throws {
         let app = launchApp()
 
-        let folderButton = element(in: app, identifier: "HomeFolderButton", fallbackLabel: "文件夹")
+        let folderButton = app.buttons["HomeFolderButton"]
         XCTAssertTrue(folderButton.waitForExistence(timeout: 5), "首页顶部缺少文件夹入口。")
         folderButton.tap()
 
-        XCTAssertTrue(app.staticTexts["Piedras"].exists, "点击文件夹入口后仍应停留在首页。")
-        XCTAssertFalse(app.textFields["GlobalChatInputField"].exists, "点击文件夹入口不应误打开全局对话。")
+        let newFolderButton = app.buttons["FolderDrawerNewFolderButton"]
+        XCTAssertTrue(newFolderButton.waitForExistence(timeout: 3), "点击文件夹入口后应打开左侧抽屉。")
+        XCTAssertFalse(app.buttons["NewRecordingButton"].exists, "打开文件夹抽屉时不应继续展示底部录音入口。")
+        XCTAssertFalse(app.buttons["HomeGlobalChatLauncher"].exists, "打开文件夹抽屉时不应继续展示底部对话入口。")
+
+        app.buttons["FolderDrawerCloseButton"].tap()
+
+        XCTAssertFalse(newFolderButton.exists, "关闭后文件夹抽屉应消失。")
+        XCTAssertTrue(app.buttons["NewRecordingButton"].waitForExistence(timeout: 3), "关闭抽屉后应恢复底部录音入口。")
+        XCTAssertTrue(app.buttons["HomeGlobalChatLauncher"].waitForExistence(timeout: 3), "关闭抽屉后应恢复底部对话入口。")
     }
 
     @MainActor

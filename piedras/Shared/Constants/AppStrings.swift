@@ -35,6 +35,14 @@ struct AppStringTable {
     var deleteAction: String { isChinese ? "删除" : "Delete" }
     var folders: String { isChinese ? "文件夹" : "Folders" }
     var foldersComingSoon: String { isChinese ? "文件夹功能即将上线" : "Folders are coming soon" }
+    var defaultFolderName: String { isChinese ? "笔记" : "Notes" }
+    var folderDrawerTitle: String { isChinese ? "文件夹" : "Folders" }
+    var newFolder: String { isChinese ? "新建文件夹" : "New Folder" }
+    var createFolderAction: String { isChinese ? "创建" : "Create" }
+    var newFolderPromptTitle: String { isChinese ? "新建文件夹" : "Create Folder" }
+    var newFolderPlaceholder: String { isChinese ? "输入文件夹名称" : "Enter folder name" }
+    var newFolderNameRequired: String { isChinese ? "请输入文件夹名称。" : "Enter a folder name." }
+    var folderEmptyState: String { isChinese ? "当前只有默认文件夹。" : "Only the default folder is available." }
 
     // ── MeetingHomeBucket ────────────────────────────────────────
 

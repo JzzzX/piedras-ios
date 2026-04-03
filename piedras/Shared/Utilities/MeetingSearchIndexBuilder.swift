@@ -132,10 +132,10 @@ enum MeetingSearchIndexBuilder {
     static func localRetrievalResult(
         for question: String,
         meetings: [Meeting],
-        workspaceID: String?
+        collectionID: String?
     ) -> LocalMeetingRetrievalResult {
         let keywords = queryTokens(from: question)
-        let filteredMeetings = meetings.filter { workspaceID == nil || $0.hiddenWorkspaceId == workspaceID }
+        let filteredMeetings = meetings.filter { collectionID == nil || $0.collectionId == collectionID }
 
         let ranked = filteredMeetings
             .map { meeting in

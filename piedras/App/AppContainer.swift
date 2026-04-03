@@ -24,6 +24,7 @@ final class AppContainer {
     let apiClient: APIClient
     let asrService: ASRService
     let workspaceBootstrapService: WorkspaceBootstrapService
+    let folderStore: FolderStore
     let meetingSyncService: MeetingSyncService
     let meetingStore: MeetingStore
     let globalChatStore: GlobalChatStore
@@ -80,6 +81,10 @@ final class AppContainer {
             apiClient: apiClient,
             settingsStore: settingsStore
         )
+        folderStore = FolderStore(
+            apiClient: apiClient,
+            settingsStore: settingsStore
+        )
         meetingSyncService = MeetingSyncService(
             repository: meetingRepository,
             settingsStore: settingsStore,
@@ -117,17 +122,19 @@ final class AppContainer {
         authStore.logoutBlockMessageProvider = { [weak meetingStore] in
             meetingStore?.logoutBlockingMessage()
         }
-        authStore.didAuthenticate = { [weak settingsStore, weak globalChatStore, weak meetingStore] user, workspace in
+        authStore.didAuthenticate = { [weak settingsStore, weak globalChatStore, weak meetingStore, weak folderStore] user, workspace in
             guard let settingsStore else { return }
             settingsStore.hiddenWorkspaceID = workspace.id
             settingsStore.workspaceBootstrapState = .success
             settingsStore.workspaceStatusMessage = "已连接 \(user.email)"
             settingsStore.clearSyncStatus()
+            folderStore?.reset()
             globalChatStore?.startNewDraft()
             meetingStore?.handleAuthenticationRecovered()
         }
-        authStore.didUnauthenticate = { [weak router, weak meetingStore, weak globalChatStore] in
+        authStore.didUnauthenticate = { [weak router, weak meetingStore, weak globalChatStore, weak folderStore] in
             meetingStore?.resetLocalAccountData()
+            folderStore?.reset()
             globalChatStore?.startNewDraft()
             router?.dismissSheet()
             router?.popToRoot()
@@ -141,6 +148,8 @@ final class AppContainer {
         AppStrings.syncLanguage(settingsStore.appLanguage)
 
         if inMemory {
+            settingsStore.hiddenWorkspaceID = "preview-workspace"
+            folderStore.seedPreviewFolders()
             authStore.phase = .authenticated
             authStore.hasResolvedInitialSession = true
             authStore.isSessionValidated = true

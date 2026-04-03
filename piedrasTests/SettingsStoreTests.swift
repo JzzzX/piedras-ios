@@ -106,4 +106,25 @@ struct SettingsStoreTests {
         #expect(store.lastSuccessfulSyncAt == syncedAt)
         #expect(store.syncStatusMessage == "启动同步完成。")
     }
+
+    @Test
+    func collectionSelectionPersistsAndFallsBackToDefaultCollection() {
+        let suiteName = "piedras.tests.settings.collections.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+
+        let store = SettingsStore(defaults: defaults)
+        store.defaultCollectionID = "collection-notes"
+        store.selectedCollectionID = "collection-projects"
+
+        let restored = SettingsStore(defaults: defaults)
+
+        #expect(restored.defaultCollectionID == "collection-notes")
+        #expect(restored.selectedCollectionID == "collection-projects")
+        #expect(restored.activeCollectionID == "collection-projects")
+
+        restored.selectedCollectionID = nil
+
+        #expect(restored.activeCollectionID == "collection-notes")
+    }
 }

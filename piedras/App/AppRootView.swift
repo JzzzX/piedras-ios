@@ -5,6 +5,7 @@ struct AppRootView: View {
     @Environment(AppRouter.self) private var router
     @Environment(AuthStore.self) private var authStore
     @Environment(SettingsStore.self) private var settingsStore
+    @Environment(FolderStore.self) private var folderStore
     @Environment(MeetingStore.self) private var meetingStore
 
     var body: some View {
@@ -23,11 +24,15 @@ struct AppRootView: View {
         }
         .onChange(of: authStore.phase, initial: true) { _, newPhase in
             guard newPhase == .authenticated else { return }
-            handleAuthenticatedAppearance()
+            Task {
+                await handleAuthenticatedAppearance()
+            }
         }
         .onChange(of: authStore.isSessionValidated, initial: true) { _, isValidated in
             guard authStore.isAuthenticated, isValidated else { return }
-            handleAuthenticatedAppearance()
+            Task {
+                await handleAuthenticatedAppearance()
+            }
         }
         .onChange(of: scenePhase, initial: true) { _, newPhase in
             guard authStore.isAuthenticated, authStore.isSessionValidated else { return }
@@ -51,7 +56,7 @@ struct AppRootView: View {
                     }
                 }
                 .task {
-                    handleAuthenticatedAppearance()
+                    await handleAuthenticatedAppearance()
                 }
         }
         .sheet(item: $router.sheet) { sheet in
@@ -102,8 +107,9 @@ struct AppRootView: View {
         !authStore.hasResolvedInitialSession
     }
 
-    private func handleAuthenticatedAppearance() {
+    private func handleAuthenticatedAppearance() async {
         if authStore.isSessionValidated {
+            await folderStore.loadIfNeeded()
             meetingStore.loadIfNeeded()
             meetingStore.handleScenePhaseChange(scenePhase)
             presentSettingsIfNeeded()

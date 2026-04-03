@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db';
 import { hasMeetingAudioFile } from '@/lib/meeting-audio';
 import { serializeMeetingDetail } from '@/lib/meeting-response';
 import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
+import { ensureDefaultCollectionForWorkspace } from '@/lib/user-collection-db';
 
 interface SegmentPayload {
   id: string;
@@ -150,6 +151,11 @@ export async function POST(req: NextRequest) {
     const normalizedChatMessages = Array.isArray(chatMessages)
       ? (chatMessages as ChatMessagePayload[])
       : null;
+    const fallbackCollection = collectionId
+      ? null
+      : await ensureDefaultCollectionForWorkspace(prisma, {
+          workspaceId: auth.workspace.id,
+        });
     const meeting = await prisma.$transaction(async (tx: any) => {
       const existingMeeting = id
         ? await tx.meeting.findUnique({
@@ -167,7 +173,7 @@ export async function POST(req: NextRequest) {
         date: normalizedDate,
         status: status || 'ended',
         duration: duration || 0,
-        collectionId: collectionId || null,
+        collectionId: collectionId || fallbackCollection?.id || null,
         workspaceId: auth.workspace.id,
         userNotes: userNotes || '',
         enhancedNotes: enhancedNotes || '',

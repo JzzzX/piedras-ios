@@ -169,6 +169,31 @@ struct SegmentCommentContextTests {
         #expect(context.contains("图片文字：白板写着：4 月 8 日开始灰度，4 月 15 日全量。"))
     }
 
+    @Test
+    func localCommentContextFiltersMeetingsByCollection() {
+        let includedMeeting = Meeting(
+            title: "项目例会",
+            collectionId: "collection-projects",
+            segments: [commentedSegment(text: "项目发布时间是 4 月 8 日。", comment: "这是项目文件夹里的评论。")]
+        )
+        let excludedMeeting = Meeting(
+            title: "私人笔记",
+            collectionId: "collection-personal",
+            segments: [commentedSegment(text: "私人安排在 4 月 9 日。", comment: "这是其他文件夹里的评论。")]
+        )
+
+        let context = MeetingCommentContextBuilder.localCommentContext(
+            for: "发布时间",
+            meetings: [includedMeeting, excludedMeeting],
+            collectionID: "collection-projects"
+        )
+
+        #expect(context.contains("项目例会"))
+        #expect(context.contains("这是项目文件夹里的评论。"))
+        #expect(!context.contains("私人笔记"))
+        #expect(!context.contains("这是其他文件夹里的评论。"))
+    }
+
     private func makeMeetingWithComments() -> Meeting {
         let firstSegment = TranscriptSegment(
             speaker: "Speaker A",
@@ -214,5 +239,19 @@ struct SegmentCommentContextTests {
             enhancedNotes: "AI 笔记",
             segments: [firstSegment, secondSegment, thirdSegment]
         )
+    }
+
+    private func commentedSegment(text: String, comment: String) -> TranscriptSegment {
+        let segment = TranscriptSegment(
+            speaker: "Speaker A",
+            text: text,
+            startTime: 12_000,
+            endTime: 18_000,
+            orderIndex: 0
+        )
+        let annotation = SegmentAnnotation(comment: comment)
+        annotation.segment = segment
+        segment.annotation = annotation
+        return segment
     }
 }

@@ -73,6 +73,7 @@ enum APIClientError: LocalizedError {
 @MainActor
 final class APIClient: AuthNetworking {
     private static let requestIDHeader = "X-Request-Id"
+    private static let workspaceIDHeader = "X-Workspace-Id"
     private static let defaultRequestTimeout: TimeInterval = 30
     private static let aiRequestTimeout: TimeInterval = 45
     private static let aiRequestRetryCount = 1
@@ -248,36 +249,64 @@ final class APIClient: AuthNetworking {
         try await sendJSONRequest(path: "/api/workspaces", method: "POST", body: payload)
     }
 
+    func listCollections() async throws -> [RemoteCollection] {
+        try await sendJSONRequest(path: "/api/collections", method: "GET", responseType: [RemoteCollection].self)
+    }
+
+    func createCollection(_ payload: CollectionCreatePayload) async throws -> RemoteCollection {
+        try await sendJSONRequest(path: "/api/collections", method: "POST", body: payload)
+    }
+
     func listMeetings(workspaceID: String) async throws -> [RemoteMeetingListItem] {
         try await sendJSONRequest(
             path: "/api/meetings",
             method: "GET",
             queryItems: [URLQueryItem(name: "workspaceId", value: workspaceID)],
+            extraHeaders: workspaceHeader(workspaceID),
             responseType: [RemoteMeetingListItem].self
         )
     }
 
-    func getMeeting(id: String) async throws -> RemoteMeetingDetail {
-        try await sendJSONRequest(path: "/api/meetings/\(id)", method: "GET", responseType: RemoteMeetingDetail.self)
+    func getMeeting(id: String, workspaceID: String? = nil) async throws -> RemoteMeetingDetail {
+        try await sendJSONRequest(
+            path: "/api/meetings/\(id)",
+            method: "GET",
+            extraHeaders: workspaceHeader(workspaceID),
+            responseType: RemoteMeetingDetail.self
+        )
     }
 
     func updateMeetingAudioCloudSyncEnabled(
         meetingID: String,
-        enabled: Bool
+        enabled: Bool,
+        workspaceID: String? = nil
     ) async throws -> RemoteMeetingDetail {
         try await sendJSONRequest(
             path: "/api/meetings/\(meetingID)",
             method: "PUT",
+            extraHeaders: workspaceHeader(workspaceID),
             body: ["audioCloudSyncEnabled": enabled]
         )
     }
 
-    func upsertMeeting(_ payload: MeetingUpsertPayload) async throws -> RemoteMeetingDetail {
-        try await sendJSONRequest(path: "/api/meetings", method: "POST", body: payload)
+    func upsertMeeting(
+        _ payload: MeetingUpsertPayload,
+        workspaceID: String? = nil
+    ) async throws -> RemoteMeetingDetail {
+        try await sendJSONRequest(
+            path: "/api/meetings",
+            method: "POST",
+            extraHeaders: workspaceHeader(workspaceID),
+            body: payload
+        )
     }
 
-    func deleteMeeting(id: String) async throws {
-        let request = try makeRequest(path: "/api/meetings/\(id)", method: "DELETE")
+    func deleteMeeting(id: String, workspaceID: String? = nil) async throws {
+        let request = try makeRequest(
+            path: "/api/meetings/\(id)",
+            method: "DELETE",
+            extraHeaders: workspaceHeader(workspaceID)
+        )
         let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data, fallback: "删除会议失败。")
     }
@@ -287,6 +316,7 @@ final class APIClient: AuthNetworking {
         fileURL: URL,
         duration: Int,
         mimeType: String,
+        workspaceID: String? = nil,
         requestTranscriptFinalization: Bool = false
     ) async throws -> RemoteAudioUploadResponse {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
@@ -298,7 +328,8 @@ final class APIClient: AuthNetworking {
             method: "PUT",
             queryItems: requestTranscriptFinalization
                 ? [URLQueryItem(name: "finalizeTranscript", value: "true")]
-                : []
+                : [],
+            extraHeaders: workspaceHeader(workspaceID)
         )
         request.timeoutInterval = 15 * 60
         request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
@@ -319,6 +350,7 @@ final class APIClient: AuthNetworking {
         meetingID: String,
         fileURL: URL,
         mimeType: String,
+        workspaceID: String? = nil,
         extractedText: String
     ) async throws -> RemoteNoteAttachmentUploadResponse {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
@@ -326,7 +358,11 @@ final class APIClient: AuthNetworking {
         }
 
         let boundary = "Boundary-\(UUID().uuidString)"
-        var request = try makeRequest(path: "/api/meetings/\(meetingID)/attachments", method: "POST")
+        var request = try makeRequest(
+            path: "/api/meetings/\(meetingID)/attachments",
+            method: "POST",
+            extraHeaders: workspaceHeader(workspaceID)
+        )
         request.timeoutInterval = 5 * 60
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
 
@@ -347,10 +383,15 @@ final class APIClient: AuthNetworking {
         return try decoder.decode(RemoteNoteAttachmentUploadResponse.self, from: data)
     }
 
-    func deleteNoteAttachment(meetingID: String, attachmentID: String) async throws {
+    func deleteNoteAttachment(
+        meetingID: String,
+        attachmentID: String,
+        workspaceID: String? = nil
+    ) async throws {
         let request = try makeRequest(
             path: "/api/meetings/\(meetingID)/attachments/\(attachmentID)",
-            method: "DELETE"
+            method: "DELETE",
+            extraHeaders: workspaceHeader(workspaceID)
         )
         let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data, fallback: "删除资料区图片失败。")
@@ -373,10 +414,14 @@ final class APIClient: AuthNetworking {
         return data
     }
 
-    func fetchMeetingProcessingStatus(meetingID: String) async throws -> RemoteMeetingProcessingStatus {
+    func fetchMeetingProcessingStatus(
+        meetingID: String,
+        workspaceID: String? = nil
+    ) async throws -> RemoteMeetingProcessingStatus {
         try await sendJSONRequest(
             path: "/api/meetings/\(meetingID)/processing-status",
             method: "GET",
+            extraHeaders: workspaceHeader(workspaceID),
             responseType: RemoteMeetingProcessingStatus.self
         )
     }
@@ -392,21 +437,25 @@ final class APIClient: AuthNetworking {
 
     func requestAudioEnhancedNotes(
         meetingID: String,
-        payload: AudioEnhanceRequestPayload
+        payload: AudioEnhanceRequestPayload,
+        workspaceID: String? = nil
     ) async throws -> RemoteAudioEnhanceStatusResponse {
         try await sendJSONRequest(
             path: "/api/meetings/\(meetingID)/ai-notes/audio",
             method: "POST",
+            extraHeaders: workspaceHeader(workspaceID),
             body: payload
         )
     }
 
     func fetchAudioEnhancedNotesStatus(
-        meetingID: String
+        meetingID: String,
+        workspaceID: String? = nil
     ) async throws -> RemoteAudioEnhanceStatusResponse {
         try await sendJSONRequest(
             path: "/api/meetings/\(meetingID)/ai-notes/audio",
             method: "GET",
+            extraHeaders: workspaceHeader(workspaceID),
             responseType: RemoteAudioEnhanceStatusResponse.self
         )
     }
@@ -446,6 +495,9 @@ final class APIClient: AuthNetworking {
         var request = try makeRequest(path: "/api/chat/global", method: "POST")
         request.timeoutInterval = Self.aiRequestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let workspaceID = settingsStore.hiddenWorkspaceID?.nilIfBlank {
+            request.setValue(workspaceID, forHTTPHeaderField: Self.workspaceIDHeader)
+        }
         request.httpBody = try encoder.encode(payload)
 
         return makeRetryableAITextStream(request: request, fallback: "全局 AI 请求失败。")
@@ -472,13 +524,15 @@ final class APIClient: AuthNetworking {
         method: String,
         queryItems: [URLQueryItem] = [],
         includeAuthorization: Bool = true,
+        extraHeaders: [String: String] = [:],
         responseType: Response.Type
     ) async throws -> Response {
         let request = try makeRequest(
             path: path,
             method: method,
             queryItems: queryItems,
-            includeAuthorization: includeAuthorization
+            includeAuthorization: includeAuthorization,
+            extraHeaders: extraHeaders
         )
         let (data, response) = try await session.data(for: request)
         try validate(response: response, data: data)
@@ -490,13 +544,15 @@ final class APIClient: AuthNetworking {
         method: String,
         queryItems: [URLQueryItem] = [],
         includeAuthorization: Bool = true,
+        extraHeaders: [String: String] = [:],
         body: Body
     ) async throws -> Response {
         var request = try makeRequest(
             path: path,
             method: method,
             queryItems: queryItems,
-            includeAuthorization: includeAuthorization
+            includeAuthorization: includeAuthorization,
+            extraHeaders: extraHeaders
         )
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
@@ -511,6 +567,7 @@ final class APIClient: AuthNetworking {
         method: String,
         queryItems: [URLQueryItem] = [],
         includeAuthorization: Bool = true,
+        extraHeaders: [String: String] = [:],
         body: Body,
         fallback: String
     ) async throws -> Response {
@@ -518,7 +575,8 @@ final class APIClient: AuthNetworking {
             path: path,
             method: method,
             queryItems: queryItems,
-            includeAuthorization: includeAuthorization
+            includeAuthorization: includeAuthorization,
+            extraHeaders: extraHeaders
         )
         request.timeoutInterval = Self.aiRequestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -533,7 +591,8 @@ final class APIClient: AuthNetworking {
         path: String,
         method: String,
         queryItems: [URLQueryItem] = [],
-        includeAuthorization: Bool = true
+        includeAuthorization: Bool = true,
+        extraHeaders: [String: String] = [:]
     ) throws -> URLRequest {
         guard let baseURL else {
             throw APIClientError.missingBaseURL
@@ -563,7 +622,17 @@ final class APIClient: AuthNetworking {
            let sessionToken = authTokenStore.sessionToken?.nilIfBlank {
             request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
         }
+        for (header, value) in extraHeaders where !value.isEmpty {
+            request.setValue(value, forHTTPHeaderField: header)
+        }
         return request
+    }
+
+    private func workspaceHeader(_ workspaceID: String?) -> [String: String] {
+        guard let workspaceID = workspaceID?.nilIfBlank else {
+            return [:]
+        }
+        return [Self.workspaceIDHeader: workspaceID]
     }
 
     private func performRetryableAIDataRequest(

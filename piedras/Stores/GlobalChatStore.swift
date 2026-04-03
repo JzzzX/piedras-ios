@@ -68,20 +68,21 @@ final class GlobalChatStore {
         }
 
         do {
-            let workspaceID = try await resolveWorkspaceID()
+            _ = try await resolveWorkspaceID()
+            let collectionID = settingsStore.activeCollectionID
             let retrieval = buildLocalRetrievalContext(
                 for: trimmedQuestion,
-                workspaceID: workspaceID
+                collectionID: collectionID
             )
             let payload = GlobalChatRequestPayload(
                 question: trimmedQuestion,
                 chatHistory: history,
-                filters: .init(workspaceId: workspaceID),
+                filters: .init(collectionId: collectionID),
                 localRetrievalContext: retrieval?.context,
                 localRetrievalSources: retrieval?.sources,
                 localCommentContext: buildLocalCommentContext(
                     for: trimmedQuestion,
-                    workspaceID: workspaceID
+                    collectionID: collectionID
                 )
             )
             let stream = try await apiClient.streamGlobalChat(payload)
@@ -211,7 +212,7 @@ final class GlobalChatStore {
         }
     }
 
-    private func buildLocalCommentContext(for question: String, workspaceID: String?) -> String? {
+    private func buildLocalCommentContext(for question: String, collectionID: String?) -> String? {
         guard let meetings = try? meetingRepository?.fetchMeetings(),
               !meetings.isEmpty else {
             return nil
@@ -220,7 +221,7 @@ final class GlobalChatStore {
         let context = MeetingCommentContextBuilder.localCommentContext(
             for: question,
             meetings: meetings,
-            workspaceID: workspaceID
+            collectionID: collectionID
         )
 
         return context.isEmpty ? nil : context
@@ -228,7 +229,7 @@ final class GlobalChatStore {
 
     private func buildLocalRetrievalContext(
         for question: String,
-        workspaceID: String?
+        collectionID: String?
     ) -> LocalMeetingRetrievalResult? {
         guard let meetings = try? meetingRepository?.fetchMeetings(),
               !meetings.isEmpty else {
@@ -238,7 +239,7 @@ final class GlobalChatStore {
         let result = MeetingSearchIndexBuilder.localRetrievalResult(
             for: question,
             meetings: meetings,
-            workspaceID: workspaceID
+            collectionID: collectionID
         )
 
         return result.context.isEmpty ? nil : result

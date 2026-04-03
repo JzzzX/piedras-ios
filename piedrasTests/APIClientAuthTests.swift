@@ -197,6 +197,50 @@ struct APIClientAuthTests {
 
     @MainActor
     @Test
+    func listMeetingsSendsRequestedWorkspaceHeader() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let suiteName = "piedras.tests.auth.workspace-header.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: defaults,
+            debugDefaultBackendBaseURLString: "https://example.com"
+        )
+        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        tokenStore.sessionToken = "session-token"
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
+        let client = APIClient(
+            settingsStore: settingsStore,
+            authTokenStore: tokenStore,
+            session: URLSession(configuration: configuration)
+        )
+
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            let response = try #require(
+                HTTPURLResponse(
+                    url: request.url ?? URL(string: "https://example.com")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+            return (response, Data("[]".utf8))
+        }
+
+        _ = try await client.listMeetings(workspaceID: "workspace-project")
+
+        #expect(
+            APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "X-Workspace-Id")
+                == "workspace-project"
+        )
+    }
+
+    @MainActor
+    @Test
     func setPasswordUsesAuthenticatedEndpoint() async throws {
         APIClientAuthMockURLProtocol.reset()
         defer { APIClientAuthMockURLProtocol.reset() }

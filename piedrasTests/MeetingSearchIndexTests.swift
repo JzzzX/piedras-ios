@@ -88,4 +88,28 @@ struct MeetingSearchIndexTests {
         #expect(result.matchedSources.contains(.enhancedNotes))
         #expect(result.matchedSources.contains(.imageText))
     }
+
+    @Test
+    func localRetrievalResultFiltersMeetingsByCollection() {
+        let included = Meeting(
+            title: "项目复盘",
+            userNotesPlainText: "这里记录发布节奏和灰度安排。",
+            collectionId: "collection-projects"
+        )
+        let excluded = Meeting(
+            title: "私人杂项",
+            userNotesPlainText: "这里也提到了发布节奏。",
+            collectionId: "collection-personal"
+        )
+
+        let result = MeetingSearchIndexBuilder.localRetrievalResult(
+            for: "发布节奏",
+            meetings: [included, excluded],
+            collectionID: "collection-projects"
+        )
+
+        #expect(result.context.contains("项目复盘"))
+        #expect(!result.context.contains("私人杂项"))
+        #expect(result.sources.map(\.title) == ["项目复盘"])
+    }
 }

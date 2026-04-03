@@ -47,11 +47,11 @@ enum MeetingCommentContextBuilder {
     static func localCommentContext(
         for question: String,
         meetings: [Meeting],
-        workspaceID: String?
+        collectionID: String?
     ) -> String {
         let keywords = splitKeywords(question)
         let candidates = meetings.compactMap { meeting -> GlobalMeetingContext? in
-            guard workspaceID == nil || meeting.hiddenWorkspaceId == workspaceID else {
+            guard collectionID == nil || meeting.collectionId == collectionID else {
                 return nil
             }
 
