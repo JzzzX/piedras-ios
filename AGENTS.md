@@ -5,6 +5,14 @@
 
 `piedrasTests/` 存放 XCTest 单元测试，覆盖仓储、Store、Service 和部分界面展示逻辑；`piedrasUITests/` 覆盖录音、导航等关键流程。服务端代码在 `cloud/api/`（Next.js + Prisma）与 `cloud/asr-proxy/`（旧版 WebSocket 代理）。说明文档放在 `docs/`，辅助脚本放在 `scripts/`。
 
+## 架构与核心约定
+- **本地优先（Local First）**：会议、转写、笔记等数据在同步前应优先落到本地存储。
+- **单设备优先（Single Device Primary）**：同步默认遵循“最后写入者胜（last-write-wins）”策略，避免引入未经验证的复杂合并逻辑。
+- **视觉风格一致性**：涉及主题或视觉语言调整时，优先延续 `AppTheme.swift` 中既有的设计令牌与整体风格。
+- **国际化**：不要在 View 中硬编码字符串，统一通过 `AppStrings.current.<key>` 管理文案。
+- **状态管理边界**：高层业务操作优先通过 `MeetingStore` 协调；全局状态优先沿用现有 `@Environment` 接入方式。
+- **持久化边界**：数据库读写尽量优先通过 `MeetingRepository` 等仓储层完成，避免在业务代码中直接散落 `ModelContext` 操作。
+
 ## 构建、测试与开发命令
 构建 iOS App：
 ```sh
@@ -21,6 +29,11 @@ cd cloud/api && npm install && npm run dev
 执行接近生产的 API 构建与启动：
 ```sh
 cd cloud/api && npm run build && npm run start
+```
+常用 Prisma 操作：
+```sh
+cd cloud/api && npx prisma generate
+cd cloud/api && npx prisma db push
 ```
 验证 ASR 链路：
 ```sh
