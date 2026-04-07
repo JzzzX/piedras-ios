@@ -5,6 +5,7 @@ import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-err
 import { prisma } from '@/lib/db';
 import { deleteMeetingAudioFile, hasMeetingAudioFile } from '@/lib/meeting-audio';
 import { deleteMeetingAttachmentsDir } from '@/lib/meeting-attachment';
+import { purgeExpiredTrashedMeetings } from '@/lib/meeting-trash';
 import { recoverPendingMeetingAudioProcessing } from '@/lib/meeting-audio-processing';
 import { serializeMeetingDetail } from '@/lib/meeting-response';
 import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
@@ -27,6 +28,11 @@ export async function GET(
   }
 
   try {
+    await purgeExpiredTrashedMeetings(prisma, {
+      deleteMeetingAudio: deleteMeetingAudioFile,
+      deleteMeetingAttachments: deleteMeetingAttachmentsDir,
+    });
+
     await recoverPendingMeetingAudioProcessing();
     const { id } = await params;
 
@@ -101,6 +107,8 @@ export async function PUT(
       status,
       duration,
       collectionId,
+      previousCollectionId,
+      deletedAt,
       userNotes,
       enhancedNotes,
       enhanceRecipeId,
@@ -130,6 +138,8 @@ export async function PUT(
     if (status !== undefined) updateData.status = status;
     if (duration !== undefined) updateData.duration = duration;
     if (collectionId !== undefined) updateData.collectionId = collectionId || null;
+    if (previousCollectionId !== undefined) updateData.previousCollectionId = previousCollectionId || null;
+    if (deletedAt !== undefined) updateData.deletedAt = deletedAt ? new Date(deletedAt) : null;
     updateData.workspaceId = auth.workspace.id;
     if (userNotes !== undefined) updateData.userNotes = userNotes;
     if (enhancedNotes !== undefined) updateData.enhancedNotes = enhancedNotes;

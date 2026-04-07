@@ -179,6 +179,8 @@ final class Meeting {
     var sourceAudioDuration: Int
     var hiddenWorkspaceId: String?
     var collectionId: String?
+    var previousCollectionId: String?
+    var deletedAt: Date?
     @Attribute(originalName: "speakersRaw")
     private var speakersRawValue: String?
     @Attribute(originalName: "speakerDiarizationStateRaw")
@@ -240,6 +242,8 @@ final class Meeting {
         sourceAudioDuration: Int = 0,
         hiddenWorkspaceId: String? = nil,
         collectionId: String? = nil,
+        previousCollectionId: String? = nil,
+        deletedAt: Date? = nil,
         speakers: [String: String] = [:],
         speakerDiarizationState: SpeakerDiarizationState = .idle,
         speakerDiarizationErrorMessage: String? = nil,
@@ -296,6 +300,8 @@ final class Meeting {
         self.sourceAudioDuration = sourceAudioDuration
         self.hiddenWorkspaceId = hiddenWorkspaceId
         self.collectionId = collectionId
+        self.previousCollectionId = previousCollectionId
+        self.deletedAt = deletedAt
         self.speakersRawValue = Self.encodeSpeakers(speakers)
         self.speakerDiarizationStateRawValue = speakerDiarizationState.rawValue
         self.speakerDiarizationErrorMessage = speakerDiarizationErrorMessage

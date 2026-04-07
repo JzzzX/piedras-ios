@@ -257,6 +257,12 @@ final class APIClient: AuthNetworking {
         try await sendJSONRequest(path: "/api/collections", method: "POST", body: payload)
     }
 
+    func deleteCollection(id: String) async throws {
+        let request = try makeRequest(path: "/api/collections/\(id)", method: "DELETE")
+        let (data, response) = try await session.data(for: request)
+        try validate(response: response, data: data, fallback: "删除文件夹失败。")
+    }
+
     func listMeetings(workspaceID: String) async throws -> [RemoteMeetingListItem] {
         try await sendJSONRequest(
             path: "/api/meetings",

@@ -4,6 +4,9 @@ import { buildMeetingAttachmentFileURL } from './meeting-attachment.ts';
 export function serializeMeetingDetail(
   meeting: {
     id: string;
+    collectionId?: string | null;
+    previousCollectionId?: string | null;
+    deletedAt?: Date | null;
     speakers: string;
     audioUpdatedAt: Date | null;
     audioProcessingState: string;

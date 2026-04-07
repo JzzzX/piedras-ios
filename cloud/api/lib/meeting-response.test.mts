@@ -10,6 +10,8 @@ test('serializeMeetingDetail includes cloud audio state and note attachments met
     {
       id: 'meeting-1',
       collectionId: 'collection-notes',
+      previousCollectionId: 'collection-archive',
+      deletedAt: new Date('2026-04-03T10:00:00.000Z'),
       speakers: '{"spk_1":"主持人"}',
       audioUpdatedAt: updatedAt,
       audioProcessingState: 'idle',
@@ -35,6 +37,8 @@ test('serializeMeetingDetail includes cloud audio state and note attachments met
 
   assert.equal(payload.audioCloudSyncEnabled, false);
   assert.equal(payload.collectionId, 'collection-notes');
+  assert.equal(payload.previousCollectionId, 'collection-archive');
+  assert.equal(payload.deletedAt?.toISOString(), '2026-04-03T10:00:00.000Z');
   assert.equal(payload.hasAudio, false);
   assert.equal(payload.audioUrl, null);
   assert.equal(payload.noteAttachmentsTextContext, '白板重点');

@@ -97,6 +97,27 @@ final class RecordingFlowUITests: XCTestCase {
     }
 
     @MainActor
+    func testFolderDrawerKeepsSystemFoldersPinnedWithoutDeleteAction() throws {
+        let app = launchApp()
+
+        let folderButton = app.buttons["HomeFolderButton"]
+        XCTAssertTrue(folderButton.waitForExistence(timeout: 5), "首页顶部缺少文件夹入口。")
+        folderButton.tap()
+
+        let defaultFolderRow = app.buttons["FolderDrawerRow_preview-notes"]
+        XCTAssertTrue(defaultFolderRow.waitForExistence(timeout: 3), "默认文件夹应常驻展示。")
+
+        let recentlyDeletedRow = app.buttons["FolderDrawerRow_preview-recently-deleted"]
+        XCTAssertTrue(recentlyDeletedRow.waitForExistence(timeout: 3), "最近删除文件夹应常驻展示。")
+
+        XCTAssertFalse(app.buttons["FolderDrawerDeleteButton_preview-notes"].exists, "默认文件夹不应出现删除按钮。")
+        XCTAssertFalse(
+            app.buttons["FolderDrawerDeleteButton_preview-recently-deleted"].exists,
+            "最近删除文件夹不应出现删除按钮。"
+        )
+    }
+
+    @MainActor
     func testMeetingRowSupportsSwipeToDelete() throws {
         let app = launchApp()
         let seededTitle = "Piedras iOS MVP Kickoff"
@@ -116,6 +137,62 @@ final class RecordingFlowUITests: XCTestCase {
         expectation(for: predicate, evaluatedWith: deletedTitle)
         waitForExpectations(timeout: 5)
         XCTAssertFalse(app.otherElements["HomeErrorBanner"].exists, "本地删除成功后不应再展示错误横幅。")
+    }
+
+    @MainActor
+    func testMeetingListStillScrollsVerticallyAfterHorizontalSwipeAttempt() throws {
+        let app = launchApp()
+
+        let rows = app.descendants(matching: .any).matching(identifier: "MeetingRow")
+        let firstRow = rows.element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.swipeLeft()
+
+        let deleteButton = app.buttons["MeetingRowDeleteButton"]
+        XCTAssertTrue(deleteButton.waitForExistence(timeout: 3), "左滑后自定义按钮未出现。")
+
+        let distantTitle = app.staticTexts["Preview Archive 7"]
+        XCTAssertFalse(distantTitle.exists, "测试前置条件错误：远端条目不应一开始就出现在首屏。")
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 2), "首页窗口未出现。")
+
+        window.swipeUp()
+        window.swipeUp()
+        window.swipeUp()
+
+        XCTAssertTrue(distantTitle.waitForExistence(timeout: 3), "横滑后首页列表仍应可以继续纵向滚动。")
+    }
+
+    @MainActor
+    func testMeetingRowMoveActionMovesMeetingIntoSelectedFolder() throws {
+        let app = launchApp()
+        let folderName = "项目归档"
+        let seededTitle = "Piedras iOS MVP Kickoff"
+
+        let firstRow = app.descendants(matching: .any).matching(identifier: "MeetingRow").element(boundBy: 0)
+        XCTAssertTrue(firstRow.waitForExistence(timeout: 5), "首页会议卡片未出现。")
+        firstRow.swipeLeft()
+
+        let moveButton = app.buttons["MeetingRowMoveButton"]
+        XCTAssertTrue(moveButton.waitForExistence(timeout: 3), "左滑后移动按钮未出现。")
+        moveButton.tap()
+
+        let targetFolderButton = app.buttons[folderName]
+        XCTAssertTrue(targetFolderButton.waitForExistence(timeout: 3), "移动面板未展示目标文件夹。")
+        targetFolderButton.tap()
+
+        let movedOutPredicate = NSPredicate(format: "exists == false")
+        expectation(for: movedOutPredicate, evaluatedWith: app.staticTexts[seededTitle])
+        waitForExpectations(timeout: 3)
+
+        let folderButton = app.buttons["HomeFolderButton"]
+        XCTAssertTrue(folderButton.waitForExistence(timeout: 3), "首页顶部缺少文件夹入口。")
+        folderButton.tap()
+        XCTAssertTrue(app.buttons[folderName].waitForExistence(timeout: 3), "抽屉里应展示目标文件夹。")
+        app.buttons[folderName].tap()
+
+        XCTAssertTrue(app.staticTexts[seededTitle].waitForExistence(timeout: 3), "移动后应能在目标文件夹里看到这条 note。")
     }
 
     @MainActor

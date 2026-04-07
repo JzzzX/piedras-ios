@@ -61,6 +61,7 @@ final class SettingsStore {
     private enum Key {
         static let hiddenWorkspaceID = "piedras.settings.hiddenWorkspaceID"
         static let defaultCollectionID = "piedras.settings.defaultCollectionID"
+        static let recentlyDeletedCollectionID = "piedras.settings.recentlyDeletedCollectionID"
         static let selectedCollectionID = "piedras.settings.selectedCollectionID"
         static let appLanguage = "piedras.settings.appLanguage"
         static let experimentalAudioAINotesEnabled = "piedras.settings.experimentalAudioAINotesEnabled"
@@ -96,6 +97,7 @@ final class SettingsStore {
 
             hiddenWorkspaceID = nil
             defaultCollectionID = nil
+            recentlyDeletedCollectionID = nil
             selectedCollectionID = nil
             workspaceBootstrapState = .idle
             workspaceStatusMessage = "等待连接云端"
@@ -114,6 +116,12 @@ final class SettingsStore {
     var defaultCollectionID: String? {
         didSet {
             defaults.set(defaultCollectionID, forKey: Key.defaultCollectionID)
+        }
+    }
+
+    var recentlyDeletedCollectionID: String? {
+        didSet {
+            defaults.set(recentlyDeletedCollectionID, forKey: Key.recentlyDeletedCollectionID)
         }
     }
 
@@ -164,6 +172,7 @@ final class SettingsStore {
             .flatMap { AppLanguage(rawValue: $0) } ?? .chinese
         hiddenWorkspaceID = defaults.string(forKey: Key.hiddenWorkspaceID)
         defaultCollectionID = defaults.string(forKey: Key.defaultCollectionID)
+        recentlyDeletedCollectionID = defaults.string(forKey: Key.recentlyDeletedCollectionID)
         selectedCollectionID = defaults.string(forKey: Key.selectedCollectionID)
             ?? defaults.string(forKey: Key.defaultCollectionID)
         isExperimentalAudioAINotesEnabled = defaults.bool(forKey: Key.experimentalAudioAINotesEnabled)

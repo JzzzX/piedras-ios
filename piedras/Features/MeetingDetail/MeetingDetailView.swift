@@ -157,6 +157,12 @@ struct MeetingDetailView: View {
         .animation(.easeOut(duration: 0.4), value: presentation.usesRecordingWorkspace)
         .toolbar(.hidden, for: .navigationBar)
         .background(InteractivePopGestureEnabler())
+        .edgeSwipeToDismiss {
+            closeAttachmentMenu()
+            closeActionMenu()
+            closeMeetingTypeOverlay()
+            dismiss()
+        }
         .safeAreaInset(edge: .top, spacing: 0) {
             detailTopChrome(meeting: meeting)
         }

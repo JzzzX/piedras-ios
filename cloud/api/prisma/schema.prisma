@@ -107,6 +107,8 @@ model Meeting {
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
   collectionId           String?  @map("folderId")
+  previousCollectionId   String?
+  deletedAt              DateTime?
   workspaceId            String
 
   segments     TranscriptSegment[]

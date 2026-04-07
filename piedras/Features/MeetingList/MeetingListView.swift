@@ -40,6 +40,10 @@ private enum MeetingHomeLayout {
     static let emptyStateBottomPadding: CGFloat = 168
 }
 
+private struct MoveMeetingSheetState: Identifiable {
+    let id: String
+}
+
 private struct HomeSectionHeaderMinYPreferenceKey: PreferenceKey {
     static var defaultValue: [String: CGFloat] = [:]
 
@@ -91,6 +95,88 @@ private struct HomeChatDockButtonStyle: ButtonStyle {
     }
 }
 
+private struct MoveMeetingFolderSheet: View {
+    let folders: [FolderSummary]
+    let onSelect: (FolderSummary) -> Void
+    let onClose: () -> Void
+
+    var body: some View {
+        ZStack {
+            AppGlassBackdrop()
+
+            VStack(spacing: 18) {
+                HStack(spacing: 12) {
+                    Text(AppStrings.current.moveNotePromptTitle)
+                        .font(AppTheme.bodyFont(size: 16, weight: .bold))
+                        .foregroundStyle(AppTheme.brandInk)
+
+                    Spacer()
+
+                    AppGlassCircleButton(
+                        systemName: "xmark",
+                        accessibilityLabel: AppStrings.current.close,
+                        size: 32
+                    ) {
+                        onClose()
+                    }
+                }
+
+                if folders.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(AppStrings.current.moveNoteAction.uppercased())
+                            .font(AppTheme.dataFont(size: 12, weight: .bold))
+                            .foregroundStyle(AppTheme.brandInkMuted)
+                            .tracking(0.8)
+
+                        Text(AppStrings.current.folderEmptyState)
+                            .font(AppTheme.bodyFont(size: 14))
+                            .foregroundStyle(AppTheme.subtleInk)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding(18)
+                    .softCard(fill: AppTheme.surface, borderColor: AppTheme.noteSectionRule)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(folders) { folder in
+                                Button {
+                                    onSelect(folder)
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Image(systemName: folder.isDefault ? "tray.full.fill" : "folder")
+                                            .font(.system(size: 15, weight: .bold))
+                                            .foregroundStyle(AppTheme.brandInk)
+                                            .frame(width: 28, height: 28)
+                                            .background(AppTheme.noteIconWash)
+                                            .overlay(
+                                                Rectangle()
+                                                    .stroke(AppTheme.noteSectionRule, lineWidth: AppTheme.retroBorderWidth)
+                                            )
+
+                                        Text(folder.displayName)
+                                            .font(AppTheme.bodyFont(size: 15, weight: .semibold))
+                                            .foregroundStyle(AppTheme.ink)
+
+                                        Spacer()
+                                    }
+                                    .padding(16)
+                                    .softCard(fill: AppTheme.surface, borderColor: AppTheme.noteSectionRule)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 20)
+            .padding(.bottom, 28)
+        }
+        .presentationBackground(AppTheme.background)
+    }
+}
+
 struct MeetingListView: View {
     @Environment(FolderStore.self) private var folderStore
     @Environment(MeetingStore.self) private var meetingStore
@@ -103,7 +189,8 @@ struct MeetingListView: View {
     @State private var currentSectionTitle: String = ""
     @State private var isFolderDrawerPresented = false
     @State private var isCreateFolderPromptPresented = false
-    @State private var openSwipeRowID: String?
+    @State private var moveSheetState: MoveMeetingSheetState?
+    @State private var folderPendingDeletion: FolderSummary?
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -131,6 +218,7 @@ struct MeetingListView: View {
                 activeFolderID: folderStore.activeFolderID,
                 isLoading: folderStore.isLoading,
                 onSelect: handleFolderSelection(_:),
+                onDelete: confirmFolderDeletion(_:),
                 onCreateFolder: presentCreateFolderPrompt
             )
         }
@@ -169,9 +257,49 @@ struct MeetingListView: View {
         } message: {
             Text(AppStrings.current.newFolderPlaceholder)
         }
+        .alert(
+            AppStrings.current.deleteFolderAction,
+            isPresented: Binding(
+                get: { folderPendingDeletion != nil },
+                set: { shouldPresent in
+                    if !shouldPresent {
+                        folderPendingDeletion = nil
+                    }
+                }
+            )
+        ) {
+            Button(AppStrings.current.cancel, role: .cancel) {
+                folderPendingDeletion = nil
+            }
+            Button(AppStrings.current.deleteAction, role: .destructive) {
+                let deletedFolderID = folderPendingDeletion?.id
+                folderPendingDeletion = nil
+                guard let deletedFolderID else { return }
+                Task {
+                    let deleted = await folderStore.deleteFolder(id: deletedFolderID)
+                    guard deleted else { return }
+                    meetingStore.reconcileDeletedFolder(id: deletedFolderID)
+                }
+            }
+        } message: {
+            Text(AppStrings.current.deleteFolderMessage)
+        }
+        .sheet(item: $moveSheetState) { state in
+            MoveMeetingFolderSheet(
+                folders: moveDestinationFolders(for: state.id),
+                onSelect: { folder in
+                    moveSheetState = nil
+                    meetingStore.moveMeeting(id: state.id, to: folder.id)
+                },
+                onClose: {
+                    moveSheetState = nil
+                }
+            )
+            .presentationDetents([.fraction(0.4), .large])
+            .presentationDragIndicator(.visible)
+        }
         .onChange(of: settingsStore.activeCollectionID, initial: false) { oldValue, newValue in
             guard oldValue != newValue else { return }
-            openSwipeRowID = nil
             meetingStore.loadMeetings()
             globalChatStore.startNewDraft()
         }
@@ -213,62 +341,13 @@ struct MeetingListView: View {
 
     private var feedList: some View {
         List {
-            // 大标题头部
-            Section {
-                header
-                    .listRowInsets(EdgeInsets(top: 2, leading: 18, bottom: 6, trailing: 18))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
-            }
-            .id("HeaderSection")
+            headerSection
 
             if homeSections.isEmpty {
-                Section {
-                    emptyState
-                        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 0, trailing: 0))
-                        .listRowBackground(Color.clear)
-                        .listRowSeparator(.hidden)
-                }
+                emptySection
             } else {
                 ForEach(homeSections) { section in
-                    Section {
-                        ForEach(section.rows) { row in
-                            HomeSwipeToDeleteRow(
-                                snapshot: row,
-                                isOpen: openSwipeRowID == row.id,
-                                onOpen: {
-                                    if openSwipeRowID == row.id {
-                                        openSwipeRowID = nil
-                                    } else {
-                                        router.showMeeting(id: row.id)
-                                    }
-                                },
-                                onDelete: {
-                                    openSwipeRowID = nil
-                                    meetingStore.deleteMeeting(id: row.id)
-                                },
-                                onOpenChanged: { shouldOpen in
-                                    withAnimation(.easeOut(duration: 0.18)) {
-                                        openSwipeRowID = shouldOpen ? row.id : nil
-                                    }
-                                }
-                            )
-                            .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
-                            .listRowBackground(Color.clear)
-                            .listRowSeparator(.hidden)
-                        }
-                    } header: {
-                        HomeSectionHeaderLabel(title: section.title)
-                            .textCase(nil)
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear.preference(
-                                        key: HomeSectionHeaderMinYPreferenceKey.self,
-                                        value: [section.title: geo.frame(in: .named("MeetingHomeList")).minY]
-                                    )
-                                }
-                            )
-                    }
+                    homeSection(section)
                 }
             }
         }
@@ -277,21 +356,6 @@ struct MeetingListView: View {
         .scrollDismissesKeyboard(.interactively)
         .scrollContentBackground(.hidden)
         .background(Color.clear)
-        .simultaneousGesture(
-            TapGesture().onEnded {
-                guard openSwipeRowID != nil else { return }
-                withAnimation(.easeOut(duration: 0.18)) {
-                    openSwipeRowID = nil
-                }
-            }
-        )
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 2, coordinateSpace: .local).onChanged { value in
-                guard openSwipeRowID != nil else { return }
-                guard abs(value.translation.height) > abs(value.translation.width) else { return }
-                openSwipeRowID = nil
-            }
-        )
         .contentMargins(.horizontal, 16, for: .scrollContent)
         .contentMargins(.bottom, MeetingHomeLayout.listBottomInset, for: .scrollContent)
         .refreshable {
@@ -308,6 +372,76 @@ struct MeetingListView: View {
         .onPreferenceChange(HomeSectionHeaderMinYPreferenceKey.self) { positions in
             currentSectionTitle = resolvedCurrentSectionTitle(from: positions)
         }
+    }
+
+    private var headerSection: some View {
+        Section {
+            header
+                .listRowInsets(EdgeInsets(top: 2, leading: 18, bottom: 6, trailing: 18))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+        .id("HeaderSection")
+    }
+
+    private var emptySection: some View {
+        Section {
+            emptyState
+                .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 0, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+        }
+    }
+
+    private func homeSection(_ section: MeetingHomeSectionSnapshot) -> some View {
+        Section {
+            ForEach(section.rows) { row in
+                meetingRow(for: row)
+            }
+        } header: {
+            HomeSectionHeaderLabel(title: section.title)
+                .textCase(nil)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(
+                            key: HomeSectionHeaderMinYPreferenceKey.self,
+                            value: [section.title: geo.frame(in: .named("MeetingHomeList")).minY]
+                        )
+                    }
+                )
+        }
+    }
+
+    private func meetingRow(for row: MeetingRowSnapshot) -> some View {
+        MeetingRowView(snapshot: row) {
+            router.showMeeting(id: row.id)
+        }
+        .contentShape(Rectangle())
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            ForEach(rowSwipeActions(for: row)) { action in
+                swipeActionButton(action)
+            }
+        }
+        .listRowInsets(EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 0))
+        .listRowBackground(Color.clear)
+        .listRowSeparator(.hidden)
+    }
+
+    private func swipeActionButton(_ action: HomeSwipeRowAction) -> some View {
+        let tintColor: Color
+        switch action.role {
+        case .primary:
+            tintColor = AppTheme.primaryActionFill
+        case .destructive:
+            tintColor = AppTheme.destructiveActionFill
+        }
+
+        return Button(action: action.action) {
+            Label(action.title, systemImage: action.systemImage)
+        }
+        .tint(tintColor)
+        .accessibilityLabel(action.accessibilityLabel)
+        .accessibilityIdentifier(action.accessibilityIdentifier)
     }
 
     private func syncWithCloud() async {
@@ -633,13 +767,25 @@ struct MeetingListView: View {
 
     private func toggleFolderDrawer() {
         hideKeyboard()
+        let shouldPresent = !isFolderDrawerPresented
         withAnimation(.easeOut(duration: 0.24)) {
-            isFolderDrawerPresented.toggle()
+            isFolderDrawerPresented = shouldPresent
+        }
+
+        guard shouldPresent else { return }
+
+        Task {
+            _ = await folderStore.ensureSystemFoldersReady()
         }
     }
 
     private func handleFolderSelection(_ folderID: String) {
         folderStore.selectFolder(id: folderID)
+    }
+
+    private func confirmFolderDeletion(_ folder: FolderSummary) {
+        hideKeyboard()
+        folderPendingDeletion = folder
     }
 
     private func presentCreateFolderPrompt() {
@@ -674,6 +820,82 @@ struct MeetingListView: View {
         }
 
         return ""
+    }
+
+    private var isShowingRecentlyDeleted: Bool {
+        settingsStore.activeCollectionID == settingsStore.recentlyDeletedCollectionID
+    }
+
+    private func rowSwipeActions(for row: MeetingRowSnapshot) -> [HomeSwipeRowAction] {
+        if isShowingRecentlyDeleted {
+            return [
+                HomeSwipeRowAction(
+                    id: "restore-\(row.id)",
+                    title: AppStrings.current.restoreNoteAction,
+                    systemImage: "arrow.uturn.backward",
+                    accessibilityLabel: AppStrings.current.restoreNoteAction,
+                    accessibilityIdentifier: "MeetingRowRestoreButton",
+                    role: .primary,
+                    action: {
+                        meetingStore.restoreMeeting(id: row.id)
+                    }
+                ),
+                HomeSwipeRowAction(
+                    id: "permanent-delete-\(row.id)",
+                    title: AppStrings.current.permanentlyDeleteNoteAction,
+                    systemImage: "trash",
+                    accessibilityLabel: AppStrings.current.permanentlyDeleteNoteAction,
+                    accessibilityIdentifier: "MeetingRowPermanentDeleteButton",
+                    role: .destructive,
+                    action: {
+                        meetingStore.permanentlyDeleteMeeting(id: row.id)
+                    }
+                )
+            ]
+        }
+
+        return [
+            HomeSwipeRowAction(
+                id: "move-\(row.id)",
+                title: AppStrings.current.moveNoteAction,
+                systemImage: "folder",
+                accessibilityLabel: AppStrings.current.moveNoteAction,
+                accessibilityIdentifier: "MeetingRowMoveButton",
+                role: .primary,
+                action: {
+                    hideKeyboard()
+                    Task {
+                        _ = await folderStore.ensureSystemFoldersReady()
+                        moveSheetState = MoveMeetingSheetState(id: row.id)
+                    }
+                }
+            ),
+            HomeSwipeRowAction(
+                id: "delete-\(row.id)",
+                title: AppStrings.current.deleteAction,
+                systemImage: "trash",
+                accessibilityLabel: AppStrings.current.deleteNoteAction,
+                accessibilityIdentifier: "MeetingRowDeleteButton",
+                role: .destructive,
+                action: {
+                    Task {
+                        let isReady = await folderStore.ensureSystemFoldersReady()
+                        guard isReady else { return }
+                        meetingStore.deleteMeeting(id: row.id)
+                    }
+                }
+            )
+        ]
+    }
+
+    private func moveDestinationFolders(for meetingID: String) -> [FolderSummary] {
+        let currentCollectionID = meetingStore.meeting(withID: meetingID)?.collectionId
+            ?? settingsStore.defaultCollectionID
+
+        return folderStore.folders.filter { folder in
+            guard !folder.isRecentlyDeleted else { return false }
+            return folder.id != currentCollectionID
+        }
     }
 
 }

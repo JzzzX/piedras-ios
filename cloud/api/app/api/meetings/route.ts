@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
+import { deleteMeetingAttachmentsDir } from '@/lib/meeting-attachment';
 import { hasMeetingAudioFile } from '@/lib/meeting-audio';
+import { deleteMeetingAudioFile } from '@/lib/meeting-audio';
+import { purgeExpiredTrashedMeetings } from '@/lib/meeting-trash';
 import { serializeMeetingDetail } from '@/lib/meeting-response';
 import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
 import { ensureDefaultCollectionForWorkspace } from '@/lib/user-collection-db';
@@ -40,6 +43,11 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    await purgeExpiredTrashedMeetings(prisma, {
+      deleteMeetingAudio: deleteMeetingAudioFile,
+      deleteMeetingAttachments: deleteMeetingAttachmentsDir,
+    });
+
     const { searchParams } = new URL(req.url);
     const query = searchParams.get('query')?.trim() || '';
     const dateFrom = searchParams.get('dateFrom');
@@ -133,6 +141,8 @@ export async function POST(req: NextRequest) {
       status,
       duration,
       collectionId,
+      previousCollectionId,
+      deletedAt,
       userNotes,
       enhancedNotes,
       enhanceRecipeId,
@@ -147,6 +157,7 @@ export async function POST(req: NextRequest) {
     } = body;
 
     const normalizedDate = date ? new Date(date) : new Date();
+    const normalizedDeletedAt = deletedAt ? new Date(deletedAt) : null;
     const normalizedSegments = Array.isArray(segments) ? (segments as SegmentPayload[]) : null;
     const normalizedChatMessages = Array.isArray(chatMessages)
       ? (chatMessages as ChatMessagePayload[])
@@ -174,6 +185,8 @@ export async function POST(req: NextRequest) {
         status: status || 'ended',
         duration: duration || 0,
         collectionId: collectionId || fallbackCollection?.id || null,
+        previousCollectionId: previousCollectionId || null,
+        deletedAt: normalizedDeletedAt,
         workspaceId: auth.workspace.id,
         userNotes: userNotes || '',
         enhancedNotes: enhancedNotes || '',

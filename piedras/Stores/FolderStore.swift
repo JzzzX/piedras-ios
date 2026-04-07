@@ -5,9 +5,16 @@ struct FolderSummary: Identifiable, Equatable {
     let id: String
     let name: String
     let isDefault: Bool
+    let isRecentlyDeleted: Bool
 
     var displayName: String {
-        isDefault ? AppStrings.current.defaultFolderName : name
+        if isDefault {
+            return AppStrings.current.defaultFolderName
+        }
+        if isRecentlyDeleted {
+            return AppStrings.current.recentlyDeletedFolderName
+        }
+        return name
     }
 }
 
@@ -22,6 +29,7 @@ final class FolderStore {
     var draftFolderName = ""
     var isLoading = false
     var isCreating = false
+    var isDeleting = false
     var lastErrorMessage: String?
 
     init(apiClient: APIClient, settingsStore: SettingsStore) {
@@ -37,6 +45,18 @@ final class FolderStore {
         guard !didLoad else { return }
         didLoad = true
         await loadFolders()
+    }
+
+    func ensureSystemFoldersReady() async -> Bool {
+        if settingsStore.defaultCollectionID != nil,
+           settingsStore.recentlyDeletedCollectionID != nil {
+            return true
+        }
+
+        await loadFolders()
+
+        return settingsStore.defaultCollectionID != nil
+            && settingsStore.recentlyDeletedCollectionID != nil
     }
 
     func loadFolders() async {
@@ -75,6 +95,31 @@ final class FolderStore {
         }
     }
 
+    func deleteFolder(id: String) async -> Bool {
+        guard let folder = folders.first(where: { $0.id == id }) else {
+            lastErrorMessage = "文件夹不存在。"
+            return false
+        }
+
+        guard !folder.isDefault, !folder.isRecentlyDeleted else {
+            lastErrorMessage = "系统文件夹不能删除。"
+            return false
+        }
+
+        isDeleting = true
+        defer { isDeleting = false }
+
+        do {
+            try await apiClient.deleteCollection(id: id)
+            await loadFolders()
+            lastErrorMessage = nil
+            return true
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            return false
+        }
+    }
+
     func selectFolder(id: String) {
         guard folders.contains(where: { $0.id == id }) else { return }
         settingsStore.selectedCollectionID = id
@@ -86,9 +131,11 @@ final class FolderStore {
         draftFolderName = ""
         isLoading = false
         isCreating = false
+        isDeleting = false
         lastErrorMessage = nil
         didLoad = false
         settingsStore.defaultCollectionID = nil
+        settingsStore.recentlyDeletedCollectionID = nil
         settingsStore.selectedCollectionID = nil
     }
 
@@ -98,9 +145,12 @@ final class FolderStore {
 
     func seedPreviewFolders(defaultID: String = "preview-notes") {
         folders = [
-            FolderSummary(id: defaultID, name: "Default Folder", isDefault: true)
+            FolderSummary(id: defaultID, name: "Default Folder", isDefault: true, isRecentlyDeleted: false),
+            FolderSummary(id: "preview-archive", name: "项目归档", isDefault: false, isRecentlyDeleted: false),
+            FolderSummary(id: "preview-recently-deleted", name: "Recently Deleted", isDefault: false, isRecentlyDeleted: true)
         ]
         settingsStore.defaultCollectionID = defaultID
+        settingsStore.recentlyDeletedCollectionID = "preview-recently-deleted"
         settingsStore.selectedCollectionID = defaultID
         lastErrorMessage = nil
         didLoad = true
@@ -108,7 +158,7 @@ final class FolderStore {
 
     private func applyRemoteCollections(_ remoteCollections: [RemoteCollection]) {
         let normalizedFolders = remoteCollections.map {
-            FolderSummary(id: $0.id, name: $0.name, isDefault: $0.isDefault)
+            FolderSummary(id: $0.id, name: $0.name, isDefault: $0.isDefault, isRecentlyDeleted: $0.isRecentlyDeleted ?? false)
         }
 
         folders = normalizedFolders
@@ -117,12 +167,17 @@ final class FolderStore {
                 if lhs.element.isDefault != rhs.element.isDefault {
                     return lhs.element.isDefault && !rhs.element.isDefault
                 }
+                if lhs.element.isRecentlyDeleted != rhs.element.isRecentlyDeleted {
+                    return !lhs.element.isRecentlyDeleted && rhs.element.isRecentlyDeleted
+                }
                 return lhs.offset < rhs.offset
             }
             .map(\.element)
 
         let defaultFolderID = folders.first(where: \.isDefault)?.id
+        let recentlyDeletedFolderID = folders.first(where: \.isRecentlyDeleted)?.id
         settingsStore.defaultCollectionID = defaultFolderID
+        settingsStore.recentlyDeletedCollectionID = recentlyDeletedFolderID
 
         if let selectedCollectionID = settingsStore.selectedCollectionID,
            folders.contains(where: { $0.id == selectedCollectionID }) {
@@ -138,12 +193,18 @@ final class FolderStore {
             FolderSummary(
                 id: remoteCollection.id,
                 name: remoteCollection.name,
-                isDefault: remoteCollection.isDefault
+                isDefault: remoteCollection.isDefault,
+                isRecentlyDeleted: remoteCollection.isRecentlyDeleted ?? false
             )
         )
         if let defaultIndex = folders.firstIndex(where: \.isDefault), defaultIndex != 0 {
             let defaultFolder = folders.remove(at: defaultIndex)
             folders.insert(defaultFolder, at: 0)
+        }
+        if let recentlyDeletedIndex = folders.firstIndex(where: \.isRecentlyDeleted),
+           recentlyDeletedIndex != folders.count - 1 {
+            let recentlyDeletedFolder = folders.remove(at: recentlyDeletedIndex)
+            folders.append(recentlyDeletedFolder)
         }
     }
 }

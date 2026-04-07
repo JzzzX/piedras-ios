@@ -12,14 +12,26 @@ final class MeetingRepository {
     func fetchMeetings(
         matching query: String = "",
         collectionID: String? = nil,
-        includeDeleted: Bool = false
+        includeDeleted: Bool = false,
+        recentlyDeletedCollectionID: String? = nil
     ) throws -> [Meeting] {
         let descriptor = FetchDescriptor<Meeting>(
             sortBy: [SortDescriptor(\Meeting.updatedAt, order: .reverse)]
         )
         let meetings = try modelContext.fetch(descriptor)
             .filter { includeDeleted || $0.syncState != .deleted }
-            .filter { collectionID == nil || $0.collectionId == collectionID }
+            .filter { meeting in
+                if includeDeleted, collectionID == nil {
+                    return true
+                }
+
+                if let recentlyDeletedCollectionID, collectionID == recentlyDeletedCollectionID {
+                    return meeting.deletedAt != nil
+                }
+
+                guard meeting.deletedAt == nil else { return false }
+                return collectionID == nil || meeting.collectionId == collectionID
+            }
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
 
         guard !trimmedQuery.isEmpty else {
@@ -46,6 +58,7 @@ final class MeetingRepository {
         let candidates = meetings.filter { meeting in
             guard meeting.collectionId == nil else { return false }
             guard meeting.syncState != .deleted else { return false }
+            guard meeting.deletedAt == nil else { return false }
 
             guard let workspaceID else {
                 return true
@@ -277,8 +290,28 @@ final class MeetingRepository {
             ChatMessage(role: "assistant", content: "核心问题是打开速度、录音稳定性和笔记编辑简洁度。", orderIndex: 1),
         ]
 
+        let archiveMeetings = (1 ... 7).map { index in
+            Meeting(
+                title: "Preview Archive \(index)",
+                date: .now.addingTimeInterval(TimeInterval(-172_800 - index * 7_200)),
+                status: .ended,
+                durationSeconds: 600 + index * 10,
+                userNotesPlainText: "归档测试数据 \(index)",
+                enhancedNotes: "",
+                hiddenWorkspaceId: workspaceID,
+                collectionId: "preview-notes",
+                syncState: preferLocalOnly ? .pending : .synced,
+                lastSyncedAt: preferLocalOnly ? nil : .now.addingTimeInterval(TimeInterval(-86_400 - index * 3_600)),
+                createdAt: .now.addingTimeInterval(TimeInterval(-172_800 - index * 7_200)),
+                updatedAt: .now.addingTimeInterval(TimeInterval(-172_800 - index * 7_200))
+            )
+        }
+
         modelContext.insert(planning)
         modelContext.insert(review)
+        for archiveMeeting in archiveMeetings {
+            modelContext.insert(archiveMeeting)
+        }
 
         try? save()
     }

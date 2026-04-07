@@ -110,6 +110,7 @@ struct AppRootView: View {
     private func handleAuthenticatedAppearance() async {
         if authStore.isSessionValidated {
             await folderStore.loadIfNeeded()
+            _ = await folderStore.ensureSystemFoldersReady()
             meetingStore.loadIfNeeded()
             meetingStore.handleScenePhaseChange(scenePhase)
             presentSettingsIfNeeded()

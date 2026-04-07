@@ -6,9 +6,11 @@ import { hashSessionToken } from './auth';
 import { prisma } from './db';
 import { verifySupabaseAccessToken } from './supabase-auth';
 import { ensureDefaultWorkspaceForUser } from './user-workspace-db';
+import { resolveUserWorkspaceId } from './user-workspace';
 
 const BEARER_PREFIX = 'Bearer ';
 const INTERNAL_ADMIN_SECRET_HEADER = 'x-admin-secret';
+const WORKSPACE_ID_HEADER = 'x-workspace-id';
 
 export interface AuthenticatedRequestContext {
   user: {
@@ -83,15 +85,16 @@ export async function requireAuthenticatedRequest(
           ...supabaseContext.session,
           provider: 'supabase',
         },
-        workspace: supabaseContext.workspace,
+        workspace: await resolveRequestWorkspace(req, supabaseContext.user.id),
       };
     }
   }
 
-  return requireLegacyAuthenticatedRequest(token, context);
+  return requireLegacyAuthenticatedRequest(req, token, context);
 }
 
 async function requireLegacyAuthenticatedRequest(
+  req: NextRequest,
   token: string,
   context: ApiRequestContext
 ): Promise<AuthenticatedRequestContext | Response> {
@@ -119,10 +122,6 @@ async function requireLegacyAuthenticatedRequest(
     return errorResponse(context, 401, '登录态已过期，请重新登录');
   }
 
-  const workspace = await ensureDefaultWorkspaceForUser(prisma, {
-    userId: authSession.user.id,
-  });
-
   await prisma.authSession.update({
     where: { id: authSession.id },
     data: { lastUsedAt: new Date() },
@@ -135,10 +134,7 @@ async function requireLegacyAuthenticatedRequest(
       expiresAt: authSession.expiresAt,
       provider: 'legacy',
     },
-    workspace: {
-      id: workspace.id,
-      name: workspace.name,
-    },
+    workspace: await resolveRequestWorkspace(req, authSession.user.id),
   };
 }
 
@@ -159,4 +155,31 @@ export async function revokeAuthenticatedSession(req: NextRequest) {
 
 function looksLikeJWT(token: string) {
   return token.split('.').length === 3;
+}
+
+async function resolveRequestWorkspace(req: NextRequest, userId: string) {
+  let workspaces = await prisma.workspace.findMany({
+    where: { ownerUserId: userId },
+    orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+    select: {
+      id: true,
+      name: true,
+    },
+  });
+
+  if (workspaces.length === 0) {
+    const defaultWorkspace = await ensureDefaultWorkspaceForUser(prisma, { userId });
+    workspaces = [{ id: defaultWorkspace.id, name: defaultWorkspace.name }];
+  }
+
+  const defaultWorkspace = workspaces[0];
+  const resolvedWorkspaceId = resolveUserWorkspaceId({
+    defaultWorkspaceId: defaultWorkspace.id,
+    requestedWorkspaceId: req.headers.get(WORKSPACE_ID_HEADER),
+    accessibleWorkspaceIds: workspaces.map((workspace) => workspace.id),
+  });
+
+  return (
+    workspaces.find((workspace) => workspace.id === resolvedWorkspaceId) ?? defaultWorkspace
+  );
 }

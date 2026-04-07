@@ -9,6 +9,7 @@ struct RemoteCollection: Codable, Equatable {
     let id: String
     let name: String
     let isDefault: Bool
+    let isRecentlyDeleted: Bool?
 }
 
 struct RemoteASRStatus: Decodable {
@@ -139,6 +140,8 @@ struct RemoteMeetingDetail: Decodable {
     let updatedAt: Date?
     let workspaceId: String?
     let collectionId: String?
+    let previousCollectionId: String?
+    let deletedAt: Date?
     let speakers: [String: String]?
     let segments: [RemoteTranscriptSegment]
     let chatMessages: [RemoteChatMessage]
@@ -175,6 +178,8 @@ struct RemoteMeetingDetail: Decodable {
         updatedAt: Date?,
         workspaceId: String?,
         collectionId: String? = nil,
+        previousCollectionId: String? = nil,
+        deletedAt: Date? = nil,
         speakers: [String: String]? = nil,
         segments: [RemoteTranscriptSegment],
         chatMessages: [RemoteChatMessage],
@@ -210,6 +215,8 @@ struct RemoteMeetingDetail: Decodable {
         self.updatedAt = updatedAt
         self.workspaceId = workspaceId
         self.collectionId = collectionId
+        self.previousCollectionId = previousCollectionId
+        self.deletedAt = deletedAt
         self.speakers = speakers
         self.segments = segments
         self.chatMessages = chatMessages
@@ -331,6 +338,8 @@ struct MeetingUpsertPayload: Encodable {
     let audioCloudSyncEnabled: Bool
     let workspaceId: String
     let collectionId: String?
+    let previousCollectionId: String?
+    let deletedAt: String?
     let userNotes: String
     let enhancedNotes: String
     let speakers: [String: String]?
@@ -411,6 +420,8 @@ enum MeetingPayloadMapper {
             audioCloudSyncEnabled: meeting.audioCloudSyncEnabled,
             workspaceId: workspaceID,
             collectionId: meeting.collectionId,
+            previousCollectionId: meeting.previousCollectionId,
+            deletedAt: meeting.deletedAt.map { iso8601FormatterWithFractionalSeconds.string(from: $0) },
             userNotes: PlainTextHTMLAdapter.html(from: meeting.userNotesPlainText),
             enhancedNotes: meeting.enhancedNotes,
             speakers: includeSpeakers ? meeting.speakers : nil,
@@ -525,6 +536,8 @@ enum MeetingPayloadMapper {
             audioUpdatedAt: remote.audioUpdatedAt,
             hiddenWorkspaceId: remote.workspaceId,
             collectionId: remote.collectionId,
+            previousCollectionId: remote.previousCollectionId,
+            deletedAt: remote.deletedAt,
             speakers: remote.speakers ?? [:],
             transcriptPipelineState: status == .ended ? .ready : (status == .transcriptionFailed ? .failed : .idle),
             syncState: .synced,
@@ -573,7 +586,9 @@ enum MeetingPayloadMapper {
         meeting.audioDuration = remote.audioDuration ?? meeting.audioDuration
         meeting.audioUpdatedAt = remote.audioUpdatedAt ?? meeting.audioUpdatedAt
         meeting.hiddenWorkspaceId = remote.workspaceId ?? meeting.hiddenWorkspaceId
-        meeting.collectionId = remote.collectionId ?? meeting.collectionId
+        meeting.collectionId = remote.collectionId
+        meeting.previousCollectionId = remote.previousCollectionId
+        meeting.deletedAt = remote.deletedAt
         if let remoteSpeakers = remote.speakers,
            !remoteSpeakers.isEmpty || meeting.speakers.isEmpty {
             meeting.speakers = remoteSpeakers
@@ -648,7 +663,6 @@ enum MeetingPayloadMapper {
         meeting.audioDuration = remote.audioDuration ?? meeting.audioDuration
         meeting.audioUpdatedAt = remote.audioUpdatedAt ?? meeting.audioUpdatedAt
         meeting.hiddenWorkspaceId = remote.workspaceId ?? meeting.hiddenWorkspaceId
-        meeting.collectionId = remote.collectionId ?? meeting.collectionId
         if let remoteSpeakers = remote.speakers,
            !remoteSpeakers.isEmpty || meeting.speakers.isEmpty {
             meeting.speakers = remoteSpeakers

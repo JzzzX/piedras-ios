@@ -103,6 +103,8 @@ export interface AsrVocabularySyncStatus {
 export interface Collection {
   id: string;
   name: string;
+  isDefault?: boolean;
+  isRecentlyDeleted?: boolean;
   description: string;
   icon: string;
   color: string;
@@ -202,6 +204,9 @@ export interface Meeting {
   speakers: Record<string, string>;
   chatMessages: ChatMessage[];
   duration: number;
+  collectionId?: string | null;
+  previousCollectionId?: string | null;
+  deletedAt?: string | null;
   audioCloudSyncEnabled?: boolean;
   audioMimeType?: string | null;
   audioDuration?: number | null;

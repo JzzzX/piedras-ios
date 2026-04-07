@@ -34,9 +34,13 @@ struct AppStringTable {
     var stop: String { isChinese ? "停止" : "Stop" }
     var deleteAction: String { isChinese ? "删除" : "Delete" }
     var deleteNoteAction: String { isChinese ? "删除笔记" : "Delete note" }
+    var moveNoteAction: String { isChinese ? "移动" : "Move" }
+    var restoreNoteAction: String { isChinese ? "恢复" : "Restore" }
+    var permanentlyDeleteNoteAction: String { isChinese ? "彻底删除" : "Delete Permanently" }
     var folders: String { isChinese ? "文件夹" : "Folders" }
     var foldersComingSoon: String { isChinese ? "文件夹功能即将上线" : "Folders are coming soon" }
     var defaultFolderName: String { isChinese ? "默认文件栏" : "Default Folder" }
+    var recentlyDeletedFolderName: String { isChinese ? "最近删除" : "Recently Deleted" }
     var folderDrawerTitle: String { isChinese ? "文件夹" : "Folders" }
     var newFolder: String { isChinese ? "新建文件夹" : "New Folder" }
     var createFolderAction: String { isChinese ? "创建" : "Create" }
@@ -44,6 +48,9 @@ struct AppStringTable {
     var newFolderPlaceholder: String { isChinese ? "输入文件夹名称" : "Enter folder name" }
     var newFolderNameRequired: String { isChinese ? "请输入文件夹名称。" : "Enter a folder name." }
     var folderEmptyState: String { isChinese ? "当前只有默认文件夹。" : "Only the default folder is available." }
+    var deleteFolderAction: String { isChinese ? "删除文件夹" : "Delete Folder" }
+    var deleteFolderMessage: String { isChinese ? "删除后，其中的笔记会移回默认文件夹。" : "Deleting this folder moves its notes back to the default folder." }
+    var moveNotePromptTitle: String { isChinese ? "选择目标文件夹" : "Select Folder" }
 
     // ── MeetingHomeBucket ────────────────────────────────────────
 

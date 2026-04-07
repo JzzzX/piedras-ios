@@ -71,16 +71,19 @@ struct MeetingDeletionSyncTests {
 
     @MainActor
     @Test
-    func deleteMeetingUsesLocalFirstTombstoneWithoutUserVisibleError() throws {
+    func deleteMeetingMovesMeetingIntoRecentlyDeletedWithoutUserVisibleError() throws {
         let appContainer = try makeAppContainer()
         let repository = appContainer.meetingRepository
         try resetRepository(repository)
+        appContainer.settingsStore.defaultCollectionID = "collection-notes"
+        appContainer.settingsStore.recentlyDeletedCollectionID = "collection-recently-deleted"
 
         let meeting = Meeting(
             id: "meeting-local-delete",
             title: "Delete locally first",
             audioRemotePath: "/audio/meeting-local-delete.m4a",
             hiddenWorkspaceId: "workspace-1",
+            collectionId: "collection-projects",
             syncState: .synced,
             lastSyncedAt: .now
         )
@@ -93,11 +96,128 @@ struct MeetingDeletionSyncTests {
 
         meetingStore.deleteMeeting(id: meeting.id)
 
-        #expect(try repository.meeting(withID: meeting.id)?.syncState == .deleted)
+        let trashedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(trashedMeeting.syncState == .pending)
+        #expect(trashedMeeting.collectionId == "collection-recently-deleted")
+        #expect(trashedMeeting.previousCollectionId == "collection-projects")
+        #expect(trashedMeeting.deletedAt != nil)
         #expect(try repository.fetchMeetings().isEmpty)
         #expect(try repository.fetchMeetings(includeDeleted: true).map(\.id) == [meeting.id])
         #expect(meetingStore.meetings.isEmpty)
         #expect(meetingStore.lastErrorMessage == nil)
+    }
+
+    @MainActor
+    @Test
+    func restoreMeetingClearsDeletedStateAndReturnsToPreviousCollection() throws {
+        let appContainer = try makeAppContainer()
+        let repository = appContainer.meetingRepository
+        try resetRepository(repository)
+        appContainer.settingsStore.defaultCollectionID = "collection-notes"
+        appContainer.settingsStore.recentlyDeletedCollectionID = "collection-recently-deleted"
+
+        let meeting = Meeting(
+            id: "meeting-restore",
+            title: "Restore me",
+            hiddenWorkspaceId: "workspace-1",
+            collectionId: "collection-recently-deleted",
+            previousCollectionId: "collection-projects",
+            deletedAt: .now,
+            syncState: .synced,
+            lastSyncedAt: .now
+        )
+        repository.insert(meeting)
+        try repository.save()
+
+        let meetingStore = appContainer.meetingStore
+        meetingStore.restoreMeeting(id: meeting.id)
+
+        let restoredMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(restoredMeeting.collectionId == "collection-projects")
+        #expect(restoredMeeting.previousCollectionId == nil)
+        #expect(restoredMeeting.deletedAt == nil)
+        #expect(restoredMeeting.syncState == .pending)
+    }
+
+    @MainActor
+    @Test
+    func moveMeetingUpdatesCollectionAndKeepsItVisibleInTargetFolder() throws {
+        let appContainer = try makeAppContainer()
+        let repository = appContainer.meetingRepository
+        try resetRepository(repository)
+        appContainer.settingsStore.defaultCollectionID = "collection-notes"
+        appContainer.settingsStore.recentlyDeletedCollectionID = "collection-recently-deleted"
+        appContainer.settingsStore.selectedCollectionID = "collection-notes"
+
+        let meeting = Meeting(
+            id: "meeting-move",
+            title: "Move me",
+            hiddenWorkspaceId: "workspace-1",
+            collectionId: "collection-notes",
+            syncState: .synced,
+            lastSyncedAt: .now
+        )
+        repository.insert(meeting)
+        try repository.save()
+
+        let meetingStore = appContainer.meetingStore
+        meetingStore.loadMeetings()
+        #expect(meetingStore.meetings.map(\.id) == [meeting.id])
+
+        meetingStore.moveMeeting(id: meeting.id, to: "collection-projects")
+
+        let movedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(movedMeeting.collectionId == "collection-projects")
+        #expect(movedMeeting.previousCollectionId == nil)
+        #expect(movedMeeting.deletedAt == nil)
+        #expect(movedMeeting.syncState == .pending)
+        #expect(meetingStore.meetings.isEmpty)
+
+        appContainer.settingsStore.selectedCollectionID = "collection-projects"
+        meetingStore.loadMeetings()
+        #expect(meetingStore.meetings.map(\.id) == [meeting.id])
+    }
+
+    @MainActor
+    @Test
+    func deletingFolderRepairsLocalMeetingCollections() throws {
+        let appContainer = try makeAppContainer()
+        let repository = appContainer.meetingRepository
+        try resetRepository(repository)
+        appContainer.settingsStore.defaultCollectionID = "collection-notes"
+        appContainer.settingsStore.recentlyDeletedCollectionID = "collection-recently-deleted"
+
+        let movedMeeting = Meeting(
+            id: "meeting-moved-to-default",
+            title: "Move me back",
+            hiddenWorkspaceId: "workspace-1",
+            collectionId: "collection-projects",
+            syncState: .synced,
+            lastSyncedAt: .now
+        )
+        let trashedMeeting = Meeting(
+            id: "meeting-restore-target",
+            title: "Restore target",
+            hiddenWorkspaceId: "workspace-1",
+            collectionId: "collection-recently-deleted",
+            previousCollectionId: "collection-projects",
+            deletedAt: .now,
+            syncState: .synced,
+            lastSyncedAt: .now
+        )
+        repository.insert(movedMeeting)
+        repository.insert(trashedMeeting)
+        try repository.save()
+
+        let meetingStore = appContainer.meetingStore
+        meetingStore.reconcileDeletedFolder(id: "collection-projects")
+
+        let refreshedMovedMeeting = try #require(try repository.meeting(withID: movedMeeting.id))
+        let refreshedTrashedMeeting = try #require(try repository.meeting(withID: trashedMeeting.id))
+        #expect(refreshedMovedMeeting.collectionId == "collection-notes")
+        #expect(refreshedMovedMeeting.deletedAt == nil)
+        #expect(refreshedTrashedMeeting.collectionId == "collection-recently-deleted")
+        #expect(refreshedTrashedMeeting.previousCollectionId == "collection-notes")
     }
 
     @MainActor
@@ -1002,6 +1122,128 @@ struct MeetingDeletionSyncTests {
 
         #expect(chatIDs == Set(["remote-chat", "local-chat"]))
         #expect(requestChatIDs == Set(["remote-chat", "local-chat"]))
+    }
+
+    @MainActor
+    @Test
+    func syncMeetingPreservesPendingLocalCollectionMoveBeforeUpsert() async throws {
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
+        let settingsStore = makeSettingsStore()
+        settingsStore.defaultCollectionID = "collection-notes"
+        settingsStore.recentlyDeletedCollectionID = "collection-recently-deleted"
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let syncService = MeetingSyncService(
+            repository: repository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+
+        let meeting = Meeting(
+            id: "meeting-move-sync",
+            title: "Move sync",
+            status: .ended,
+            hiddenWorkspaceId: "workspace-1",
+            collectionId: "collection-projects",
+            syncState: .pending,
+            lastSyncedAt: .now
+        )
+        repository.insert(meeting)
+        try repository.save()
+
+        var upsertBody: [String: Any]?
+        MockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/meetings/\(meeting.id)":
+                return (
+                    response,
+                    Data(
+                        """
+                        {
+                          "id": "\(meeting.id)",
+                          "title": "Move sync",
+                          "date": "2026-03-24T04:00:00.000Z",
+                          "status": "ended",
+                          "duration": 0,
+                          "collectionId": "collection-projects",
+                          "previousCollectionId": null,
+                          "deletedAt": null,
+                          "userNotes": "",
+                          "enhancedNotes": "",
+                          "createdAt": "2026-03-24T03:50:00.000Z",
+                          "updatedAt": "2026-03-24T04:00:00.000Z",
+                          "workspaceId": "workspace-1",
+                          "speakers": {},
+                          "segments": [],
+                          "chatMessages": [],
+                          "hasAudio": false,
+                          "audioUrl": null
+                        }
+                        """.utf8
+                    )
+                )
+
+            case "/api/meetings":
+                let requestBody = try #require(request.httpBody)
+                upsertBody = try #require(
+                    JSONSerialization.jsonObject(with: requestBody) as? [String: Any]
+                )
+                return (
+                    response,
+                    Data(
+                        """
+                        {
+                          "id": "\(meeting.id)",
+                          "title": "Move sync",
+                          "date": "2026-03-24T04:00:00.000Z",
+                          "status": "ended",
+                          "duration": 0,
+                          "collectionId": "collection-archive",
+                          "previousCollectionId": null,
+                          "deletedAt": null,
+                          "userNotes": "",
+                          "enhancedNotes": "",
+                          "createdAt": "2026-03-24T03:50:00.000Z",
+                          "updatedAt": "2026-03-24T04:00:01.000Z",
+                          "workspaceId": "workspace-1",
+                          "speakers": {},
+                          "segments": [],
+                          "chatMessages": [],
+                          "hasAudio": false,
+                          "audioUrl": null
+                        }
+                        """.utf8
+                    )
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+        defer { MockURLProtocol.reset() }
+
+        meeting.collectionId = "collection-archive"
+        meeting.previousCollectionId = nil
+        meeting.deletedAt = nil
+        try repository.save()
+
+        try await syncService.syncMeeting(id: meeting.id)
+
+        let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(upsertBody?["collectionId"] as? String == "collection-archive")
+        #expect(upsertBody?["previousCollectionId"] as? NSNull != nil || upsertBody?["previousCollectionId"] == nil)
+        #expect(refreshedMeeting.collectionId == "collection-archive")
+        #expect(refreshedMeeting.syncState == .synced)
     }
 
     @MainActor

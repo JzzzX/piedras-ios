@@ -307,6 +307,7 @@ final class MeetingStore {
         fileTranscriptionPartials.removeAll()
         settingsStore.hiddenWorkspaceID = nil
         settingsStore.defaultCollectionID = nil
+        settingsStore.recentlyDeletedCollectionID = nil
         settingsStore.selectedCollectionID = nil
         settingsStore.workspaceBootstrapState = .idle
         settingsStore.workspaceStatusMessage = "等待登录"
@@ -340,7 +341,8 @@ final class MeetingStore {
             }
             meetings = try repository.fetchMeetings(
                 matching: searchText,
-                collectionID: settingsStore.activeCollectionID
+                collectionID: settingsStore.activeCollectionID,
+                recentlyDeletedCollectionID: settingsStore.recentlyDeletedCollectionID
             )
             if let selectedMeetingID,
                meetings.contains(where: { $0.id == selectedMeetingID }) {
@@ -364,7 +366,7 @@ final class MeetingStore {
         do {
             let meeting = try repository.createDraftMeeting(
                 hiddenWorkspaceID: settingsStore.hiddenWorkspaceID,
-                collectionID: settingsStore.activeCollectionID
+                collectionID: writableCollectionID()
             )
             if startingRecording {
                 _ = primeRecordingSession(
@@ -393,7 +395,8 @@ final class MeetingStore {
     func searchMeetings(matching query: String) -> [Meeting] {
         (try? repository.fetchMeetings(
             matching: query,
-            collectionID: settingsStore.activeCollectionID
+            collectionID: settingsStore.activeCollectionID,
+            recentlyDeletedCollectionID: settingsStore.recentlyDeletedCollectionID
         )) ?? []
     }
 
@@ -549,6 +552,126 @@ final class MeetingStore {
     }
 
     func deleteMeeting(id: String) {
+        trashMeeting(id: id)
+    }
+
+    func reconcileDeletedFolder(id folderID: String) {
+        guard let defaultCollectionID = settingsStore.defaultCollectionID else {
+            lastErrorMessage = "默认文件夹尚未准备好。"
+            return
+        }
+
+        do {
+            let meetings = try repository.fetchMeetings(includeDeleted: true)
+            var didChange = false
+
+            for meeting in meetings where meeting.syncState != .deleted {
+                if meeting.deletedAt == nil, meeting.collectionId == folderID {
+                    meeting.collectionId = defaultCollectionID
+                    didChange = true
+                }
+
+                if meeting.previousCollectionId == folderID {
+                    meeting.previousCollectionId = defaultCollectionID
+                    didChange = true
+                }
+            }
+
+            guard didChange else {
+                loadMeetings()
+                return
+            }
+
+            try repository.save()
+            loadMeetings()
+            lastErrorMessage = nil
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func moveMeeting(id: String, to folderID: String) {
+        guard let meeting = meeting(withID: id) else {
+            return
+        }
+
+        guard folderID != settingsStore.recentlyDeletedCollectionID else {
+            trashMeeting(id: id)
+            return
+        }
+
+        guard meeting.collectionId != folderID || meeting.deletedAt != nil else {
+            return
+        }
+
+        meeting.collectionId = folderID
+        meeting.deletedAt = nil
+        meeting.previousCollectionId = nil
+        meeting.markPending()
+        persistChanges()
+        scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1))
+    }
+
+    func trashMeeting(id: String) {
+        guard let meeting = meeting(withID: id) else {
+            return
+        }
+
+        if recordingSessionStore.meetingID == id, recordingSessionStore.phase != .idle {
+            lastErrorMessage = "请先结束当前录音，再删除这条会议。"
+            return
+        }
+
+        guard let recentlyDeletedCollectionID = settingsStore.recentlyDeletedCollectionID else {
+            lastErrorMessage = "最近删除文件夹尚未准备好。"
+            return
+        }
+
+        if meeting.deletedAt != nil, meeting.collectionId == recentlyDeletedCollectionID {
+            return
+        }
+
+        lastErrorMessage = nil
+        let sourceCollectionID = meeting.collectionId
+            ?? settingsStore.defaultCollectionID
+
+        if sourceCollectionID != recentlyDeletedCollectionID {
+            meeting.previousCollectionId = sourceCollectionID
+        }
+        meeting.collectionId = recentlyDeletedCollectionID
+        meeting.deletedAt = .now
+        meeting.markPending()
+        persistChanges()
+        scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1))
+    }
+
+    func restoreMeeting(id: String) {
+        guard let meeting = meeting(withID: id) else {
+            return
+        }
+
+        let restoreCollectionID: String? = {
+            if let previousCollectionID = meeting.previousCollectionId,
+               previousCollectionID != settingsStore.recentlyDeletedCollectionID {
+                return previousCollectionID
+            }
+            return settingsStore.defaultCollectionID
+        }()
+
+        guard let restoreCollectionID else {
+            lastErrorMessage = "默认文件夹尚未准备好。"
+            return
+        }
+
+        meeting.collectionId = restoreCollectionID
+        meeting.previousCollectionId = nil
+        meeting.deletedAt = nil
+        meeting.markPending()
+        persistChanges()
+        scheduleMeetingSync(meetingID: meeting.id, delay: .seconds(1))
+    }
+
+    func permanentlyDeleteMeeting(id: String) {
         guard let meeting = meeting(withID: id) else {
             return
         }
@@ -3417,6 +3540,7 @@ final class MeetingStore {
                         extractedTextByFileName[fileName] = normalizedText
                     }
                 }
+
                 guard !Task.isCancelled else { return }
                 guard noteAttachmentTaskTokens[meetingID] == taskToken else { return }
                 guard let meeting = self.meeting(withID: meetingID) else { return }
@@ -3436,6 +3560,14 @@ final class MeetingStore {
             noteAttachmentTextTasks[meetingID] = nil
             noteAttachmentTaskTokens[meetingID] = nil
         }
+    }
+
+    private func writableCollectionID() -> String? {
+        guard settingsStore.activeCollectionID == settingsStore.recentlyDeletedCollectionID else {
+            return settingsStore.activeCollectionID
+        }
+
+        return settingsStore.defaultCollectionID
     }
 
     private func applyNoteAttachmentText(

@@ -16,6 +16,7 @@ export async function createDefaultWorkspaceForUser(
   input: { userId: string }
 ) {
   const lastWorkspace = await db.workspace.findFirst({
+    where: { ownerUserId: input.userId },
     orderBy: { sortOrder: 'desc' },
     select: { sortOrder: true },
   });
@@ -28,6 +29,40 @@ export async function createDefaultWorkspaceForUser(
       color: DEFAULT_WORKSPACE_COLOR,
       workflowMode: 'general',
       modeLabel: 'Private',
+      sortOrder: nextSortOrder(lastWorkspace?.sortOrder),
+      ownerUserId: input.userId,
+    },
+  });
+}
+
+interface CreateWorkspaceForUserInput {
+  userId: string;
+  name: string;
+  description?: string;
+  icon?: string;
+  color?: string;
+  workflowMode?: Prisma.WorkspaceCreateInput['workflowMode'];
+  modeLabel?: string;
+}
+
+export async function createWorkspaceForUser(
+  db: WorkspaceDatabase,
+  input: CreateWorkspaceForUserInput
+) {
+  const lastWorkspace = await db.workspace.findFirst({
+    where: { ownerUserId: input.userId },
+    orderBy: { sortOrder: 'desc' },
+    select: { sortOrder: true },
+  });
+
+  return db.workspace.create({
+    data: {
+      name: input.name.trim(),
+      description: input.description?.trim() || '',
+      icon: input.icon?.trim() || DEFAULT_WORKSPACE_ICON,
+      color: input.color?.trim() || '#94a3b8',
+      workflowMode: input.workflowMode === 'interview' ? 'interview' : 'general',
+      modeLabel: input.modeLabel?.trim() || '',
       sortOrder: nextSortOrder(lastWorkspace?.sortOrder),
       ownerUserId: input.userId,
     },

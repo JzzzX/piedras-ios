@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
-import { ensureDefaultWorkspaceForUser } from '@/lib/user-workspace-db';
+import {
+  createWorkspaceForUser,
+  ensureDefaultWorkspaceForUser,
+} from '@/lib/user-workspace-db';
 
 export async function GET(req: NextRequest) {
   const context = createRequestContext(req, '/api/workspaces');
@@ -56,26 +59,14 @@ export async function POST(req: NextRequest) {
       return errorResponse(context, 400, '工作区名称不能为空');
     }
 
-    const existingWorkspace = await prisma.workspace.findFirst({
-      where: { ownerUserId: auth.user.id },
-      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
-    });
-
-    if (existingWorkspace) {
-      return errorResponse(context, 409, '当前账号已存在默认工作区');
-    }
-
-    const workspace = await prisma.workspace.create({
-      data: {
-        name,
-        description: body.description?.trim() || '',
-        icon: body.icon?.trim() || 'folder',
-        color: body.color?.trim() || '#94a3b8',
-        workflowMode: body.workflowMode === 'interview' ? 'interview' : 'general',
-        modeLabel: body.modeLabel?.trim() || '',
-        sortOrder: 1,
-        ownerUserId: auth.user.id,
-      },
+    const workspace = await createWorkspaceForUser(prisma, {
+      userId: auth.user.id,
+      name,
+      description: body.description,
+      icon: body.icon,
+      color: body.color,
+      workflowMode: body.workflowMode,
+      modeLabel: body.modeLabel,
     });
 
     return jsonResponse(context, workspace);

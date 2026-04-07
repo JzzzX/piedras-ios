@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
+import { deleteMeetingAttachmentsDir } from '@/lib/meeting-attachment';
+import { deleteMeetingAudioFile } from '@/lib/meeting-audio';
+import { purgeExpiredTrashedMeetings } from '@/lib/meeting-trash';
 import {
   createCollectionForWorkspace,
   ensureWorkspaceCollectionsHydrated,
@@ -17,13 +20,20 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const { defaultCollection, collections } = await ensureWorkspaceCollectionsHydrated(prisma, {
+    await purgeExpiredTrashedMeetings(prisma, {
+      deleteMeetingAudio: deleteMeetingAudioFile,
+      deleteMeetingAttachments: deleteMeetingAttachmentsDir,
+    });
+
+    const { defaultCollection, recentlyDeletedCollection, collections } = await ensureWorkspaceCollectionsHydrated(prisma, {
       workspaceId: auth.workspace.id,
     });
 
     return jsonResponse(
       context,
-      collections.map((collection) => serializeCollection(collection, defaultCollection.id))
+      collections.map((collection) =>
+        serializeCollection(collection, defaultCollection.id, recentlyDeletedCollection.id)
+      )
     );
   } catch (error) {
     return errorResponse(
@@ -44,6 +54,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    await purgeExpiredTrashedMeetings(prisma, {
+      deleteMeetingAudio: deleteMeetingAudioFile,
+      deleteMeetingAttachments: deleteMeetingAttachmentsDir,
+    });
+
     const body = (await req.json()) as {
       name?: string;
     };
@@ -53,7 +68,7 @@ export async function POST(req: NextRequest) {
       return errorResponse(context, 400, '文件夹名称不能为空');
     }
 
-    const { defaultCollection } = await ensureWorkspaceCollectionsHydrated(prisma, {
+    const { defaultCollection, recentlyDeletedCollection } = await ensureWorkspaceCollectionsHydrated(prisma, {
       workspaceId: auth.workspace.id,
     });
     const collection = await createCollectionForWorkspace(prisma, {
@@ -61,7 +76,10 @@ export async function POST(req: NextRequest) {
       name,
     });
 
-    return jsonResponse(context, serializeCollection(collection, defaultCollection.id));
+    return jsonResponse(
+      context,
+      serializeCollection(collection, defaultCollection.id, recentlyDeletedCollection.id)
+    );
   } catch (error) {
     return errorResponse(
       context,

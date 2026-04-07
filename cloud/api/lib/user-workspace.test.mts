@@ -22,3 +22,25 @@ test('resolveUserWorkspaceId falls back to the authenticated users default works
     'workspace-user-a'
   );
 });
+
+test('resolveUserWorkspaceId allows an explicitly selected workspace when it belongs to the user', () => {
+  assert.equal(
+    resolveUserWorkspaceId({
+      defaultWorkspaceId: 'workspace-user-a',
+      requestedWorkspaceId: 'workspace-user-b',
+      accessibleWorkspaceIds: ['workspace-user-b'],
+    }),
+    'workspace-user-b'
+  );
+});
+
+test('resolveUserWorkspaceId falls back to the default workspace when the requested workspace is not accessible', () => {
+  assert.equal(
+    resolveUserWorkspaceId({
+      defaultWorkspaceId: 'workspace-user-a',
+      requestedWorkspaceId: 'workspace-user-b',
+      accessibleWorkspaceIds: [],
+    }),
+    'workspace-user-a'
+  );
+});

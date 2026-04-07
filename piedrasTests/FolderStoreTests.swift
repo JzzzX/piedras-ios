@@ -43,7 +43,7 @@ private final class FolderStoreMockURLProtocol: URLProtocol {
 @Suite(.serialized)
 struct FolderStoreTests {
     @Test
-    func loadFoldersPromotesDefaultCollectionAndLocalizesDisplayName() async throws {
+    func loadFoldersPromotesDefaultAndRecentlyDeletedCollectionsAndLocalizesDisplayName() async throws {
         FolderStoreMockURLProtocol.reset()
         defer { FolderStoreMockURLProtocol.reset() }
 
@@ -75,8 +75,9 @@ struct FolderStoreTests {
             #expect(request.url?.path == "/api/collections")
             let payload = """
             [
-              { "id": "collection-notes", "name": "Default Folder", "isDefault": true },
-              { "id": "collection-projects", "name": "项目资料", "isDefault": false }
+              { "id": "collection-notes", "name": "Default Folder", "isDefault": true, "isRecentlyDeleted": false },
+              { "id": "collection-projects", "name": "项目资料", "isDefault": false, "isRecentlyDeleted": false },
+              { "id": "collection-recently-deleted", "name": "Recently Deleted", "isDefault": false, "isRecentlyDeleted": true }
             ]
             """
             return (response, Data(payload.utf8))
@@ -84,10 +85,12 @@ struct FolderStoreTests {
 
         await store.loadFolders()
 
-        #expect(store.folders.count == 2)
-        #expect(store.folders.map(\.displayName) == ["默认文件栏", "项目资料"])
+        #expect(store.folders.count == 3)
+        #expect(store.folders.map(\.displayName) == ["默认文件栏", "项目资料", "最近删除"])
         #expect(store.folders.first?.isDefault == true)
+        #expect(store.folders.last?.isRecentlyDeleted == true)
         #expect(settingsStore.defaultCollectionID == "collection-notes")
+        #expect(settingsStore.recentlyDeletedCollectionID == "collection-recently-deleted")
         #expect(settingsStore.selectedCollectionID == "collection-notes")
         #expect(settingsStore.activeCollectionID == "collection-notes")
     }
@@ -129,7 +132,8 @@ struct FolderStoreTests {
                 #expect(request.httpMethod == "GET")
                 let payload = """
                 [
-                  { "id": "collection-notes", "name": "Default Folder", "isDefault": true }
+                  { "id": "collection-notes", "name": "Default Folder", "isDefault": true, "isRecentlyDeleted": false },
+                  { "id": "collection-recently-deleted", "name": "Recently Deleted", "isDefault": false, "isRecentlyDeleted": true }
                 ]
                 """
                 return (response, Data(payload.utf8))
@@ -141,7 +145,7 @@ struct FolderStoreTests {
             #expect(body["name"] == "项目归档")
 
             let payload = """
-            { "id": "collection-archive", "name": "项目归档", "isDefault": false }
+            { "id": "collection-archive", "name": "项目归档", "isDefault": false, "isRecentlyDeleted": false }
             """
             return (response, Data(payload.utf8))
         }
@@ -152,10 +156,58 @@ struct FolderStoreTests {
         let created = await store.createFolder()
 
         #expect(created == true)
-        #expect(store.folders.map(\.displayName) == ["默认文件栏", "项目归档"])
+        #expect(store.folders.map(\.displayName) == ["默认文件栏", "项目归档", "最近删除"])
         #expect(settingsStore.selectedCollectionID == "collection-archive")
         #expect(settingsStore.activeCollectionID == "collection-archive")
         #expect(store.draftFolderName.isEmpty)
+    }
+
+    @Test
+    func ensureSystemFoldersReadyLoadsCollectionsWhenIdentifiersAreMissing() async throws {
+        FolderStoreMockURLProtocol.reset()
+        defer { FolderStoreMockURLProtocol.reset() }
+
+        let suiteName = "piedras.tests.folders.ensure-system.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: defaults,
+            debugDefaultBackendBaseURLString: "https://example.com"
+        )
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [FolderStoreMockURLProtocol.self]
+        let apiClient = APIClient(
+            settingsStore: settingsStore,
+            authTokenStore: UserDefaultsAuthTokenStore(defaults: defaults),
+            session: URLSession(configuration: configuration)
+        )
+        let store = FolderStore(apiClient: apiClient, settingsStore: settingsStore)
+
+        FolderStoreMockURLProtocol.requestHandler = { request in
+            let response = try #require(
+                HTTPURLResponse(
+                    url: request.url ?? URL(string: "https://example.com")!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+            #expect(request.url?.path == "/api/collections")
+            let payload = """
+            [
+              { "id": "collection-notes", "name": "Default Folder", "isDefault": true, "isRecentlyDeleted": false },
+              { "id": "collection-recently-deleted", "name": "Recently Deleted", "isDefault": false, "isRecentlyDeleted": true }
+            ]
+            """
+            return (response, Data(payload.utf8))
+        }
+
+        let isReady = await store.ensureSystemFoldersReady()
+
+        #expect(isReady == true)
+        #expect(settingsStore.defaultCollectionID == "collection-notes")
+        #expect(settingsStore.recentlyDeletedCollectionID == "collection-recently-deleted")
+        #expect(FolderStoreMockURLProtocol.requests.count == 1)
     }
 
     private func data(from stream: InputStream?) -> Data? {
