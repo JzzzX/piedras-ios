@@ -19,10 +19,10 @@ function summarizeMissingItems(items: string[]) {
 
 export function requireStartupBootstrapReady(
   context: StartupBootstrapGuardContext,
-  snapshot: StartupBootstrapSnapshot = getStartupBootstrapSnapshot()
+  snapshot: StartupBootstrapSnapshot | Partial<StartupBootstrapSnapshot> = getStartupBootstrapSnapshot()
 ) {
   const resolvedSnapshot = buildStartupBootstrapSnapshot(snapshot);
-  if (resolvedSnapshot.ready) {
+  if (resolvedSnapshot.ready && resolvedSnapshot.schemaReady) {
     return null;
   }
 

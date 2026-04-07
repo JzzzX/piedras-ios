@@ -64,6 +64,8 @@ test('summarizeAuthSchemaStatus reports missing meeting audio ai columns', () =>
 test('summarizeMediaSyncSchemaStatus reports missing meeting media sync schema objects', () => {
   const status = summarizeMediaSyncSchemaStatus({
     meetingAudioCloudSyncEnabledColumnPresent: false,
+    meetingPreviousCollectionIdColumnPresent: false,
+    meetingDeletedAtColumnPresent: false,
     meetingAttachmentTablePresent: false,
     meetingAttachmentIndexPresent: false,
     meetingAttachmentForeignKeyPresent: false,
@@ -72,6 +74,8 @@ test('summarizeMediaSyncSchemaStatus reports missing meeting media sync schema o
   assert.equal(status.ready, false);
   assert.deepEqual(status.missingItems, [
     'Meeting.audioCloudSyncEnabled 字段',
+    'Meeting.previousCollectionId 字段',
+    'Meeting.deletedAt 字段',
     'MeetingAttachment 表',
     'MeetingAttachment_meetingId_updatedAt_idx 索引',
     'MeetingAttachment_meetingId_fkey 外键',

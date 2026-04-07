@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db';
 import { deleteMeetingAttachmentsDir } from '@/lib/meeting-attachment';
 import { deleteMeetingAudioFile } from '@/lib/meeting-audio';
 import { purgeExpiredTrashedMeetings } from '@/lib/meeting-trash';
+import { runWithStartupBootstrapGuard } from '@/lib/startup-bootstrap-route';
 import {
   createCollectionForWorkspace,
   ensureWorkspaceCollectionsHydrated,
@@ -13,79 +14,83 @@ import {
 
 export async function GET(req: NextRequest) {
   const context = createRequestContext(req, '/api/collections');
-  const auth = await requireAuthenticatedRequest(req, context);
+  return runWithStartupBootstrapGuard(context, async () => {
+    const auth = await requireAuthenticatedRequest(req, context);
 
-  if (auth instanceof Response) {
-    return auth;
-  }
+    if (auth instanceof Response) {
+      return auth;
+    }
 
-  try {
-    await purgeExpiredTrashedMeetings(prisma, {
-      deleteMeetingAudio: deleteMeetingAudioFile,
-      deleteMeetingAttachments: deleteMeetingAttachmentsDir,
-    });
+    try {
+      await purgeExpiredTrashedMeetings(prisma, {
+        deleteMeetingAudio: deleteMeetingAudioFile,
+        deleteMeetingAttachments: deleteMeetingAttachmentsDir,
+      });
 
-    const { defaultCollection, recentlyDeletedCollection, collections } = await ensureWorkspaceCollectionsHydrated(prisma, {
-      workspaceId: auth.workspace.id,
-    });
+      const { defaultCollection, recentlyDeletedCollection, collections } = await ensureWorkspaceCollectionsHydrated(prisma, {
+        workspaceId: auth.workspace.id,
+      });
 
-    return jsonResponse(
-      context,
-      collections.map((collection) =>
-        serializeCollection(collection, defaultCollection.id, recentlyDeletedCollection.id)
-      )
-    );
-  } catch (error) {
-    return errorResponse(
-      context,
-      500,
-      error instanceof Error ? `加载文件夹失败：${error.message}` : '加载文件夹失败，请稍后重试。',
-      error
-    );
-  }
+      return jsonResponse(
+        context,
+        collections.map((collection) =>
+          serializeCollection(collection, defaultCollection.id, recentlyDeletedCollection.id)
+        )
+      );
+    } catch (error) {
+      return errorResponse(
+        context,
+        500,
+        error instanceof Error ? `加载文件夹失败：${error.message}` : '加载文件夹失败，请稍后重试。',
+        error
+      );
+    }
+  });
 }
 
 export async function POST(req: NextRequest) {
   const context = createRequestContext(req, '/api/collections');
-  const auth = await requireAuthenticatedRequest(req, context);
+  return runWithStartupBootstrapGuard(context, async () => {
+    const auth = await requireAuthenticatedRequest(req, context);
 
-  if (auth instanceof Response) {
-    return auth;
-  }
-
-  try {
-    await purgeExpiredTrashedMeetings(prisma, {
-      deleteMeetingAudio: deleteMeetingAudioFile,
-      deleteMeetingAttachments: deleteMeetingAttachmentsDir,
-    });
-
-    const body = (await req.json()) as {
-      name?: string;
-    };
-    const name = body.name?.trim();
-
-    if (!name) {
-      return errorResponse(context, 400, '文件夹名称不能为空');
+    if (auth instanceof Response) {
+      return auth;
     }
 
-    const { defaultCollection, recentlyDeletedCollection } = await ensureWorkspaceCollectionsHydrated(prisma, {
-      workspaceId: auth.workspace.id,
-    });
-    const collection = await createCollectionForWorkspace(prisma, {
-      workspaceId: auth.workspace.id,
-      name,
-    });
+    try {
+      await purgeExpiredTrashedMeetings(prisma, {
+        deleteMeetingAudio: deleteMeetingAudioFile,
+        deleteMeetingAttachments: deleteMeetingAttachmentsDir,
+      });
 
-    return jsonResponse(
-      context,
-      serializeCollection(collection, defaultCollection.id, recentlyDeletedCollection.id)
-    );
-  } catch (error) {
-    return errorResponse(
-      context,
-      500,
-      error instanceof Error ? `创建文件夹失败：${error.message}` : '创建文件夹失败，请稍后重试。',
-      error
-    );
-  }
+      const body = (await req.json()) as {
+        name?: string;
+      };
+      const name = body.name?.trim();
+
+      if (!name) {
+        return errorResponse(context, 400, '文件夹名称不能为空');
+      }
+
+      const { defaultCollection, recentlyDeletedCollection } = await ensureWorkspaceCollectionsHydrated(prisma, {
+        workspaceId: auth.workspace.id,
+      });
+      const collection = await createCollectionForWorkspace(prisma, {
+        workspaceId: auth.workspace.id,
+        name,
+      });
+
+      return jsonResponse(
+        context,
+        serializeCollection(collection, defaultCollection.id, recentlyDeletedCollection.id)
+      );
+    } catch (error) {
+      return errorResponse(
+        context,
+        500,
+        error instanceof Error ? `创建文件夹失败：${error.message}` : '创建文件夹失败，请稍后重试。',
+        error
+      );
+    }
+  });
 }

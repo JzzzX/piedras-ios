@@ -22,6 +22,12 @@ const MEDIA_SYNC_BOOTSTRAP_SQL = `
 ALTER TABLE "Meeting"
   ADD COLUMN IF NOT EXISTS "audioCloudSyncEnabled" BOOLEAN NOT NULL DEFAULT true;
 
+ALTER TABLE "Meeting"
+  ADD COLUMN IF NOT EXISTS "previousCollectionId" TEXT;
+
+ALTER TABLE "Meeting"
+  ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP(3);
+
 CREATE TABLE IF NOT EXISTS "MeetingAttachment" (
   "id" TEXT NOT NULL,
   "originalName" TEXT NOT NULL,
@@ -109,6 +115,8 @@ function summarizeMediaSyncSchemaStatus(input) {
     ready: true,
     missingItems: [],
     meetingAudioCloudSyncEnabledColumnPresent: Boolean(input.meetingAudioCloudSyncEnabledColumnPresent),
+    meetingPreviousCollectionIdColumnPresent: Boolean(input.meetingPreviousCollectionIdColumnPresent),
+    meetingDeletedAtColumnPresent: Boolean(input.meetingDeletedAtColumnPresent),
     meetingAttachmentTablePresent: Boolean(input.meetingAttachmentTablePresent),
     meetingAttachmentIndexPresent: Boolean(input.meetingAttachmentIndexPresent),
     meetingAttachmentForeignKeyPresent: Boolean(input.meetingAttachmentForeignKeyPresent),
@@ -117,6 +125,14 @@ function summarizeMediaSyncSchemaStatus(input) {
   if (!status.meetingAudioCloudSyncEnabledColumnPresent) {
     status.ready = false;
     status.missingItems.push('Meeting.audioCloudSyncEnabled 字段');
+  }
+  if (!status.meetingPreviousCollectionIdColumnPresent) {
+    status.ready = false;
+    status.missingItems.push('Meeting.previousCollectionId 字段');
+  }
+  if (!status.meetingDeletedAtColumnPresent) {
+    status.ready = false;
+    status.missingItems.push('Meeting.deletedAt 字段');
   }
   if (!status.meetingAttachmentTablePresent) {
     status.ready = false;
@@ -235,12 +251,12 @@ async function getAuthSchemaStatus(prisma) {
 }
 
 async function getMediaSyncSchemaStatus(prisma) {
-  const meetingAudioCloudSyncEnabledColumn = await prisma.$queryRawUnsafe(`
+  const meetingColumns = await prisma.$queryRawUnsafe(`
     SELECT column_name AS "objectName"
     FROM information_schema.columns
     WHERE table_schema = 'public'
       AND table_name = 'Meeting'
-      AND column_name = 'audioCloudSyncEnabled'
+      AND column_name IN ('audioCloudSyncEnabled', 'previousCollectionId', 'deletedAt')
   `);
   const meetingAttachmentTable = await prisma.$queryRawUnsafe(`
     SELECT table_name AS "objectName"
@@ -262,7 +278,13 @@ async function getMediaSyncSchemaStatus(prisma) {
   `);
 
   return summarizeMediaSyncSchemaStatus({
-    meetingAudioCloudSyncEnabledColumnPresent: meetingAudioCloudSyncEnabledColumn.length > 0,
+    meetingAudioCloudSyncEnabledColumnPresent: meetingColumns.some(
+      (item) => item.objectName === 'audioCloudSyncEnabled'
+    ),
+    meetingPreviousCollectionIdColumnPresent: meetingColumns.some(
+      (item) => item.objectName === 'previousCollectionId'
+    ),
+    meetingDeletedAtColumnPresent: meetingColumns.some((item) => item.objectName === 'deletedAt'),
     meetingAttachmentTablePresent: meetingAttachmentTable.length > 0,
     meetingAttachmentIndexPresent: meetingAttachmentIndex.length > 0,
     meetingAttachmentForeignKeyPresent: meetingAttachmentForeignKey.length > 0,

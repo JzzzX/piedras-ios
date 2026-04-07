@@ -78,3 +78,43 @@ test('startup bootstrap controller marks ready after a successful retry', async 
   assert.equal(snapshot.retryScheduled, false);
   assert.equal(snapshot.attempts, 2);
 });
+
+test('startup bootstrap controller keeps the service unavailable when schema bootstrap is still incomplete', async () => {
+  resetStartupBootstrapStateForTests();
+
+  const scheduled = [];
+  const controller = createStartupBootstrapController({
+    bootstrap: async () => ({
+      schemaStatus: {
+        ready: false,
+        missingItems: ['Meeting.deletedAt 字段', 'Meeting.previousCollectionId 字段'],
+      },
+      legacyUsers: [],
+    }),
+    retryDelayMS: 2_000,
+    setTimeoutFn: (callback, delay) => {
+      scheduled.push({ callback, delay });
+      return callback;
+    },
+    clearTimeoutFn: () => {},
+    now: () => new Date('2026-04-07T10:00:00.000Z'),
+  });
+
+  await controller.start();
+
+  const snapshot = getStartupBootstrapSnapshotForTests();
+  assert.equal(snapshot.ready, false);
+  assert.equal(snapshot.status, 'failed');
+  assert.equal(snapshot.schemaReady, false);
+  assert.equal(
+    snapshot.lastError,
+    '启动初始化未完成：Meeting.deletedAt 字段、Meeting.previousCollectionId 字段'
+  );
+  assert.deepEqual(snapshot.missingItems, [
+    'Meeting.deletedAt 字段',
+    'Meeting.previousCollectionId 字段',
+  ]);
+  assert.equal(snapshot.retryScheduled, true);
+  assert.equal(scheduled.length, 1);
+  assert.equal(scheduled[0].delay, 2_000);
+});

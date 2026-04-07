@@ -126,15 +126,39 @@ function createStartupBootstrapController({
         try {
           const result = await bootstrap();
           const nextState = getMutableState();
-          nextState.ready = true;
-          nextState.status = 'ready';
-          nextState.completedAt = toISOString(now());
-          nextState.lastError = null;
-          nextState.schemaReady = Boolean(result?.schemaStatus?.ready);
-          nextState.missingItems = Array.isArray(result?.schemaStatus?.missingItems)
+          const schemaReady = Boolean(result?.schemaStatus?.ready);
+          const missingItems = Array.isArray(result?.schemaStatus?.missingItems)
             ? [...result.schemaStatus.missingItems]
             : [];
-          nextState.legacyUsers = collectLegacyUsers(result?.legacyUsers);
+          const legacyUsers = collectLegacyUsers(result?.legacyUsers);
+
+          nextState.completedAt = toISOString(now());
+          nextState.schemaReady = schemaReady;
+          nextState.missingItems = missingItems;
+          nextState.legacyUsers = legacyUsers;
+
+          if (!schemaReady) {
+            nextState.ready = false;
+            nextState.status = 'failed';
+            nextState.lastError =
+              missingItems.length > 0
+                ? `启动初始化未完成：${missingItems.join('、')}`
+                : '启动初始化未完成';
+
+            logger('startup_bootstrap_failed', {
+              attempts: nextState.attempts,
+              error: nextState.lastError,
+              missingItems: nextState.missingItems,
+              retryDelayMS,
+            });
+
+            scheduleRetry();
+            return result;
+          }
+
+          nextState.ready = true;
+          nextState.status = 'ready';
+          nextState.lastError = null;
           nextState.retryScheduled = false;
           nextState.retryAt = null;
 
