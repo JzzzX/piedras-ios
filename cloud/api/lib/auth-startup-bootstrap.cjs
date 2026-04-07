@@ -18,16 +18,20 @@ const LEGACY_BOOTSTRAP_USERS = [
   },
 ];
 
-const MEDIA_SYNC_BOOTSTRAP_SQL = `
+const MEDIA_SYNC_BOOTSTRAP_STATEMENTS = [
+  `
 ALTER TABLE "Meeting"
   ADD COLUMN IF NOT EXISTS "audioCloudSyncEnabled" BOOLEAN NOT NULL DEFAULT true;
-
+`,
+  `
 ALTER TABLE "Meeting"
   ADD COLUMN IF NOT EXISTS "previousCollectionId" TEXT;
-
+`,
+  `
 ALTER TABLE "Meeting"
   ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP(3);
-
+`,
+  `
 CREATE TABLE IF NOT EXISTS "MeetingAttachment" (
   "id" TEXT NOT NULL,
   "originalName" TEXT NOT NULL,
@@ -40,10 +44,12 @@ CREATE TABLE IF NOT EXISTS "MeetingAttachment" (
 
   CONSTRAINT "MeetingAttachment_pkey" PRIMARY KEY ("id")
 );
-
+`,
+  `
 CREATE INDEX IF NOT EXISTS "MeetingAttachment_meetingId_updatedAt_idx"
   ON "MeetingAttachment"("meetingId", "updatedAt");
-
+`,
+  `
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -57,7 +63,8 @@ BEGIN
       ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
 END $$;
-`;
+`,
+];
 
 function summarizeAuthSchemaStatus(input) {
   const tableNames = new Set(input.tableNames);
@@ -71,7 +78,6 @@ function summarizeAuthSchemaStatus(input) {
     userAuthUserIdColumnPresent: Boolean(input.userAuthUserIdColumnPresent),
     userAuthUserIdUniqueIndexPresent: Boolean(input.userAuthUserIdUniqueIndexPresent),
     userPasswordHashNullable: Boolean(input.userPasswordHashNullable),
-    meetingAudioEnhancedColumnsPresent: input.meetingAudioEnhancedColumnsPresent !== false,
   };
 
   if (!status.userTable) {
@@ -102,11 +108,6 @@ function summarizeAuthSchemaStatus(input) {
     status.ready = false;
     status.missingItems.push('User.passwordHash 可空约束');
   }
-  if (!status.meetingAudioEnhancedColumnsPresent) {
-    status.ready = false;
-    status.missingItems.push('Meeting 音频 AI 笔记字段');
-  }
-
   return status;
 }
 
@@ -223,20 +224,6 @@ async function getAuthSchemaStatus(prisma) {
       AND tablename = 'User'
       AND indexname = 'User_authUserId_key'
   `);
-  const meetingAudioEnhancedColumns = await prisma.$queryRawUnsafe(`
-    SELECT column_name AS "columnName"
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'Meeting'
-      AND column_name IN (
-        'audioEnhancedNotes',
-        'audioEnhancedNotesStatus',
-        'audioEnhancedNotesError',
-        'audioEnhancedNotesUpdatedAt',
-        'audioEnhancedNotesProvider',
-        'audioEnhancedNotesModel'
-      )
-  `);
   const userAuthUserIdColumn = userAuthColumns.find((item) => item.columnName === 'authUserId');
   const userPasswordHashColumn = userAuthColumns.find((item) => item.columnName === 'passwordHash');
 
@@ -246,7 +233,6 @@ async function getAuthSchemaStatus(prisma) {
     userAuthUserIdColumnPresent: Boolean(userAuthUserIdColumn),
     userAuthUserIdUniqueIndexPresent: userAuthIndexes.length > 0,
     userPasswordHashNullable: userPasswordHashColumn?.isNullable === 'YES',
-    meetingAudioEnhancedColumnsPresent: meetingAudioEnhancedColumns.length === 6,
   });
 }
 
@@ -313,7 +299,9 @@ async function runPrismaDbPush(logger) {
 
 async function runMediaSyncSchemaBootstrap(prisma, logger) {
   logger('media_sync_schema_bootstrap_running', {});
-  await prisma.$executeRawUnsafe(MEDIA_SYNC_BOOTSTRAP_SQL);
+  for (const statement of MEDIA_SYNC_BOOTSTRAP_STATEMENTS) {
+    await prisma.$executeRawUnsafe(statement);
+  }
   logger('media_sync_schema_bootstrap_completed', {});
 }
 
@@ -444,6 +432,7 @@ module.exports = {
   bootstrapAuthRuntime,
   buildLegacyBootstrapPlans,
   mergeSchemaStatuses,
+  runMediaSyncSchemaBootstrap,
   summarizeAuthSchemaStatus,
   summarizeMediaSyncSchemaStatus,
 };

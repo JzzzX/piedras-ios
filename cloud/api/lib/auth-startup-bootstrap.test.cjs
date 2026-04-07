@@ -4,6 +4,7 @@ const test = require('node:test');
 const {
   buildLegacyBootstrapPlans,
   mergeSchemaStatuses,
+  runMediaSyncSchemaBootstrap,
   summarizeAuthSchemaStatus,
   summarizeMediaSyncSchemaStatus,
 } = require('./auth-startup-bootstrap.cjs');
@@ -35,7 +36,6 @@ test('summarizeAuthSchemaStatus reports missing user auth schema even when core 
     userAuthUserIdColumnPresent: false,
     userAuthUserIdUniqueIndexPresent: false,
     userPasswordHashNullable: false,
-    meetingAudioEnhancedColumnsPresent: false,
   });
 
   assert.equal(status.ready, false);
@@ -43,22 +43,7 @@ test('summarizeAuthSchemaStatus reports missing user auth schema even when core 
     'User.authUserId 字段',
     'User.authUserId 唯一索引',
     'User.passwordHash 可空约束',
-    'Meeting 音频 AI 笔记字段',
   ]);
-});
-
-test('summarizeAuthSchemaStatus reports missing meeting audio ai columns', () => {
-  const status = summarizeAuthSchemaStatus({
-    tableNames: ['User', 'AuthSession', 'InviteCode'],
-    workspaceOwnerColumnPresent: true,
-    userAuthUserIdColumnPresent: true,
-    userAuthUserIdUniqueIndexPresent: true,
-    userPasswordHashNullable: true,
-    meetingAudioEnhancedColumnsPresent: false,
-  });
-
-  assert.equal(status.ready, false);
-  assert.deepEqual(status.missingItems, ['Meeting 音频 AI 笔记字段']);
 });
 
 test('summarizeMediaSyncSchemaStatus reports missing meeting media sync schema objects', () => {
@@ -119,4 +104,32 @@ test('buildLegacyBootstrapPlans assigns the two largest legacy workspaces to fix
       workspaceName: 'Archive',
     },
   ]);
+});
+
+test('runMediaSyncSchemaBootstrap executes each media sync schema statement separately', async () => {
+  const executedStatements = [];
+  const events = [];
+
+  await runMediaSyncSchemaBootstrap(
+    {
+      $executeRawUnsafe: async (statement) => {
+        executedStatements.push(statement.trim());
+      },
+    },
+    (event) => {
+      events.push(event);
+    }
+  );
+
+  assert.deepEqual(events, [
+    'media_sync_schema_bootstrap_running',
+    'media_sync_schema_bootstrap_completed',
+  ]);
+  assert.equal(executedStatements.length, 6);
+  assert.match(executedStatements[0], /ADD COLUMN IF NOT EXISTS "audioCloudSyncEnabled"/);
+  assert.match(executedStatements[1], /ADD COLUMN IF NOT EXISTS "previousCollectionId"/);
+  assert.match(executedStatements[2], /ADD COLUMN IF NOT EXISTS "deletedAt"/);
+  assert.match(executedStatements[3], /CREATE TABLE IF NOT EXISTS "MeetingAttachment"/);
+  assert.match(executedStatements[4], /CREATE INDEX IF NOT EXISTS "MeetingAttachment_meetingId_updatedAt_idx"/);
+  assert.match(executedStatements[5], /ADD CONSTRAINT "MeetingAttachment_meetingId_fkey"/);
 });
