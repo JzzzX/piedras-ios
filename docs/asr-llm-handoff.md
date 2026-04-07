@@ -92,7 +92,7 @@ curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
 本次通过 Zeabur deployment 看到：
 
 - 当前线上 `piedras-ios` 最新部署 commit 为 `f197063b54fe02c6e487c6473dbd1c8ee7a11d0d`
-- commit message 为 `fix(ai): 兼容音频 AI 笔记的 m4a 输入`
+- commit message 为 `fix(audio): 兼容 m4a 输入`
 - 创建时间为 `2026-03-31T12:42:18Z`
 
 ### 2. 当前本地仓库状态
@@ -261,19 +261,11 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 
 对应代码见 [llm-health.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/llm-health.ts#L106) 和 [llm-provider.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/llm-provider.ts#L715)。
 
-## 音频 AI 笔记当前也统一走 AiHubMix
+## 音频 AI 笔记实验已下线
 
-音频 AI 笔记链路已经改成单一路径：
+原“音频 AI 笔记”实验链路已经从当前产品版本移除，不再作为线上可用能力排查。
 
-- 服务端统一先转成单声道 `mp3`
-- 请求体统一走 inline audio
-- 不再依赖 Gemini Files API
-
-这意味着现在的风险点主要是：
-
-- `ffmpeg` 转码失败
-- 长音频导致总耗时偏大
-- AiHubMix 上游在音频理解场景下超时或限流
+如果看到历史文档、旧字段或旧日志提到这项能力，应按“历史实验残留信息”理解，不再把它作为当前故障分类。
 
 ## 已知不稳定点清单
 
@@ -338,28 +330,15 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 - `LLM_TIMEOUT_MS` 偏紧
 - 代理层误把占位文本当成成功响应
 
-### E. 音频 AI 笔记问题
-
-表现：
-
-- 普通聊天正常
-- 音频 AI 笔记在长音频或特定格式下报错
-
-优先检查：
-
-- `ffmpeg` 是否可用
-- 输入音频是否损坏
-- 是否出现 AiHubMix 超时 / 429 / 5xx
-
 ## 建议排查顺序
 
 接到问题后，建议按这个顺序查：
 
 1. 先确认线上排查基准版本
 2. 先看健康接口是否全绿
-3. 再判断是实时 ASR、离线补转写，还是 LLM / 音频 AI 笔记问题
+3. 再判断是实时 ASR、离线补转写，还是文本 LLM 链路问题
 4. 不要把“实时字幕失败”直接等同于“数据丢失”
-5. 不要把“`/api/llm/status` 正常”直接等同于“音频 AI 功能没问题”
+5. 不要把“`/api/llm/status` 正常”直接等同于“所有 AI 功能都没问题”
 
 推荐命令：
 
@@ -416,8 +395,7 @@ node scripts/asr_smoke_test.mjs tmp-asr-sample.wav https://piedras.preview.aliyu
 2. 再次确认 Zeabur 上真正在线的 service、domain、deployment
 3. 固化一份当前线上环境变量清单，只记录 key，不记录 secret 值
 4. 用一个小音频跑通实时 ASR smoke test
-5. 用一个长音频样本验证音频 AI 笔记在转码和上游响应上是否稳定
-6. 决定是否正式下线 `piedras-asr` 这个独立项目，避免后续认知混乱
+5. 决定是否正式下线 `piedras-asr` 这个独立项目，避免后续认知混乱
 
 ## 最后提醒
 

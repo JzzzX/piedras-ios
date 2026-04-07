@@ -441,31 +441,6 @@ final class APIClient: AuthNetworking {
         )
     }
 
-    func requestAudioEnhancedNotes(
-        meetingID: String,
-        payload: AudioEnhanceRequestPayload,
-        workspaceID: String? = nil
-    ) async throws -> RemoteAudioEnhanceStatusResponse {
-        try await sendJSONRequest(
-            path: "/api/meetings/\(meetingID)/ai-notes/audio",
-            method: "POST",
-            extraHeaders: workspaceHeader(workspaceID),
-            body: payload
-        )
-    }
-
-    func fetchAudioEnhancedNotesStatus(
-        meetingID: String,
-        workspaceID: String? = nil
-    ) async throws -> RemoteAudioEnhanceStatusResponse {
-        try await sendJSONRequest(
-            path: "/api/meetings/\(meetingID)/ai-notes/audio",
-            method: "GET",
-            extraHeaders: workspaceHeader(workspaceID),
-            responseType: RemoteAudioEnhanceStatusResponse.self
-        )
-    }
-
     func generateMeetingTitle(
         transcript: String,
         durationSeconds: Int,

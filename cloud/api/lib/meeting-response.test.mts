@@ -13,6 +13,12 @@ test('serializeMeetingDetail includes cloud audio state and note attachments met
       previousCollectionId: 'collection-archive',
       deletedAt: new Date('2026-04-03T10:00:00.000Z'),
       speakers: '{"spk_1":"主持人"}',
+      audioEnhancedNotes: 'legacy experimental summary',
+      audioEnhancedNotesStatus: 'ready',
+      audioEnhancedNotesError: '',
+      audioEnhancedNotesUpdatedAt: updatedAt,
+      audioEnhancedNotesProvider: 'demo',
+      audioEnhancedNotesModel: 'gemini-3-flash-preview',
       audioUpdatedAt: updatedAt,
       audioProcessingState: 'idle',
       audioProcessingError: '',
@@ -42,6 +48,12 @@ test('serializeMeetingDetail includes cloud audio state and note attachments met
   assert.equal(payload.hasAudio, false);
   assert.equal(payload.audioUrl, null);
   assert.equal(payload.noteAttachmentsTextContext, '白板重点');
+  assert.equal('audioEnhancedNotes' in payload, false);
+  assert.equal('audioEnhancedNotesStatus' in payload, false);
+  assert.equal('audioEnhancedNotesError' in payload, false);
+  assert.equal('audioEnhancedNotesUpdatedAt' in payload, false);
+  assert.equal('audioEnhancedNotesProvider' in payload, false);
+  assert.equal('audioEnhancedNotesModel' in payload, false);
   assert.deepEqual(payload.noteAttachments, [
     {
         id: 'attachment-1',

@@ -5,20 +5,6 @@ import Testing
 @MainActor
 struct SettingsStoreTests {
     @Test
-    func experimentalAudioAINotesTogglePersistsAcrossRestarts() {
-        let suiteName = "piedras.tests.settings.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let store = SettingsStore(defaults: defaults)
-
-        store.isExperimentalAudioAINotesEnabled = true
-
-        let restored = SettingsStore(defaults: defaults)
-
-        #expect(restored.isExperimentalAudioAINotesEnabled == true)
-    }
-
-    @Test
     func aiBlockingMessageDoesNotBlockWhenBackendIsReachable() {
         let suiteName = "piedras.tests.settings.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

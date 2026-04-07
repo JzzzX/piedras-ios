@@ -190,12 +190,6 @@ export interface Meeting {
   segments: TranscriptSegment[];
   userNotes: string;
   enhancedNotes: string;
-  audioEnhancedNotes?: string;
-  audioEnhancedNotesStatus?: string;
-  audioEnhancedNotesError?: string;
-  audioEnhancedNotesUpdatedAt?: string | null;
-  audioEnhancedNotesProvider?: string | null;
-  audioEnhancedNotesModel?: string | null;
   enhanceRecipeId?: string | null;
   roundLabel: string;
   interviewerName: string;

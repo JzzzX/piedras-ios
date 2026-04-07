@@ -257,17 +257,6 @@ struct AppStringTable {
     var noAINotesYet: String { isChinese ? "暂无 AI 笔记。" : "No AI notes yet." }
     var generatingNotesShort: String { isChinese ? "正在生成笔记" : "Generating notes" }
     var textAINotesVersion: String { isChinese ? "文本版 AI 笔记" : "Transcript AI Notes" }
-    var audioAINotesExperimentTitle: String { isChinese ? "音频版 AI 笔记（实验）" : "Audio AI Notes (Experimental)" }
-    var audioAINotesExperimentBadge: String { isChinese ? "实验" : "Experimental" }
-    var generateAudioAINotes: String { isChinese ? "生成音频版" : "Generate Audio Notes" }
-    var refreshAudioAINotes: String { isChinese ? "刷新音频版" : "Refresh Audio Notes" }
-    var audioAINotesFailed: String { isChinese ? "音频版 AI 笔记生成失败。" : "Audio AI notes failed." }
-    var audioAINotesUnavailable: String { isChinese ? "暂无可用云端音频，可先同步或上传后再试。" : "Cloud audio is unavailable. Sync or upload audio first." }
-    var experimentalAudioAINotesToggle: String { isChinese ? "启用音频版 AI 笔记实验" : "Enable audio AI notes experiment" }
-    var experimentalAudioAINotesHelp: String { isChinese ? "保留实验入口，当前版本暂不开放点击与体验。" : "Keep the experiment entry visible, but it is not interactive in the current build." }
-    var experimentalAudioAINotesFutureNotice: String { isChinese ? "未来版本会接入原始音频多模态总结能力。" : "A future version will add raw-audio multimodal summarization." }
-    var comingSoonShort: String { isChinese ? "待实现" : "Coming Soon" }
-
     // ── RecordingControlBar ──────────────────────────────────────
 
     var recordingTitle: String { isChinese ? "录音" : "Recording" }

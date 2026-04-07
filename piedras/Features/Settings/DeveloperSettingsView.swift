@@ -33,42 +33,6 @@ struct DeveloperSettingsView: View {
                     }
 
                     VStack(alignment: .leading, spacing: 8) {
-                        SectionLabel(title: AppStrings.current.ai)
-
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 12) {
-                                RetroIconBadge(systemName: "waveform.badge.magnifyingglass", size: 28, symbolSize: 11)
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(AppStrings.current.experimentalAudioAINotesToggle)
-                                        .font(AppTheme.bodyFont(size: 14, weight: .semibold))
-                                        .foregroundStyle(AppTheme.brandInk)
-
-                                    Text(AppStrings.current.experimentalAudioAINotesHelp)
-                                        .font(AppTheme.bodyFont(size: 12))
-                                        .foregroundStyle(AppTheme.subtleInk)
-                                        .multilineTextAlignment(.leading)
-
-                                    Text(AppStrings.current.experimentalAudioAINotesFutureNotice)
-                                        .font(AppTheme.bodyFont(size: 11))
-                                        .foregroundStyle(AppTheme.subtleInk)
-                                        .multilineTextAlignment(.leading)
-                                }
-
-                                Spacer()
-
-                                Text(AppStrings.current.comingSoonShort)
-                                    .font(AppTheme.dataFont(size: 12))
-                                    .foregroundStyle(AppTheme.subtleInk)
-                            }
-                            .padding(.vertical, 4)
-                            .opacity(0.72)
-                        }
-                        .padding(16)
-                        .softCard()
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
                         SectionLabel(title: AppStrings.current.cloud)
 
                         VStack(alignment: .leading, spacing: 12) {

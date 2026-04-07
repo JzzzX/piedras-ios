@@ -64,7 +64,6 @@ final class SettingsStore {
         static let recentlyDeletedCollectionID = "piedras.settings.recentlyDeletedCollectionID"
         static let selectedCollectionID = "piedras.settings.selectedCollectionID"
         static let appLanguage = "piedras.settings.appLanguage"
-        static let experimentalAudioAINotesEnabled = "piedras.settings.experimentalAudioAINotesEnabled"
         static let remoteStatusSnapshot = "piedras.settings.remoteStatusSnapshot"
         static let syncStatusSnapshot = "piedras.settings.syncStatusSnapshot"
 #if DEBUG
@@ -135,12 +134,6 @@ final class SettingsStore {
         selectedCollectionID ?? defaultCollectionID
     }
 
-    var isExperimentalAudioAINotesEnabled: Bool {
-        didSet {
-            defaults.set(isExperimentalAudioAINotesEnabled, forKey: Key.experimentalAudioAINotesEnabled)
-        }
-    }
-
     var apiReachable = false
     var asrReady = false
     var llmReady = false
@@ -175,7 +168,6 @@ final class SettingsStore {
         recentlyDeletedCollectionID = defaults.string(forKey: Key.recentlyDeletedCollectionID)
         selectedCollectionID = defaults.string(forKey: Key.selectedCollectionID)
             ?? defaults.string(forKey: Key.defaultCollectionID)
-        isExperimentalAudioAINotesEnabled = defaults.bool(forKey: Key.experimentalAudioAINotesEnabled)
 #if DEBUG
         debugBackendBaseURLString = defaults.string(forKey: Key.debugBackendBaseURLString)
             ?? debugDefaultBackendBaseURLString

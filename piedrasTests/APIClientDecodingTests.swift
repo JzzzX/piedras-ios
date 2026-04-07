@@ -23,12 +23,6 @@ struct APIClientDecodingTests {
           "audioUpdatedAt": "2026-03-19T08:47:00.000Z",
           "userNotes": "<p>Notes</p>",
           "enhancedNotes": "summary",
-          "audioEnhancedNotes": "audio summary",
-          "audioEnhancedNotesStatus": "ready",
-          "audioEnhancedNotesError": "",
-          "audioEnhancedNotesUpdatedAt": "2026-03-19T08:48:00.000Z",
-          "audioEnhancedNotesProvider": "openai",
-          "audioEnhancedNotesModel": "gemini-3-flash-preview",
           "createdAt": "2026-03-19T08:40:00.000Z",
           "updatedAt": "2026-03-19T08:47:00.000Z",
           "workspaceId": "workspace-1",
@@ -67,9 +61,6 @@ struct APIClientDecodingTests {
 
         #expect(meeting.chatMessages.count == 1)
         #expect(Int(meeting.chatMessages[0].timestamp.timeIntervalSince1970) == 1_773_901_562)
-        #expect(meeting.audioEnhancedNotes == "audio summary")
-        #expect(meeting.audioEnhancedNotesStatus == "ready")
-        #expect(meeting.audioEnhancedNotesProvider == "openai")
         #expect(meeting.collectionId == "collection-notes")
         #expect(meeting.audioCloudSyncEnabled == false)
         #expect(meeting.noteAttachments?.count == 1)
@@ -134,35 +125,6 @@ struct APIClientDecodingTests {
 
         #expect(meeting.chatMessages.count == 1)
         #expect(meeting.chatMessages[0].timestamp == fractionalFormatter.date(from: "2026-03-19T09:19:00.000Z"))
-    }
-
-    @Test
-    func decodesAudioEnhanceStatusPayload() throws {
-        let payload = """
-        {
-          "meetingId": "meeting-3",
-          "hasAudio": true,
-          "audioEnhancedNotes": "音频总结",
-          "audioEnhancedNotesStatus": "processing",
-          "audioEnhancedNotesError": null,
-          "audioEnhancedNotesUpdatedAt": "2026-03-31T09:00:00.000Z",
-          "audioEnhancedNotesProvider": "openai",
-          "audioEnhancedNotesModel": "gpt-4.1",
-          "audioEnhancedNotesAttempts": 1,
-          "audioEnhancedNotesRequestedAt": "2026-03-31T08:59:00.000Z",
-          "audioEnhancedNotesStartedAt": "2026-03-31T08:59:02.000Z"
-        }
-        """
-
-        let status = try APIClient.makeJSONDecoder().decode(
-            RemoteAudioEnhanceStatusResponse.self,
-            from: Data(payload.utf8)
-        )
-
-        #expect(status.meetingId == "meeting-3")
-        #expect(status.audioEnhancedNotesStatus == "processing")
-        #expect(status.audioEnhancedNotesAttempts == 1)
-        #expect(status.audioEnhancedNotesProvider == "openai")
     }
 
     @MainActor

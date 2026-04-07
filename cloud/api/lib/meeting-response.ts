@@ -27,30 +27,49 @@ export function serializeMeetingDetail(
   },
   options: { hasAudio: boolean }
 ) {
-  const noteAttachments = (meeting.noteAttachments ?? []).map((attachment) => ({
+  const {
+    speakers,
+    noteAttachments: rawNoteAttachments,
+    audioEnhancedNotes: _audioEnhancedNotes,
+    audioEnhancedNotesStatus: _audioEnhancedNotesStatus,
+    audioEnhancedNotesError: _audioEnhancedNotesError,
+    audioEnhancedNotesUpdatedAt: _audioEnhancedNotesUpdatedAt,
+    audioEnhancedNotesProvider: _audioEnhancedNotesProvider,
+    audioEnhancedNotesModel: _audioEnhancedNotesModel,
+    ...meetingPayload
+  } = meeting as typeof meeting & {
+    audioEnhancedNotes?: string;
+    audioEnhancedNotesStatus?: string;
+    audioEnhancedNotesError?: string;
+    audioEnhancedNotesUpdatedAt?: Date | null;
+    audioEnhancedNotesProvider?: string | null;
+    audioEnhancedNotesModel?: string | null;
+  };
+
+  const noteAttachments = (rawNoteAttachments ?? []).map((attachment) => ({
     id: attachment.id,
     mimeType: attachment.mimeType,
     originalName: attachment.originalName,
     extractedText: attachment.extractedText,
     createdAt: attachment.createdAt,
     updatedAt: attachment.updatedAt,
-    url: buildMeetingAttachmentFileURL(meeting.id, attachment.id),
+    url: buildMeetingAttachmentFileURL(meetingPayload.id, attachment.id),
   }));
-  const noteAttachmentsTextContext = (meeting.noteAttachments ?? [])
+  const noteAttachmentsTextContext = (rawNoteAttachments ?? [])
     .map((attachment) => attachment.extractedText.trim())
     .filter(Boolean)
     .join('\n\n');
 
   return {
-    ...meeting,
-    speakers: JSON.parse(meeting.speakers),
+    ...meetingPayload,
+    speakers: JSON.parse(speakers),
     hasAudio: options.hasAudio,
     audioUrl: options.hasAudio
-      ? `/api/meetings/${meeting.id}/audio?t=${meeting.audioUpdatedAt?.getTime() || Date.now()}`
+      ? `/api/meetings/${meetingPayload.id}/audio?t=${meetingPayload.audioUpdatedAt?.getTime() || Date.now()}`
       : null,
-    audioCloudSyncEnabled: meeting.audioCloudSyncEnabled ?? true,
+    audioCloudSyncEnabled: meetingPayload.audioCloudSyncEnabled ?? true,
     noteAttachments,
     noteAttachmentsTextContext,
-    ...buildMeetingAudioProcessingStatus(meeting),
+    ...buildMeetingAudioProcessingStatus(meetingPayload),
   };
 }
