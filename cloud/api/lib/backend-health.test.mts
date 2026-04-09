@@ -30,6 +30,16 @@ test('buildBackendHealthPayload stays unhealthy until startup bootstrap is ready
       lastError: null,
       message: '音频补转写就绪',
     },
+    noteAttachments: {
+      configured: false,
+      ready: false,
+      storageReady: false,
+      storagePersistent: false,
+      storagePath: '',
+      checkedAt: '2026-03-30T06:00:00.000Z',
+      lastError: 'MEETING_ATTACHMENT_STORAGE_ROOT 未配置',
+      message: 'MEETING_ATTACHMENT_STORAGE_ROOT 未配置，生产环境重启后资料区附件可能丢失',
+    },
     llm: {
       configured: true,
       reachable: true,

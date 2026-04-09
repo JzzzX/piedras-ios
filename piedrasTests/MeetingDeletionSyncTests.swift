@@ -1126,6 +1126,103 @@ struct MeetingDeletionSyncTests {
 
     @MainActor
     @Test
+    func syncMeetingSkipsMissingRemoteAttachmentsWhenLocalCacheIsGone() async throws {
+        let fixture = try makeRepositoryFixture()
+        let repository = fixture.repository
+        let settingsStore = makeSettingsStore()
+        let apiClient = makeAPIClient(settingsStore: settingsStore)
+        let syncService = MeetingSyncService(
+            repository: repository,
+            settingsStore: settingsStore,
+            apiClient: apiClient
+        )
+
+        let meeting = Meeting(
+            id: "meeting-missing-attachment",
+            title: "Broken attachment",
+            status: .ended,
+            hiddenWorkspaceId: "workspace-1",
+            syncState: .pending
+        )
+        meeting.noteAttachmentFileNames = ["stale-attachment.jpg"]
+        meeting.noteAttachmentRemoteIDsByFileName = ["stale-attachment.jpg": "attachment-404"]
+        repository.insert(meeting)
+        try repository.save()
+
+        let remotePayload = """
+        {
+          "id": "\(meeting.id)",
+          "title": "Broken attachment",
+          "date": "2026-04-09T07:00:00.000Z",
+          "status": "ended",
+          "duration": 0,
+          "userNotes": "",
+          "enhancedNotes": "",
+          "createdAt": "2026-04-09T06:50:00.000Z",
+          "updatedAt": "2026-04-09T07:00:00.000Z",
+          "workspaceId": "workspace-1",
+          "speakers": {},
+          "segments": [],
+          "chatMessages": [],
+          "noteAttachments": [
+            {
+              "id": "attachment-404",
+              "mimeType": "image/jpeg",
+              "url": "/api/meetings/\(meeting.id)/attachments/attachment-404",
+              "originalName": "whiteboard.jpg",
+              "extractedText": "白板重点",
+              "createdAt": "2026-04-09T06:55:00.000Z",
+              "updatedAt": "2026-04-09T06:55:00.000Z"
+            }
+          ],
+          "noteAttachmentsTextContext": "白板重点",
+          "hasAudio": false,
+          "audioUrl": null
+        }
+        """
+
+        MockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let statusCode = url.path.contains("/attachments/") ? 404 : 200
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: statusCode,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/json"]
+                )
+            )
+
+            switch url.path {
+            case "/api/meetings/\(meeting.id)":
+                return (response, Data(remotePayload.utf8))
+
+            case "/api/meetings":
+                return (response, Data(remotePayload.utf8))
+
+            case "/api/meetings/\(meeting.id)/attachments/attachment-404":
+                return (
+                    response,
+                    Data(#"{"error":"资料区附件不存在","requestId":"rid-missing-attachment"}"#.utf8)
+                )
+
+            default:
+                throw URLError(.unsupportedURL)
+            }
+        }
+        defer { MockURLProtocol.reset() }
+
+        try await syncService.syncMeeting(id: meeting.id)
+
+        let refreshedMeeting = try #require(try repository.meeting(withID: meeting.id))
+        #expect(refreshedMeeting.syncState == .synced)
+        #expect(refreshedMeeting.noteAttachmentFileNames.isEmpty)
+        #expect(refreshedMeeting.noteAttachmentRemoteIDsByFileName.isEmpty)
+        #expect(refreshedMeeting.noteAttachmentExtractedTextByFileName.isEmpty)
+    }
+
+    @MainActor
+    @Test
     func syncMeetingPreservesPendingLocalCollectionMoveBeforeUpsert() async throws {
         let fixture = try makeRepositoryFixture()
         let repository = fixture.repository

@@ -11,6 +11,7 @@ interface BackendHealthPayloadInput {
   llmProviders?: string[];
   asr?: unknown;
   audioFinalization?: { ready?: boolean } | null;
+  noteAttachments?: { ready?: boolean } | null;
   llm?: unknown;
 }
 
@@ -32,7 +33,8 @@ export function buildBackendHealthPayload(input: BackendHealthPayloadInput) {
       : false
   );
   const audioReady = Boolean(input.audioFinalization?.ready);
-  const recordingReady = input.database && asrReady && audioReady && startupBootstrap.ready;
+  const noteAttachmentsReady = Boolean(input.noteAttachments?.ready);
+  const recordingReady = input.database && asrReady && audioReady && noteAttachmentsReady && startupBootstrap.ready;
 
   return {
     ok: recordingReady,
@@ -40,6 +42,7 @@ export function buildBackendHealthPayload(input: BackendHealthPayloadInput) {
     llmProviders: input.llmProviders ?? [],
     asr: input.asr,
     audioFinalization: input.audioFinalization,
+    noteAttachments: input.noteAttachments,
     recordingReady,
     llm: input.llm,
     startupBootstrap,

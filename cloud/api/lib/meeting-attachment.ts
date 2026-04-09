@@ -8,9 +8,25 @@ const ATTACHMENT_FILE_NAME = 'attachment.bin';
 const STORAGE_ROOT_ENV_KEY = 'MEETING_ATTACHMENT_STORAGE_ROOT';
 const DEFAULT_STORAGE_SEGMENTS = ['storage', 'meeting-attachments'] as const;
 
-export function resolveMeetingAttachmentStorageRoot() {
-  const configuredRoot = process.env[STORAGE_ROOT_ENV_KEY]?.trim();
-  const cwd = process.cwd();
+export interface MeetingAttachmentStorageConfig {
+  rootPath: string;
+  configured: boolean;
+  persistent: boolean;
+  message: string;
+}
+
+interface MeetingAttachmentStorageConfigOptions {
+  env?: NodeJS.ProcessEnv;
+  cwd?: string;
+  nodeEnv?: string;
+}
+
+export function resolveMeetingAttachmentStorageRoot(
+  options: Pick<MeetingAttachmentStorageConfigOptions, 'env' | 'cwd'> = {}
+) {
+  const env = options.env ?? process.env;
+  const cwd = options.cwd ?? process.cwd();
+  const configuredRoot = env[STORAGE_ROOT_ENV_KEY]?.trim();
 
   if (configuredRoot) {
     return path.isAbsolute(configuredRoot)
@@ -19,6 +35,40 @@ export function resolveMeetingAttachmentStorageRoot() {
   }
 
   return path.join(cwd, ...DEFAULT_STORAGE_SEGMENTS);
+}
+
+export function getMeetingAttachmentStorageConfig(
+  options: MeetingAttachmentStorageConfigOptions = {}
+): MeetingAttachmentStorageConfig {
+  const env = options.env ?? process.env;
+  const nodeEnv = options.nodeEnv ?? env.NODE_ENV ?? 'development';
+  const configuredRoot = env[STORAGE_ROOT_ENV_KEY]?.trim();
+  const rootPath = resolveMeetingAttachmentStorageRoot(options);
+
+  if (configuredRoot) {
+    return {
+      rootPath,
+      configured: true,
+      persistent: true,
+      message: `资料区附件使用持久化目录：${rootPath}`,
+    };
+  }
+
+  if (nodeEnv === 'production') {
+    return {
+      rootPath,
+      configured: false,
+      persistent: false,
+      message: `${STORAGE_ROOT_ENV_KEY} 未配置，生产环境重启后资料区附件可能丢失`,
+    };
+  }
+
+  return {
+    rootPath,
+    configured: true,
+    persistent: false,
+    message: `未配置 ${STORAGE_ROOT_ENV_KEY}，当前使用本地目录：${rootPath}`,
+  };
 }
 
 function getMeetingAttachmentDir(meetingId: string, attachmentId: string) {
@@ -66,6 +116,31 @@ export async function hasMeetingAttachmentFile(meetingId: string, attachmentId: 
   } catch {
     return false;
   }
+}
+
+export async function partitionMeetingAttachmentsByFile<T extends { id: string }>(
+  meetingId: string,
+  attachments: readonly T[]
+) {
+  const availability = await Promise.all(
+    attachments.map(async (attachment) => ({
+      attachment,
+      exists: await hasMeetingAttachmentFile(meetingId, attachment.id),
+    }))
+  );
+
+  return availability.reduce(
+    (result, entry) => {
+      if (entry.exists) {
+        result.available.push(entry.attachment);
+      } else {
+        result.missing.push(entry.attachment);
+      }
+
+      return result;
+    },
+    { available: [] as T[], missing: [] as T[] }
+  );
 }
 
 export async function deleteMeetingAttachmentFile(meetingId: string, attachmentId: string) {

@@ -10,7 +10,10 @@ import {
   jsonResponse,
 } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
-import { saveMeetingAttachmentFile } from '@/lib/meeting-attachment';
+import {
+  partitionMeetingAttachmentsByFile,
+  saveMeetingAttachmentFile,
+} from '@/lib/meeting-attachment';
 import { requireStartupBootstrapReady } from '@/lib/startup-bootstrap-guard';
 
 export const runtime = 'nodejs';
@@ -47,10 +50,22 @@ export async function GET(
         updatedAt: true,
       },
     });
+    const { available, missing } = await partitionMeetingAttachmentsByFile(id, attachments);
+
+    if (missing.length > 0) {
+      await prisma.meetingAttachment.deleteMany({
+        where: {
+          meetingId: id,
+          id: {
+            in: missing.map((attachment) => attachment.id),
+          },
+        },
+      });
+    }
 
     return jsonResponse(
       context,
-      attachments.map((attachment) => ({
+      available.map((attachment) => ({
         ...attachment,
         url: `/api/meetings/${id}/attachments/${attachment.id}`,
       }))

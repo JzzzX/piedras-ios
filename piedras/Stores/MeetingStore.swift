@@ -2958,6 +2958,14 @@ final class MeetingStore {
             }
         }
 
+        if let noteAttachments = health.noteAttachments, !noteAttachments.ready {
+            return "\(AppEnvironment.cloudName) 已响应，资料区附件存储异常"
+        }
+
+        if let audioFinalization = health.audioFinalization, !audioFinalization.ready {
+            return "\(AppEnvironment.cloudName) 已响应，音频存储异常"
+        }
+
         if health.ok == false {
             return "\(AppEnvironment.cloudName) 已响应"
         }

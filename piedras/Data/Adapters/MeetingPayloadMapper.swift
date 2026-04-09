@@ -41,8 +41,21 @@ struct RemoteBackendHealth: Decodable {
     let database: Bool?
     let asr: RemoteASRStatus?
     let llm: RemoteLLMStatus?
+    let audioFinalization: RemoteStorageRuntimeStatus?
+    let noteAttachments: RemoteStorageRuntimeStatus?
     let startupBootstrap: RemoteStartupBootstrapStatus?
     let checkedAt: Date?
+}
+
+struct RemoteStorageRuntimeStatus: Decodable {
+    let configured: Bool?
+    let ready: Bool
+    let storageReady: Bool?
+    let storagePersistent: Bool?
+    let storagePath: String?
+    let checkedAt: Date?
+    let lastError: String?
+    let message: String
 }
 
 struct RemoteStartupBootstrapStatus: Decodable {

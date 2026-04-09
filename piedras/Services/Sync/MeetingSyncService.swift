@@ -279,7 +279,8 @@ final class MeetingSyncService: MeetingSyncServicing {
         fileNames.removeAll { obsoleteFileNames.contains($0) }
 
         for attachment in remoteAttachments {
-            if let existingFileName = remoteIDByFileName.first(where: { $0.value == attachment.id })?.key,
+            let existingFileName = remoteIDByFileName.first(where: { $0.value == attachment.id })?.key
+            if let existingFileName,
                FileManager.default.fileExists(atPath: MeetingNoteAttachmentStorage.imageURL(meetingID: meeting.id, fileName: existingFileName).path) {
                 if let extractedText = attachment.extractedText?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !extractedText.isEmpty {
@@ -288,7 +289,22 @@ final class MeetingSyncService: MeetingSyncServicing {
                 continue
             }
 
-            let data = try await apiClient.downloadAuthenticatedData(fromAbsoluteURLString: attachment.url)
+            if let existingFileName {
+                MeetingNoteAttachmentStorage.deleteImage(meetingID: meeting.id, fileName: existingFileName)
+                fileNames.removeAll { $0 == existingFileName }
+                remoteIDByFileName.removeValue(forKey: existingFileName)
+                extractedTextByFileName.removeValue(forKey: existingFileName)
+            }
+
+            let data: Data
+            do {
+                data = try await apiClient.downloadAuthenticatedData(fromAbsoluteURLString: attachment.url)
+            } catch {
+                guard isMissingRemoteAttachmentError(error) else {
+                    throw error
+                }
+                continue
+            }
             let cachedFileName = MeetingNoteAttachmentStorage.cachedFileName(
                 remoteAttachmentID: attachment.id,
                 mimeType: attachment.mimeType,
@@ -327,6 +343,14 @@ final class MeetingSyncService: MeetingSyncServicing {
             meeting.noteAttachmentTextUpdatedAt = nil
         }
         try repository.save()
+    }
+
+    private func isMissingRemoteAttachmentError(_ error: Error) -> Bool {
+        guard case let APIClientError.requestFailed(message) = error else {
+            return false
+        }
+
+        return message.contains("资料区附件不存在") || message.contains("HTTP 404")
     }
 
     private func pollForFinalizedMeetingIfNeeded(

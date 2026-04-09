@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getAsrRuntimeStatus } from "@/lib/asr";
 import { buildBackendHealthPayload } from "@/lib/backend-health";
 import { getConfiguredProviders } from "@/lib/llm-provider";
+import { getMeetingAttachmentRuntimeStatus } from "@/lib/meeting-attachment-runtime-health";
 import { getLlmRuntimeStatus } from "@/lib/llm-health";
 import { getAudioFinalizationRuntimeStatus } from "@/lib/recording-runtime-health";
 import { getStartupBootstrapSnapshot } from "@/lib/startup-bootstrap-state";
@@ -63,6 +64,16 @@ export async function GET(req: NextRequest) {
     lastError: error instanceof Error ? error.message : String(error),
     message: error instanceof Error ? error.message : String(error),
   }));
+  const noteAttachments = await getMeetingAttachmentRuntimeStatus().catch((error) => ({
+    configured: false,
+    ready: false,
+    storageReady: false,
+    storagePersistent: false,
+    storagePath: '',
+    checkedAt: null,
+    lastError: error instanceof Error ? error.message : String(error),
+    message: error instanceof Error ? error.message : String(error),
+  }));
   return NextResponse.json(
     buildBackendHealthPayload({
       mode: 'full',
@@ -70,6 +81,7 @@ export async function GET(req: NextRequest) {
       llmProviders: getConfiguredProviders(),
       asr,
       audioFinalization,
+      noteAttachments,
       llm,
       startupBootstrap,
       checkedAt,

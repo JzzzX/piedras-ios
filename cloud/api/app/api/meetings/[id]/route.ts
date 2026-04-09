@@ -4,7 +4,10 @@ import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
 import { deleteMeetingAudioFile, hasMeetingAudioFile } from '@/lib/meeting-audio';
-import { deleteMeetingAttachmentsDir } from '@/lib/meeting-attachment';
+import {
+  deleteMeetingAttachmentsDir,
+  partitionMeetingAttachmentsByFile,
+} from '@/lib/meeting-attachment';
 import { purgeExpiredTrashedMeetings } from '@/lib/meeting-trash';
 import { recoverPendingMeetingAudioProcessing } from '@/lib/meeting-audio-processing';
 import { serializeMeetingDetail } from '@/lib/meeting-response';
@@ -55,8 +58,18 @@ export async function GET(
 
     const hasAudio =
       Boolean(meeting.audioMimeType) && (await hasMeetingAudioFile(meeting.id));
+    const availableNoteAttachments = await sanitizeMeetingNoteAttachments(
+      meeting.id,
+      meeting.noteAttachments ?? []
+    );
 
-    const payload = serializeMeetingDetail(meeting, { hasAudio });
+    const payload = serializeMeetingDetail(
+      {
+        ...meeting,
+        noteAttachments: availableNoteAttachments,
+      },
+      { hasAudio }
+    );
     console.log(
       JSON.stringify({
         scope: 'cloud-sync',
@@ -198,9 +211,18 @@ export async function PUT(
       hydratedMeeting
         ? await hasMeetingAudioFile(hydratedMeeting.id)
         : false;
+    const availableNoteAttachments = hydratedMeeting
+      ? await sanitizeMeetingNoteAttachments(hydratedMeeting.id, hydratedMeeting.noteAttachments ?? [])
+      : [];
 
     const payload = hydratedMeeting
-      ? serializeMeetingDetail(hydratedMeeting, { hasAudio })
+      ? serializeMeetingDetail(
+          {
+            ...hydratedMeeting,
+            noteAttachments: availableNoteAttachments,
+          },
+          { hasAudio }
+        )
       : null;
 
     if (payload) {
@@ -231,6 +253,26 @@ export async function PUT(
       error
     );
   }
+}
+
+async function sanitizeMeetingNoteAttachments<T extends { id: string }>(
+  meetingId: string,
+  attachments: readonly T[]
+) {
+  const { available, missing } = await partitionMeetingAttachmentsByFile(meetingId, attachments);
+
+  if (missing.length > 0) {
+    await prisma.meetingAttachment.deleteMany({
+      where: {
+        meetingId,
+        id: {
+          in: missing.map((attachment) => attachment.id),
+        },
+      },
+    });
+  }
+
+  return available;
 }
 
 async function mergeMeetingChatMessages(

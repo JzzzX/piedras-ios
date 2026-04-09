@@ -2,7 +2,10 @@ import { NextRequest } from 'next/server';
 import { requireAuthenticatedRequest } from '@/lib/api-auth';
 import { createRequestContext, errorResponse, jsonResponse } from '@/lib/api-error';
 import { prisma } from '@/lib/db';
-import { deleteMeetingAttachmentsDir } from '@/lib/meeting-attachment';
+import {
+  deleteMeetingAttachmentsDir,
+  partitionMeetingAttachmentsByFile,
+} from '@/lib/meeting-attachment';
 import { hasMeetingAudioFile } from '@/lib/meeting-audio';
 import { deleteMeetingAudioFile } from '@/lib/meeting-audio';
 import { purgeExpiredTrashedMeetings } from '@/lib/meeting-trash';
@@ -251,8 +254,19 @@ export async function POST(req: NextRequest) {
     });
 
     const hasAudio = meeting?.audioMimeType ? await hasMeetingAudioFile(meeting.id) : false;
+    const availableNoteAttachments = meeting
+      ? await sanitizeMeetingNoteAttachments(meeting.id, meeting.noteAttachments ?? [])
+      : [];
 
-    const payload = meeting ? serializeMeetingDetail(meeting, { hasAudio }) : null;
+    const payload = meeting
+      ? serializeMeetingDetail(
+          {
+            ...meeting,
+            noteAttachments: availableNoteAttachments,
+          },
+          { hasAudio }
+        )
+      : null;
 
     if (payload) {
       console.log(
@@ -279,6 +293,26 @@ export async function POST(req: NextRequest) {
       error
     );
   }
+}
+
+async function sanitizeMeetingNoteAttachments<T extends { id: string }>(
+  meetingId: string,
+  attachments: readonly T[]
+) {
+  const { available, missing } = await partitionMeetingAttachmentsByFile(meetingId, attachments);
+
+  if (missing.length > 0) {
+    await prisma.meetingAttachment.deleteMany({
+      where: {
+        meetingId,
+        id: {
+          in: missing.map((attachment) => attachment.id),
+        },
+      },
+    });
+  }
+
+  return available;
 }
 
 async function mergeMeetingChatMessages(

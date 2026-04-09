@@ -33,6 +33,12 @@ export async function GET(
     const attachment = await requireAttachmentOwnership(id, attachmentId, auth.workspace.id);
 
     if (!(await hasMeetingAttachmentFile(id, attachmentId))) {
+      await prisma.meetingAttachment.deleteMany({
+        where: {
+          id: attachmentId,
+          meetingId: id,
+        },
+      });
       return errorResponse(context, 404, '资料区附件不存在');
     }
 
