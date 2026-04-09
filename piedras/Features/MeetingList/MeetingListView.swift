@@ -224,9 +224,7 @@ struct MeetingListView: View {
         }
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) {
-            if !isFolderDrawerPresented {
-                bottomDock
-            }
+            bottomDock
         }
         .overlay(alignment: .top) {
             if let error = homeErrorMessage {
@@ -484,6 +482,11 @@ struct MeetingListView: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 14)
+        .opacity(isFolderDrawerPresented ? 0 : 1)
+        .offset(y: isFolderDrawerPresented ? 16 : 0)
+        .allowsHitTesting(!isFolderDrawerPresented)
+        .accessibilityHidden(isFolderDrawerPresented)
+        .animation(FolderDrawerMotion.animation, value: isFolderDrawerPresented)
     }
 
     private var unifiedBottomDock: some View {
@@ -768,7 +771,7 @@ struct MeetingListView: View {
     private func toggleFolderDrawer() {
         hideKeyboard()
         let shouldPresent = !isFolderDrawerPresented
-        withAnimation(.easeOut(duration: 0.24)) {
+        withAnimation(FolderDrawerMotion.animation) {
             isFolderDrawerPresented = shouldPresent
         }
 
@@ -794,7 +797,7 @@ struct MeetingListView: View {
     }
 
     private func finalizeFolderMutation() {
-        withAnimation(.easeOut(duration: 0.24)) {
+        withAnimation(FolderDrawerMotion.animation) {
             isFolderDrawerPresented = false
         }
     }

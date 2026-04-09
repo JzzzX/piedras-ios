@@ -158,7 +158,7 @@ struct MeetingDetailView: View {
         .animation(.easeOut(duration: 0.22), value: isRecordingNoteEditorFocused)
         .toolbar(.hidden, for: .navigationBar)
         .background(InteractivePopGestureEnabler())
-        .edgeSwipeToDismiss {
+        .meetingDetailDismissGesture(.forPushDestination) {
             closeAttachmentMenu()
             closeActionMenu()
             closeMeetingTypeOverlay()
@@ -391,7 +391,8 @@ struct MeetingDetailView: View {
                 allowsDirectEditing: !showsPrompt,
                 focusRequestToken: recordingNoteFocusRequest,
                 isFocused: $isRecordingNoteEditorFocused,
-                accessibilityIdentifier: "RecordingNoteEditor"
+                accessibilityIdentifier: "RecordingNoteEditor",
+                caretScrollBehavior: .pinCurrentLineNearTop(topPadding: 32)
             )
 
             if showsPrompt {
@@ -732,7 +733,8 @@ struct MeetingDetailView: View {
                     allowsDirectEditing: !showsPrompt,
                     focusRequestToken: recordingNoteFocusRequest,
                     isFocused: $isRecordingNoteEditorFocused,
-                    accessibilityIdentifier: "RecordingNoteEditor"
+                    accessibilityIdentifier: "RecordingNoteEditor",
+                    caretScrollBehavior: .pinCurrentLineNearTop(topPadding: 32)
                 )
 
                 if showsPrompt {
@@ -929,7 +931,7 @@ struct MeetingDetailView: View {
                 }
                 .presentationBackground(AppTheme.surface)
                 .presentationDragIndicator(.hidden)
-                .edgeSwipeToDismiss {
+                .meetingDetailDismissGesture(.forSheet) {
                     activeSheet = nil
                 }
             }
@@ -2234,7 +2236,7 @@ private struct MarkdownEditorSheetScaffold<Content: View>: View {
         }
         .presentationBackground(.clear)
         .presentationDragIndicator(.hidden)
-        .edgeSwipeToDismiss(onDismiss: onCancel)
+        .meetingDetailDismissGesture(.forSheet, onDismiss: onCancel)
     }
 }
 
@@ -2319,5 +2321,17 @@ private struct EdgeSwipeDismissModifier: ViewModifier {
 private extension View {
     func edgeSwipeToDismiss(onDismiss: @escaping () -> Void) -> some View {
         modifier(EdgeSwipeDismissModifier(onDismiss: onDismiss))
+    }
+
+    @ViewBuilder
+    func meetingDetailDismissGesture(
+        _ mode: MeetingDetailDismissGestureMode,
+        onDismiss: @escaping () -> Void
+    ) -> some View {
+        if mode.usesCustomEdgeSwipe {
+            edgeSwipeToDismiss(onDismiss: onDismiss)
+        } else {
+            self
+        }
     }
 }

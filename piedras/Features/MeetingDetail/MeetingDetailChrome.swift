@@ -95,6 +95,18 @@ struct MeetingDetailRecordingDocumentChrome: Equatable {
     let notePromptMinHeight: CGFloat
 }
 
+enum MeetingDetailDismissGestureMode: Equatable {
+    case systemNavigation
+    case customEdgeSwipe
+
+    static let forPushDestination: Self = .systemNavigation
+    static let forSheet: Self = .customEdgeSwipe
+
+    var usesCustomEdgeSwipe: Bool {
+        self == .customEdgeSwipe
+    }
+}
+
 enum MeetingDetailChrome {
     static let actionMenuChrome = MeetingDetailActionMenuChrome(
         backdropOpacity: 0.001,

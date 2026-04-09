@@ -1,5 +1,23 @@
 import SwiftUI
 
+struct FolderDrawerPresentationChrome: Equatable {
+    let panelOffset: CGFloat
+    let backdropOpacity: Double
+    let allowsHitTesting: Bool
+    let hidesAccessibility: Bool
+
+    init(isPresented: Bool, drawerWidth: CGFloat, backdropOpacity: Double = 0.34) {
+        panelOffset = isPresented ? 0 : -drawerWidth
+        self.backdropOpacity = isPresented ? backdropOpacity : 0
+        allowsHitTesting = isPresented
+        hidesAccessibility = !isPresented
+    }
+}
+
+enum FolderDrawerMotion {
+    static let animation = Animation.spring(response: 0.28, dampingFraction: 0.86)
+}
+
 struct FolderDrawerView: View {
     @Binding var isPresented: Bool
     let folders: [FolderSummary]
@@ -12,24 +30,30 @@ struct FolderDrawerView: View {
     @State private var openSwipeFolderID: String?
 
     var body: some View {
-        if isPresented {
-            ZStack(alignment: .leading) {
-                Color.black.opacity(0.34)
-                    .ignoresSafeArea()
-                    .onTapGesture { close() }
-                    .transition(.opacity)
+        let chrome = FolderDrawerPresentationChrome(
+            isPresented: isPresented,
+            drawerWidth: drawerWidth
+        )
 
-                drawerContent
-                    .frame(width: drawerWidth)
-                    .transition(.move(edge: .leading))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            .animation(.easeOut(duration: 0.24), value: isPresented)
-            .accessibilityIdentifier("FolderDrawer")
-            .onChange(of: isPresented, initial: false) { _, newValue in
-                guard !newValue else { return }
-                openSwipeFolderID = nil
-            }
+        return ZStack(alignment: .leading) {
+            Color.black
+                .opacity(chrome.backdropOpacity)
+                .ignoresSafeArea()
+                .contentShape(Rectangle())
+                .onTapGesture { close() }
+
+            drawerContent
+                .frame(width: drawerWidth)
+                .offset(x: chrome.panelOffset)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .allowsHitTesting(chrome.allowsHitTesting)
+        .accessibilityHidden(chrome.hidesAccessibility)
+        .animation(FolderDrawerMotion.animation, value: isPresented)
+        .accessibilityIdentifier("FolderDrawer")
+        .onChange(of: isPresented, initial: false) { _, newValue in
+            guard !newValue else { return }
+            openSwipeFolderID = nil
         }
     }
 
@@ -59,8 +83,6 @@ struct FolderDrawerView: View {
                 }
                 .accessibilityIdentifier("FolderDrawerList")
             }
-
-            footer
         }
         .background(AppTheme.surface)
         .frame(maxHeight: .infinity, alignment: .top)
@@ -79,7 +101,14 @@ struct FolderDrawerView: View {
                 .font(AppTheme.bodyFont(size: 16, weight: .bold))
                 .foregroundStyle(AppTheme.brandInk)
 
-            Spacer()
+            AppGlassCircleButton(
+                systemName: "plus",
+                accessibilityLabel: AppStrings.current.newFolder,
+                size: 30
+            ) {
+                onCreateFolder()
+            }
+            .accessibilityIdentifier("FolderDrawerNewFolderButton")
 
             AppGlassCircleButton(
                 systemName: "xmark",
@@ -89,6 +118,8 @@ struct FolderDrawerView: View {
                 close()
             }
             .accessibilityIdentifier("FolderDrawerCloseButton")
+
+            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
@@ -96,33 +127,6 @@ struct FolderDrawerView: View {
             Rectangle()
                 .fill(AppTheme.border)
                 .frame(height: AppTheme.retroBorderWidth)
-        }
-    }
-
-    private var footer: some View {
-        VStack(spacing: 0) {
-            Rectangle()
-                .fill(AppTheme.border)
-                .frame(height: AppTheme.retroBorderWidth)
-
-            Button(action: onCreateFolder) {
-                HStack(spacing: 10) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 14, weight: .bold))
-                        .foregroundStyle(AppTheme.brandInk)
-
-                    Text(AppStrings.current.newFolder)
-                        .font(AppTheme.bodyFont(size: 14, weight: .semibold))
-                        .foregroundStyle(AppTheme.brandInk)
-
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-                .frame(height: 60)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("FolderDrawerNewFolderButton")
         }
     }
 
@@ -157,7 +161,7 @@ struct FolderDrawerView: View {
     }
 
     private func close() {
-        withAnimation(.easeOut(duration: 0.24)) {
+        withAnimation(FolderDrawerMotion.animation) {
             isPresented = false
         }
         openSwipeFolderID = nil
