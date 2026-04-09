@@ -15,6 +15,7 @@ struct NoteEditorView: View {
     var focusRequestToken: Int = 0
     var isFocused: Binding<Bool>? = nil
     var accessibilityIdentifier: String? = nil
+    var caretScrollBehavior: EditorialCaretScrollBehavior = .visibleOnly
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -46,7 +47,8 @@ struct NoteEditorView: View {
                     allowsDirectEditing: allowsDirectEditing,
                     focusRequestToken: focusRequestToken,
                     isFocused: isFocused,
-                    accessibilityIdentifier: accessibilityIdentifier
+                    accessibilityIdentifier: accessibilityIdentifier,
+                    caretScrollBehavior: caretScrollBehavior
                 )
             }
         }

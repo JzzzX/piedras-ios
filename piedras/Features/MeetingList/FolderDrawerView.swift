@@ -110,6 +110,8 @@ struct FolderDrawerView: View {
             }
             .accessibilityIdentifier("FolderDrawerNewFolderButton")
 
+            Spacer(minLength: 0)
+
             AppGlassCircleButton(
                 systemName: "xmark",
                 accessibilityLabel: AppStrings.current.close,
@@ -118,8 +120,6 @@ struct FolderDrawerView: View {
                 close()
             }
             .accessibilityIdentifier("FolderDrawerCloseButton")
-
-            Spacer(minLength: 0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
