@@ -323,40 +323,69 @@ struct MeetingDetailView: View {
             ThinDivider()
                 .padding(.bottom, 20)
 
-            ScrollView(showsIndicators: false) {
-                ZStack(alignment: .topLeading) {
-                    NoteEditorView(
-                        text: noteEditorBinding(for: meeting),
-                        showsHeader: false,
-                        title: AppStrings.current.notes,
-                    placeholder: MeetingDetailChrome.recordingNoteEditorPlaceholder(
-                        notes: currentNotesText(for: meeting),
-                        isEditorFocused: isRecordingNoteEditorFocused
-                    ),
-                    minHeight: recordingNoteEditorMinHeight,
-                    fixedHeight: isRecordingNoteEditorFocused ? recordingKeyboardEditorHeight : nil,
-                    usesBodyStyle: true,
-                    allowsInternalScrolling: isRecordingNoteEditorFocused,
-                    hidesAccessibility: showsPrompt,
-                    allowsDirectEditing: !showsPrompt,
-                    focusRequestToken: recordingNoteFocusRequest,
-                    isFocused: $isRecordingNoteEditorFocused,
-                    accessibilityIdentifier: "RecordingNoteEditor"
-                )
-
-                    if showsPrompt {
-                        recordingNotePrompt(chrome: MeetingDetailChrome.recordingDocument)
-                    }
+            if isRecordingNoteEditorFocused {
+                GeometryReader { proxy in
+                    recordingWorkspaceEditor(
+                        meeting: meeting,
+                        chrome: MeetingDetailChrome.recordingDocument,
+                        showsPrompt: false,
+                        fixedHeight: max(proxy.size.height, recordingNoteEditorMinHeight),
+                        allowsInternalScrolling: true
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    recordingWorkspaceEditor(
+                        meeting: meeting,
+                        chrome: MeetingDetailChrome.recordingDocument,
+                        showsPrompt: showsPrompt,
+                        fixedHeight: nil,
+                        allowsInternalScrolling: false
+                    )
+                    .padding(.bottom, 24)
+                }
+                .scrollDismissesKeyboard(.interactively)
             }
-            .scrollDisabled(isRecordingNoteEditorFocused)
-            .scrollDismissesKeyboard(.interactively)
         }
         .padding(.horizontal, 24)
         .padding(.top, 16)
         .padding(.bottom, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func recordingWorkspaceEditor(
+        meeting: Meeting,
+        chrome: MeetingDetailRecordingDocumentChrome,
+        showsPrompt: Bool,
+        fixedHeight: CGFloat?,
+        allowsInternalScrolling: Bool
+    ) -> some View {
+        ZStack(alignment: .topLeading) {
+            NoteEditorView(
+                text: noteEditorBinding(for: meeting),
+                showsHeader: false,
+                title: AppStrings.current.notes,
+                placeholder: MeetingDetailChrome.recordingNoteEditorPlaceholder(
+                    notes: currentNotesText(for: meeting),
+                    isEditorFocused: isRecordingNoteEditorFocused
+                ),
+                minHeight: recordingNoteEditorMinHeight,
+                fixedHeight: fixedHeight,
+                usesBodyStyle: true,
+                allowsInternalScrolling: allowsInternalScrolling,
+                hidesAccessibility: showsPrompt,
+                allowsDirectEditing: !showsPrompt,
+                focusRequestToken: recordingNoteFocusRequest,
+                isFocused: $isRecordingNoteEditorFocused,
+                accessibilityIdentifier: "RecordingNoteEditor"
+            )
+
+            if showsPrompt {
+                recordingNotePrompt(chrome: chrome)
+            }
+        }
     }
 
     private func detailTopChrome(meeting: Meeting) -> some View {

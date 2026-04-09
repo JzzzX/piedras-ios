@@ -366,6 +366,7 @@ final class MeetingStore {
                 hiddenWorkspaceID: settingsStore.hiddenWorkspaceID,
                 collectionID: writableCollectionID()
             )
+            seedUITestRecordingAttachmentIfNeeded(for: meeting, startingRecording: startingRecording)
             if startingRecording {
                 _ = primeRecordingSession(
                     meetingID: meeting.id,
@@ -404,6 +405,34 @@ final class MeetingStore {
 
     func clearLastError() {
         lastErrorMessage = nil
+    }
+
+    private func seedUITestRecordingAttachmentIfNeeded(for meeting: Meeting, startingRecording: Bool) {
+        guard startingRecording, isUITestRuntime else { return }
+        guard ProcessInfo.processInfo.arguments.contains("UITEST_RECORDING_SEED_ATTACHMENT") else { return }
+        guard meeting.noteAttachmentFileNames.isEmpty else { return }
+        guard let image = makeUITestSeedAttachmentImage() else { return }
+        _ = addNoteAttachment(image, to: meeting)
+    }
+
+    private func makeUITestSeedAttachmentImage() -> UIImage? {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 120, height: 120))
+        return renderer.image { context in
+            UIColor.systemYellow.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 120, height: 120))
+
+            let text = "UITEST"
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: UIFont.systemFont(ofSize: 22, weight: .bold),
+                .foregroundColor: UIColor.black,
+            ]
+            let textSize = text.size(withAttributes: attributes)
+            let origin = CGPoint(
+                x: (120 - textSize.width) / 2,
+                y: (120 - textSize.height) / 2
+            )
+            text.draw(at: origin, withAttributes: attributes)
+        }
     }
 
     func updateTitle(_ title: String, for meeting: Meeting) {
