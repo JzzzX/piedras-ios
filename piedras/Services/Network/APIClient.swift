@@ -50,6 +50,11 @@ private struct AuthRefreshRequestPayload: Encodable {
     let refreshToken: String
 }
 
+private struct RefreshedAuthState {
+    let sessionToken: String
+    let refreshToken: String?
+}
+
 enum APIClientError: LocalizedError {
     case missingBaseURL
     case invalidResponse
@@ -82,6 +87,7 @@ final class APIClient: AuthNetworking {
     private let session: URLSession
     private let encoder = JSONEncoder()
     private let decoder: JSONDecoder
+    private var authRefreshTask: Task<RefreshedAuthState, Error>?
 
     init(
         settingsStore: SettingsStore,
@@ -201,7 +207,7 @@ final class APIClient: AuthNetworking {
 
     func logout() async throws {
         let request = try makeRequest(path: "/api/auth/logout", method: "POST")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data, fallback: "退出登录失败。")
     }
 
@@ -259,7 +265,7 @@ final class APIClient: AuthNetworking {
 
     func deleteCollection(id: String) async throws {
         let request = try makeRequest(path: "/api/collections/\(id)", method: "DELETE")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data, fallback: "删除文件夹失败。")
     }
 
@@ -313,7 +319,7 @@ final class APIClient: AuthNetworking {
             method: "DELETE",
             extraHeaders: workspaceHeader(workspaceID)
         )
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data, fallback: "删除会议失败。")
     }
 
@@ -341,14 +347,14 @@ final class APIClient: AuthNetworking {
         request.setValue(mimeType, forHTTPHeaderField: "Content-Type")
         request.setValue(String(max(duration, 0)), forHTTPHeaderField: "X-Audio-Duration")
 
-        let (data, response) = try await session.upload(for: request, fromFile: fileURL)
+        let (data, response) = try await performUploadRequest(request, fromFile: fileURL)
         try validate(response: response, data: data)
         return try decoder.decode(RemoteAudioUploadResponse.self, from: data)
     }
 
     func deleteRemoteAudio(meetingID: String) async throws {
         let request = try makeRequest(path: "/api/meetings/\(meetingID)/audio", method: "DELETE")
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data, fallback: "删除云端音频失败。")
     }
 
@@ -384,7 +390,7 @@ final class APIClient: AuthNetworking {
             ]
         )
 
-        let (data, response) = try await session.upload(for: request, from: body)
+        let (data, response) = try await performUploadRequest(request, from: body)
         try validate(response: response, data: data)
         return try decoder.decode(RemoteNoteAttachmentUploadResponse.self, from: data)
     }
@@ -399,7 +405,7 @@ final class APIClient: AuthNetworking {
             method: "DELETE",
             extraHeaders: workspaceHeader(workspaceID)
         )
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data, fallback: "删除资料区图片失败。")
     }
 
@@ -415,7 +421,7 @@ final class APIClient: AuthNetworking {
             request.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
         }
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data, fallback: "下载文件失败。")
         return data
     }
@@ -515,7 +521,7 @@ final class APIClient: AuthNetworking {
             includeAuthorization: includeAuthorization,
             extraHeaders: extraHeaders
         )
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data)
         return try decoder.decode(responseType, from: data)
     }
@@ -538,7 +544,7 @@ final class APIClient: AuthNetworking {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(body)
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data)
         return try decoder.decode(Response.self, from: data)
     }
@@ -616,12 +622,131 @@ final class APIClient: AuthNetworking {
         return [Self.workspaceIDHeader: workspaceID]
     }
 
+    private func performDataRequest(
+        _ request: URLRequest
+    ) async throws -> (Data, URLResponse) {
+        try await performRequestWithAuthRefresh(
+            request: request,
+            operation: { [self] request in
+                try await self.session.data(for: request)
+            },
+            response: { result in result.1 }
+        )
+    }
+
+    private func performUploadRequest(
+        _ request: URLRequest,
+        from body: Data
+    ) async throws -> (Data, URLResponse) {
+        try await performRequestWithAuthRefresh(
+            request: request,
+            operation: { [self] request in
+                try await self.session.upload(for: request, from: body)
+            },
+            response: { result in result.1 }
+        )
+    }
+
+    private func performUploadRequest(
+        _ request: URLRequest,
+        fromFile fileURL: URL
+    ) async throws -> (Data, URLResponse) {
+        try await performRequestWithAuthRefresh(
+            request: request,
+            operation: { [self] request in
+                try await self.session.upload(for: request, fromFile: fileURL)
+            },
+            response: { result in result.1 }
+        )
+    }
+
+    private func performRequestWithAuthRefresh<Result>(
+        request: URLRequest,
+        operation: @escaping (URLRequest) async throws -> Result,
+        response: @escaping (Result) -> URLResponse
+    ) async throws -> Result {
+        let initialResult = try await operation(request)
+
+        guard shouldAttemptAuthRefresh(for: request, response: response(initialResult)) else {
+            return initialResult
+        }
+
+        let refreshedState = try await refreshAuthStateForRetry()
+        let retriedRequest = requestByUpdatingAuthorization(
+            for: request,
+            sessionToken: refreshedState.sessionToken
+        )
+        return try await operation(retriedRequest)
+    }
+
+    private func shouldAttemptAuthRefresh(
+        for request: URLRequest,
+        response: URLResponse
+    ) -> Bool {
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 401 else {
+            return false
+        }
+
+        guard request.value(forHTTPHeaderField: "Authorization")?.hasPrefix("Bearer ") == true else {
+            return false
+        }
+
+        guard let path = request.url?.path else {
+            return false
+        }
+
+        guard !path.hasPrefix("/api/auth/") else {
+            return false
+        }
+
+        return authTokenStore.refreshToken?.nilIfBlank != nil
+    }
+
+    private func refreshAuthStateForRetry() async throws -> RefreshedAuthState {
+        if let authRefreshTask {
+            return try await authRefreshTask.value
+        }
+
+        let task = Task<RefreshedAuthState, Error> { @MainActor in
+            guard let refreshToken = self.authTokenStore.refreshToken?.nilIfBlank else {
+                throw APIClientError.requestFailed("登录态已失效，请重新登录")
+            }
+
+            let response = try await self.refreshAuthSession(refreshToken: refreshToken)
+            guard let sessionToken = response.session.token?.nilIfBlank else {
+                throw APIClientError.requestFailed("登录态已失效，请重新登录")
+            }
+
+            self.authTokenStore.sessionToken = sessionToken
+            self.authTokenStore.refreshToken = response.session.refreshToken?.nilIfBlank ?? refreshToken
+            return RefreshedAuthState(
+                sessionToken: sessionToken,
+                refreshToken: self.authTokenStore.refreshToken?.nilIfBlank
+            )
+        }
+
+        authRefreshTask = task
+        defer { authRefreshTask = nil }
+        return try await task.value
+    }
+
+    private func requestByUpdatingAuthorization(
+        for request: URLRequest,
+        sessionToken: String
+    ) -> URLRequest {
+        var updatedRequest = request
+        updatedRequest.setValue(Self.makeRequestID(), forHTTPHeaderField: Self.requestIDHeader)
+        updatedRequest.setValue("Bearer \(sessionToken)", forHTTPHeaderField: "Authorization")
+        return updatedRequest
+    }
+
     private func performRetryableAIDataRequest(
         request: URLRequest
     ) async throws -> (Data, URLResponse) {
         for attempt in 0 ... Self.aiRequestRetryCount {
             do {
-                let (data, response) = try await session.data(for: request)
+                let (data, response) = try await performDataRequest(request)
                 if let httpResponse = response as? HTTPURLResponse,
                    Self.isRetryableAIStatusCode(httpResponse.statusCode),
                    attempt < Self.aiRequestRetryCount {
@@ -653,7 +778,13 @@ final class APIClient: AuthNetworking {
             let task = Task {
                 for attempt in 0 ... Self.aiRequestRetryCount {
                     do {
-                        let (bytes, response) = try await session.bytes(for: request)
+                        let (bytes, response) = try await performRequestWithAuthRefresh(
+                            request: request,
+                            operation: { request in
+                                try await session.bytes(for: request)
+                            },
+                            response: { result in result.1 }
+                        )
                         guard let httpResponse = response as? HTTPURLResponse else {
                             throw APIClientError.invalidResponse
                         }

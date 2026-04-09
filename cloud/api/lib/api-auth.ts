@@ -88,6 +88,8 @@ export async function requireAuthenticatedRequest(
         workspace: await resolveRequestWorkspace(req, supabaseContext.user.id),
       };
     }
+
+    return errorResponse(context, 401, '登录态已失效，请重新登录');
   }
 
   return requireLegacyAuthenticatedRequest(req, token, context);

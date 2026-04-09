@@ -38,13 +38,25 @@ export function identityFromSupabaseClaims(claims: SupabaseJwtClaims): SupabaseI
   };
 }
 
-export async function verifySupabaseAccessToken(token: string): Promise<SupabaseIdentity | null> {
-  const client = getSupabaseVerifierClient();
+type SupabaseVerifierClient = Pick<SupabaseClient, 'auth'>;
+
+export async function verifySupabaseAccessToken(
+  token: string,
+  injectedClient?: SupabaseVerifierClient | null
+): Promise<SupabaseIdentity | null> {
+  const client = injectedClient ?? getSupabaseVerifierClient();
   if (!client) {
     return null;
   }
 
-  const { data, error } = await client.auth.getClaims(token);
+  let claimsResult: Awaited<ReturnType<SupabaseClient['auth']['getClaims']>>;
+  try {
+    claimsResult = await client.auth.getClaims(token);
+  } catch {
+    return null;
+  }
+
+  const { data, error } = claimsResult;
   if (error || !data?.claims) {
     return null;
   }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { identityFromSupabaseClaims } from './supabase-auth.ts';
+import { identityFromSupabaseClaims, verifySupabaseAccessToken } from './supabase-auth.ts';
 
 test('identityFromSupabaseClaims maps verified claims into an auth identity', () => {
   const result = identityFromSupabaseClaims({
@@ -33,4 +33,21 @@ test('identityFromSupabaseClaims returns null when required claims are missing',
     }),
     null
   );
+});
+
+test('verifySupabaseAccessToken returns null when Supabase rejects an expired JWT', async () => {
+  let getClaimsCallCount = 0;
+  const fakeClient = {
+    auth: {
+      getClaims: async () => {
+        getClaimsCallCount += 1;
+        throw new Error('Jwt has expired');
+      },
+    },
+  };
+
+  const result = await verifySupabaseAccessToken('expired.jwt.token', fakeClient as any);
+
+  assert.equal(result, null);
+  assert.equal(getClaimsCallCount, 1);
 });
