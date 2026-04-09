@@ -14,6 +14,26 @@ export interface AsrStatus {
   lastError: string | null;
 }
 
+interface DoubaoProxyHealthPayload {
+  ok?: boolean;
+  ready?: boolean;
+  lastUpstreamError?: string | null;
+  lastError?: string | null;
+  lastCloseReason?: string | null;
+  lastCloseSeverity?: string | null;
+  lastReadyAt?: string | null;
+  lastPartialAt?: string | null;
+  lastFinalAt?: string | null;
+  lastUpstreamCloseAt?: string | null;
+  lastCloseAt?: string | null;
+}
+
+interface InterpretedDoubaoProxyHealth {
+  ready: boolean;
+  lastError: string | null;
+  recentTimeoutDetail: string | null;
+}
+
 function normalizeProxyPath(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -156,6 +176,54 @@ export function resolveAsrProxyPublicBaseURL(
   }
 }
 
+export function isIgnorableDoubaoSessionTimeout(detail: string | null | undefined): boolean {
+  const normalized = String(detail || '').trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  return (
+    normalized.includes('read result timeout')
+    || normalized.includes('timeout waiting next packet')
+    || normalized.includes('waiting next packet timeout')
+    || normalized.includes('会话空闲超时')
+  );
+}
+
+export function interpretDoubaoProxyHealth(
+  payload: DoubaoProxyHealthPayload | null | undefined
+): InterpretedDoubaoProxyHealth {
+  const reportedError = payload?.lastUpstreamError || payload?.lastError || null;
+  const timeoutDetail = payload?.lastCloseReason || reportedError || null;
+  const hasIgnorableTimeout = isIgnorableDoubaoSessionTimeout(timeoutDetail);
+  const lastSuccessAt = latestTimestamp(
+    payload?.lastFinalAt,
+    payload?.lastPartialAt,
+    payload?.lastReadyAt
+  );
+  const lastFailureAt = latestTimestamp(
+    payload?.lastUpstreamCloseAt,
+    payload?.lastCloseAt
+  );
+  const hasAnySuccessSignal = lastSuccessAt !== null;
+  const hasRecoveredSuccessSignal =
+    lastSuccessAt !== null && (lastFailureAt === null || lastSuccessAt >= lastFailureAt);
+  const recoveredByTimeoutSuccess = Boolean(reportedError) && hasIgnorableTimeout && hasAnySuccessSignal;
+  const recoveredBySuccess = Boolean(reportedError) && !hasIgnorableTimeout && hasRecoveredSuccessSignal;
+  const explicitReady = payload?.ready;
+  const ready = explicitReady === true
+    ? true
+    : explicitReady === false
+      ? false
+      : recoveredByTimeoutSuccess || recoveredBySuccess || (!reportedError && payload?.ok !== false);
+
+  return {
+    ready,
+    lastError: ready ? null : reportedError,
+    recentTimeoutDetail: ready && hasIgnorableTimeout && hasAnySuccessSignal ? timeoutDetail : null,
+  };
+}
+
 export async function getAsrRuntimeStatus(): Promise<AsrStatus> {
   const configuredStatus = getAsrStatus();
   const checkedAt = new Date().toISOString();
@@ -195,20 +263,14 @@ export async function getAsrRuntimeStatus(): Promise<AsrStatus> {
           throw new Error(detail ? `HTTP ${response.status}: ${detail}` : `HTTP ${response.status}`);
         }
 
-        const payload = (await response.json().catch(() => null)) as
-          | {
-              ready?: boolean;
-              lastUpstreamError?: string | null;
-              lastError?: string | null;
-            }
-          | null;
-        const lastError = payload?.lastUpstreamError || payload?.lastError || null;
+        const payload = (await response.json().catch(() => null)) as DoubaoProxyHealthPayload | null;
+        const interpreted = interpretDoubaoProxyHealth(payload);
 
         return {
           reachable: true,
-          ready: payload?.ready !== false && !lastError,
+          ready: interpreted.ready,
           checkedAt: probeCheckedAt,
-          lastError,
+          lastError: interpreted.lastError,
         };
       } catch (error) {
         return {
@@ -233,4 +295,24 @@ export async function getAsrRuntimeStatus(): Promise<AsrStatus> {
         ? '豆包 ASR 代理在线'
         : `豆包 ASR 代理在线，但上游初始化失败${probe.lastError ? `：${probe.lastError}` : ''}`,
   };
+}
+
+function latestTimestamp(...candidates: Array<string | null | undefined>): string | null {
+  const timestamps = candidates
+    .map((value) => {
+      if (!value) {
+        return null;
+      }
+
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? { value, parsed } : null;
+    })
+    .filter((item): item is { value: string; parsed: number } => item !== null);
+
+  if (timestamps.length === 0) {
+    return null;
+  }
+
+  timestamps.sort((left, right) => right.parsed - left.parsed);
+  return timestamps[0].value;
 }
