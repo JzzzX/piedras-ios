@@ -241,6 +241,95 @@ struct APIClientAuthTests {
 
     @MainActor
     @Test
+    func listMeetingsRefreshesExpiredSessionAndRetriesOnce() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let suiteName = "piedras.tests.auth.retry.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: defaults,
+            debugDefaultBackendBaseURLString: "https://example.com"
+        )
+        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        tokenStore.sessionToken = "expired-session-token"
+        tokenStore.refreshToken = "refresh-token-1"
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
+        let client = APIClient(
+            settingsStore: settingsStore,
+            authTokenStore: tokenStore,
+            session: URLSession(configuration: configuration)
+        )
+
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            let path = request.url?.path
+            switch path {
+            case "/api/meetings":
+                let requestCount = APIClientAuthMockURLProtocol.requests.filter { $0.url?.path == "/api/meetings" }.count
+                let statusCode = requestCount == 1 ? 401 : 200
+                let response = try #require(
+                    HTTPURLResponse(
+                        url: request.url ?? URL(string: "https://example.com/api/meetings")!,
+                        statusCode: statusCode,
+                        httpVersion: nil,
+                        headerFields: ["Content-Type": "application/json"]
+                    )
+                )
+                let payload = statusCode == 401
+                    ? #"{"error":"登录态已失效，请重新登录"}"#
+                    : "[]"
+                return (response, Data(payload.utf8))
+
+            case "/api/auth/refresh":
+                let response = try #require(
+                    HTTPURLResponse(
+                        url: request.url ?? URL(string: "https://example.com/api/auth/refresh")!,
+                        statusCode: 200,
+                        httpVersion: nil,
+                        headerFields: ["Content-Type": "application/json"]
+                    )
+                )
+                let payload = """
+                {
+                  "user": { "id": "user-1", "email": "test@example.com" },
+                  "workspace": { "id": "workspace-1", "name": "Piedras" },
+                  "session": {
+                    "token": "fresh-session-token",
+                    "refreshToken": "refresh-token-2",
+                    "expiresAt": "2026-03-27T10:00:00.000Z"
+                  },
+                  "requiresEmailVerification": false,
+                  "verificationEmail": null
+                }
+                """
+                return (response, Data(payload.utf8))
+
+            default:
+                throw URLError(.badServerResponse)
+            }
+        }
+
+        let meetings = try await client.listMeetings(workspaceID: "workspace-project")
+
+        #expect(meetings.isEmpty)
+        #expect(APIClientAuthMockURLProtocol.requests.map { $0.url?.path } == [
+            "/api/meetings",
+            "/api/auth/refresh",
+            "/api/meetings",
+        ])
+        #expect(
+            APIClientAuthMockURLProtocol.requests.last?.value(forHTTPHeaderField: "Authorization")
+                == "Bearer fresh-session-token"
+        )
+        #expect(tokenStore.sessionToken == "fresh-session-token")
+        #expect(tokenStore.refreshToken == "refresh-token-2")
+    }
+
+    @MainActor
+    @Test
     func setPasswordUsesAuthenticatedEndpoint() async throws {
         APIClientAuthMockURLProtocol.reset()
         defer { APIClientAuthMockURLProtocol.reset() }

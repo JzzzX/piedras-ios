@@ -666,9 +666,50 @@ final class RecordingDetailUITests: XCTestCase {
         stopButton.tap()
     }
 
-    private func launchApp() -> XCUIApplication {
+    @MainActor
+    func testRecordingDetailKeepsEditorReachableWithCompactAttachmentStrip() throws {
+        let app = launchApp(extraArguments: ["UITEST_RECORDING_SEED_ATTACHMENT"])
+
+        let newRecordingButton = element(in: app, identifier: "NewRecordingButton", fallbackLabel: "新录音")
+        XCTAssertTrue(newRecordingButton.waitForExistence(timeout: 8), "首页录音入口未出现。")
+        newRecordingButton.tap()
+
+        dismissPermissionAlertsIfNeeded(in: app)
+        app.tap()
+
+        let editor = app.textViews["RecordingNoteEditor"]
+        let notePrompt = app.buttons["RecordingDetailNotePrompt"]
+        if notePrompt.waitForExistence(timeout: 2) {
+            notePrompt.tap()
+        } else {
+            XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
+            editor.tap()
+        }
+
+        XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
+        app.typeText("attachment check")
+
+        let compactStrip = element(
+            in: app,
+            identifier: "RecordingAttachmentCompactStrip",
+            fallbackLabel: "资料区"
+        )
+        XCTAssertTrue(compactStrip.waitForExistence(timeout: 2), "进入输入态后应保留紧凑附件条。")
+
+        let dismissButton = element(
+            in: app,
+            identifier: "RecordingBottomBarDismissKeyboardButton",
+            fallbackLabel: "收起键盘"
+        )
+        XCTAssertTrue(dismissButton.waitForExistence(timeout: 2), "进入输入态后应显示收起键盘入口。")
+        XCTAssertTrue(editor.isHittable, "有附件时进入输入态后，正文编辑器仍应处于可见可点击状态。")
+        XCTAssertLessThan(editor.frame.minY, compactStrip.frame.minY, "正文编辑器应位于紧凑附件条上方可见区域。")
+    }
+
+    private func launchApp(extraArguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments.append("UITEST_IN_MEMORY")
+        app.launchArguments.append(contentsOf: extraArguments)
         app.launch()
         return app
     }
