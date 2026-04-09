@@ -17,7 +17,6 @@ final class RecordingFlowUITests: XCTestCase {
         newRecordingButton.tap()
 
         dismissPermissionAlertsIfNeeded(in: app)
-        app.tap()
 
         let stopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
         XCTAssertTrue(stopButton.waitForExistence(timeout: 12), "开始录音后未进入录音态。")
@@ -542,29 +541,34 @@ final class RecordingFlowUITests: XCTestCase {
     }
 
     private func dismissPermissionAlertsIfNeeded(in app: XCUIApplication) {
-        addUIInterruptionMonitor(withDescription: "Permissions") { alert in
-            let candidateLabels = [
-                "允许",
-                "好",
-                "OK",
-                "Allow",
-                "Allow While Using App",
-            ]
+        let candidateLabels = [
+            "允许",
+            "好",
+            "OK",
+            "Allow",
+            "Allow While Using App",
+        ]
+        let alertHosts = [
+            app,
+            XCUIApplication(bundleIdentifier: "com.apple.springboard"),
+        ]
 
-            for label in candidateLabels where alert.buttons[label].exists {
-                alert.buttons[label].tap()
-                return true
+        for host in alertHosts {
+            for label in candidateLabels {
+                let button = host.buttons[label]
+                if button.waitForExistence(timeout: 0.5) {
+                    button.tap()
+                    return
+                }
             }
 
-            if alert.buttons.firstMatch.exists {
+            let alert = host.alerts.firstMatch
+            if alert.waitForExistence(timeout: 0.5),
+               alert.buttons.firstMatch.exists {
                 alert.buttons.firstMatch.tap()
-                return true
+                return
             }
-
-            return false
         }
-
-        app.tap()
     }
 
     private func edgeSwipeBack(in app: XCUIApplication) {
@@ -589,10 +593,8 @@ final class RecordingDetailUITests: XCTestCase {
         newRecordingButton.tap()
 
         dismissPermissionAlertsIfNeeded(in: app)
-        app.tap()
 
-        let stopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
-        XCTAssertTrue(stopButton.waitForExistence(timeout: 12), "开始录音后未进入录音态。")
+        XCTAssertTrue(waitForRecordingDetail(in: app), "开始录音后未进入录音态。")
 
         let titleEditButton = app.buttons["RecordingDetailTitleEditButton"]
         XCTAssertTrue(titleEditButton.waitForExistence(timeout: 3), "录音态标题区应显示直接编辑按钮。")
@@ -609,14 +611,18 @@ final class RecordingDetailUITests: XCTestCase {
         }
 
         XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
+        editor.tap()
 
-        app.typeText("abc")
+        editor.typeText("abc")
 
         let editorContainsTypedText = NSPredicate(format: "value CONTAINS %@", "abc")
         expectation(for: editorContainsTypedText, evaluatedWith: editor)
         waitForExpectations(timeout: 3)
 
-        stopButton.tap()
+        let stopButton = element(in: app, identifier: "StopRecordingButton", fallbackLabel: "停止录音")
+        if stopButton.waitForExistence(timeout: 3) {
+            stopButton.tap()
+        }
     }
 
     @MainActor
@@ -628,14 +634,8 @@ final class RecordingDetailUITests: XCTestCase {
         newRecordingButton.tap()
 
         dismissPermissionAlertsIfNeeded(in: app)
-        app.tap()
 
-        let stopButton = element(
-            in: app,
-            identifier: "StopRecordingButton",
-            fallbackLabel: "停止录音"
-        )
-        XCTAssertTrue(stopButton.waitForExistence(timeout: 12), "开始录音后未进入录音态。")
+        XCTAssertTrue(waitForRecordingDetail(in: app), "开始录音后未进入录音态。")
 
         XCTAssertTrue(app.staticTexts["笔记类型"].waitForExistence(timeout: 3), "录音态应展示“笔记类型”文案。")
 
@@ -649,15 +649,25 @@ final class RecordingDetailUITests: XCTestCase {
         }
 
         XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
-        app.typeText("abc")
+        editor.tap()
+        editor.typeText("abc")
 
         let dismissButton = element(
             in: app,
             identifier: "RecordingBottomBarDismissKeyboardButton",
             fallbackLabel: "收起键盘"
         )
+        let stopButton = element(
+            in: app,
+            identifier: "StopRecordingButton",
+            fallbackLabel: "停止录音"
+        )
         XCTAssertTrue(dismissButton.waitForExistence(timeout: 2), "进入输入态后底栏右侧应切换为收起键盘入口。")
         XCTAssertFalse(stopButton.isHittable, "进入输入态后底栏右侧不应继续显示结束录音按钮。")
+        XCTAssertTrue(element(in: app, identifier: "RecordingDetailCompactHeader").waitForExistence(timeout: 2), "进入输入态后应切换为紧凑标题摘要。")
+        XCTAssertFalse(app.buttons["RecordingDetailTitleEditButton"].exists, "进入输入态后不应继续展示标题编辑按钮。")
+        XCTAssertFalse(app.staticTexts["笔记类型"].exists, "进入输入态后应折叠笔记类型区域。")
+        XCTAssertFalse(app.buttons["RecordingBottomBarTranscriptTrigger"].exists, "进入输入态后底栏不应继续展示转写预览行。")
 
         dismissButton.tap()
 
@@ -675,7 +685,6 @@ final class RecordingDetailUITests: XCTestCase {
         newRecordingButton.tap()
 
         dismissPermissionAlertsIfNeeded(in: app)
-        app.tap()
 
         let editor = app.textViews["RecordingNoteEditor"]
         let notePrompt = app.buttons["RecordingDetailNotePrompt"]
@@ -687,7 +696,8 @@ final class RecordingDetailUITests: XCTestCase {
         }
 
         XCTAssertTrue(editor.waitForExistence(timeout: 2), "录音正文编辑器缺失。")
-        app.typeText("attachment check")
+        editor.tap()
+        editor.typeText("attachment check")
 
         let compactStrip = element(
             in: app,
@@ -702,6 +712,9 @@ final class RecordingDetailUITests: XCTestCase {
             fallbackLabel: "收起键盘"
         )
         XCTAssertTrue(dismissButton.waitForExistence(timeout: 2), "进入输入态后应显示收起键盘入口。")
+        XCTAssertTrue(element(in: app, identifier: "RecordingDetailCompactHeader").waitForExistence(timeout: 2), "进入输入态后应保留紧凑标题摘要。")
+        XCTAssertFalse(app.staticTexts["笔记类型"].exists, "进入输入态后应折叠笔记类型区域。")
+        XCTAssertFalse(app.buttons["RecordingBottomBarTranscriptTrigger"].exists, "进入输入态后底栏不应继续展示转写预览行。")
         XCTAssertTrue(editor.isHittable, "有附件时进入输入态后，正文编辑器仍应处于可见可点击状态。")
         XCTAssertLessThan(editor.frame.minY, compactStrip.frame.minY, "正文编辑器应位于紧凑附件条上方可见区域。")
     }
@@ -727,29 +740,51 @@ final class RecordingDetailUITests: XCTestCase {
             .firstMatch
     }
 
+    private func waitForRecordingDetail(in app: XCUIApplication, timeout: TimeInterval = 12) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        let titleEditButton = app.buttons["RecordingDetailTitleEditButton"]
+        let notePrompt = app.buttons["RecordingDetailNotePrompt"]
+        let editor = app.textViews["RecordingNoteEditor"]
+        let recBadge = app.staticTexts["RecBadge"]
+
+        repeat {
+            if titleEditButton.exists || notePrompt.exists || editor.exists || recBadge.exists {
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        } while Date() < deadline
+
+        return titleEditButton.exists || notePrompt.exists || editor.exists || recBadge.exists
+    }
+
     private func dismissPermissionAlertsIfNeeded(in app: XCUIApplication) {
-        addUIInterruptionMonitor(withDescription: "Permissions") { alert in
-            let candidateLabels = [
-                "允许",
-                "好",
-                "OK",
-                "Allow",
-                "Allow While Using App",
-            ]
+        let candidateLabels = [
+            "允许",
+            "好",
+            "OK",
+            "Allow",
+            "Allow While Using App",
+        ]
+        let alertHosts = [
+            app,
+            XCUIApplication(bundleIdentifier: "com.apple.springboard"),
+        ]
 
-            for label in candidateLabels where alert.buttons[label].exists {
-                alert.buttons[label].tap()
-                return true
+        for host in alertHosts {
+            for label in candidateLabels {
+                let button = host.buttons[label]
+                if button.waitForExistence(timeout: 0.5) {
+                    button.tap()
+                    return
+                }
             }
 
-            if alert.buttons.firstMatch.exists {
+            let alert = host.alerts.firstMatch
+            if alert.waitForExistence(timeout: 0.5),
+               alert.buttons.firstMatch.exists {
                 alert.buttons.firstMatch.tap()
-                return true
+                return
             }
-
-            return false
         }
-
-        app.tap()
     }
 }

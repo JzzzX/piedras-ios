@@ -155,6 +155,7 @@ struct MeetingDetailView: View {
         .animation(.easeOut(duration: 0.18), value: showsActionMenu)
         .animation(.easeOut(duration: 0.18), value: showsMeetingTypeOverlay)
         .animation(.easeOut(duration: 0.4), value: presentation.usesRecordingWorkspace)
+        .animation(.easeOut(duration: 0.22), value: isRecordingNoteEditorFocused)
         .toolbar(.hidden, for: .navigationBar)
         .background(InteractivePopGestureEnabler())
         .edgeSwipeToDismiss {
@@ -258,6 +259,12 @@ struct MeetingDetailView: View {
         .onChange(of: selectedNoteAttachmentItems) { _, items in
             handleSelectedNoteAttachments(items)
         }
+        .onChange(of: isRecordingNoteEditorFocused) { _, isFocused in
+            guard isFocused else { return }
+            closeActionMenu()
+            closeAttachmentMenu()
+            closeMeetingTypeOverlay()
+        }
     }
 
     private func standardDetailContent(
@@ -317,11 +324,16 @@ struct MeetingDetailView: View {
                     .padding(.bottom, 12)
             }
 
-            recordingTitleBlock(meeting: meeting, chrome: MeetingDetailChrome.recordingDocument)
-                .padding(.bottom, 20)
+            if isRecordingNoteEditorFocused {
+                recordingFocusedHeader(meeting: meeting)
+                    .padding(.bottom, 12)
+            } else {
+                recordingTitleBlock(meeting: meeting, chrome: MeetingDetailChrome.recordingDocument)
+                    .padding(.bottom, 20)
+            }
 
             ThinDivider()
-                .padding(.bottom, 20)
+                .padding(.bottom, isRecordingNoteEditorFocused ? 12 : 20)
 
             if isRecordingNoteEditorFocused {
                 GeometryReader { proxy in
@@ -386,6 +398,28 @@ struct MeetingDetailView: View {
                 recordingNotePrompt(chrome: chrome)
             }
         }
+    }
+
+    private func recordingFocusedHeader(meeting: Meeting) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(displayTitle(for: meeting))
+                .font(AppTheme.bodyFont(size: 20, weight: .bold))
+                .foregroundStyle(AppTheme.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .accessibilityIdentifier("RecordingDetailCompactHeaderTitle")
+
+            Spacer(minLength: 0)
+
+            Text(MeetingDetailChrome.recordingMetaLine(for: meeting.date))
+                .font(AppTheme.dataFont(size: 11))
+                .foregroundStyle(AppTheme.subtleInk)
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+                .accessibilityIdentifier("RecordingDetailCompactHeaderMeta")
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("RecordingDetailCompactHeader")
     }
 
     private func detailTopChrome(meeting: Meeting) -> some View {

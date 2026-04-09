@@ -13,8 +13,10 @@ struct RecordingBottomBar: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Row 1: Transcript preview
-            transcriptPreviewRow
+            if !isEditorFocused {
+                // Row 1: Transcript preview
+                transcriptPreviewRow
+            }
 
             // Row 2: Controls
             controlRow

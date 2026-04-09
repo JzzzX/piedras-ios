@@ -231,14 +231,20 @@ private struct EditorialTextView: UIViewRepresentable {
 
         func textViewDidChange(_ textView: UITextView) {
             text = textView.text
+            scrollSelectionIntoViewIfNeeded(textView)
         }
 
         func textViewDidBeginEditing(_ textView: UITextView) {
             isFocused?.wrappedValue = true
+            scrollSelectionIntoViewIfNeeded(textView)
         }
 
         func textViewDidEndEditing(_ textView: UITextView) {
             isFocused?.wrappedValue = false
+        }
+
+        func textViewDidChangeSelection(_ textView: UITextView) {
+            scrollSelectionIntoViewIfNeeded(textView)
         }
 
         @objc
@@ -268,6 +274,17 @@ private struct EditorialTextView: UIViewRepresentable {
             ]
             toolbar.sizeToFit()
             return toolbar
+        }
+
+        private func scrollSelectionIntoViewIfNeeded(_ textView: UITextView) {
+            guard textView.isScrollEnabled else { return }
+
+            let selectedRange = textView.selectedRange
+            guard selectedRange.location != NSNotFound else { return }
+
+            DispatchQueue.main.async {
+                textView.scrollRangeToVisible(selectedRange)
+            }
         }
     }
 }
