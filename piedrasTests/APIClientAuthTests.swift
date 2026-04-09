@@ -422,4 +422,57 @@ struct APIClientAuthTests {
                 == "Bearer session-token"
         )
     }
+
+    @MainActor
+    @Test
+    func downloadAuthenticatedDataResolvesRelativeFileURLAgainstBackendBaseURL() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let suiteName = "piedras.tests.auth.download-relative.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: defaults,
+            debugDefaultBackendBaseURLString: "https://example.com"
+        )
+        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        tokenStore.sessionToken = "session-token"
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
+        let client = APIClient(
+            settingsStore: settingsStore,
+            authTokenStore: tokenStore,
+            session: URLSession(configuration: configuration)
+        )
+
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            let url = try #require(request.url)
+            let response = try #require(
+                HTTPURLResponse(
+                    url: url,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: ["Content-Type": "application/octet-stream"]
+                )
+            )
+            return (response, Data("attachment".utf8))
+        }
+
+        let data = try await client.downloadAuthenticatedData(
+            fromAbsoluteURLString: "/api/meetings/meeting-1/attachments/attachment-1"
+        )
+
+        #expect(String(decoding: data, as: UTF8.self) == "attachment")
+        #expect(APIClientAuthMockURLProtocol.requests.count == 1)
+        #expect(
+            APIClientAuthMockURLProtocol.requests.first?.url?.absoluteString
+                == "https://example.com/api/meetings/meeting-1/attachments/attachment-1"
+        )
+        #expect(
+            APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
+                == "Bearer session-token"
+        )
+    }
 }

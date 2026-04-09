@@ -410,7 +410,8 @@ final class APIClient: AuthNetworking {
     }
 
     func downloadAuthenticatedData(fromAbsoluteURLString urlString: String) async throws -> Data {
-        guard let url = URL(string: urlString) else {
+        let resolvedURLString = resolveAbsoluteURLString(urlString) ?? urlString
+        guard let url = URL(string: resolvedURLString), url.scheme != nil else {
             throw APIClientError.invalidResponse
         }
 
