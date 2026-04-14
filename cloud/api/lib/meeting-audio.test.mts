@@ -13,7 +13,7 @@ import {
 } from './meeting-audio.ts';
 
 test('saveMeetingAudioFile stores meeting audio under configured storage root', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'piedras-meeting-audio-'));
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'coco-interview-meeting-audio-'));
   const originalRoot = process.env.MEETING_AUDIO_STORAGE_ROOT;
 
   process.env.MEETING_AUDIO_STORAGE_ROOT = tempRoot;
@@ -40,18 +40,18 @@ test('saveMeetingAudioFile stores meeting audio under configured storage root', 
 test('getMeetingAudioStorageConfig marks production fallback storage as not ready for persistent audio', () => {
   const storage = getMeetingAudioStorageConfig({
     env: {},
-    cwd: '/srv/piedras',
+    cwd: '/srv/coco-interview',
     nodeEnv: 'production',
   });
 
-  assert.equal(storage.rootPath, path.join('/srv/piedras', 'storage', 'meetings'));
+  assert.equal(storage.rootPath, path.join('/srv/coco-interview', 'storage', 'meetings'));
   assert.equal(storage.configured, false);
   assert.equal(storage.persistent, false);
   assert.match(storage.message, /MEETING_AUDIO_STORAGE_ROOT/);
 });
 
 test('saveMeetingAudioStream writes audio payloads without buffering the whole file in the caller', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'piedras-meeting-audio-stream-'));
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'coco-interview-meeting-audio-stream-'));
   const originalRoot = process.env.MEETING_AUDIO_STORAGE_ROOT;
 
   process.env.MEETING_AUDIO_STORAGE_ROOT = tempRoot;

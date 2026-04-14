@@ -1,4 +1,4 @@
-# Piedras 单入口 Zeabur 部署
+# 椰子面试 单入口 Zeabur 部署
 
 ## 目标
 
@@ -13,7 +13,7 @@
 现有 Zeabur 域名直接作为唯一入口：
 
 ```text
-https://piedras.preview.aliyun-zeabur.cn
+https://api.coco-interview.example.com
 ```
 
 这个服务应当由仓库根目录的 `Dockerfile.asr-proxy` 构建，但实际运行的是 `cloud/api/server.cjs`，因此同一个端口会同时提供：
@@ -68,7 +68,7 @@ AIHUBMIX_PATH=/chat/completions
 LLM_PROVIDER=aihubmix
 
 ASR_PROXY_SESSION_SECRET=
-ASR_PROXY_PUBLIC_BASE_URL=https://piedras.preview.aliyun-zeabur.cn
+ASR_PROXY_PUBLIC_BASE_URL=https://api.coco-interview.example.com
 ASR_PROXY_HEALTH_PATH=/asr-proxy/healthz
 ASR_PROXY_WS_PATH=/ws/asr
 
@@ -89,15 +89,15 @@ DOUBAO_ASR_WS_URL=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
 - 你现在提供的 Zeabur 环境变量里只有豆包凭据和 `ZBPACK_DOCKERFILE_NAME`
 - 还必须补上 `DATABASE_URL`、`ADMIN_API_SECRET`、`ASR_MODE`、`ASR_PROXY_PUBLIC_BASE_URL`、`ASR_PROXY_HEALTH_PATH`、`ASR_PROXY_WS_PATH`，以及现有 `AIHUBMIX_*` 变量
 - 建议显式设置 `LLM_PROVIDER=aihubmix`，把线上 LLM 路径固定到 AiHubMix，避免误配到历史 provider
-- `ASR_PROXY_PUBLIC_BASE_URL` 必须写成实际公网域名，当前就是 `https://piedras.preview.aliyun-zeabur.cn`
+- `ASR_PROXY_PUBLIC_BASE_URL` 必须写成实际公网域名，当前就是 `https://api.coco-interview.example.com`
 - 如果现在线上数据库还是旧版共享数据结构，新增代码会在服务启动时自动补账号 schema
 - 如果你希望旧数据自动挂到两个可登录测试账号，再补一个 `LEGACY_BOOTSTRAP_PASSWORD`；服务首次启动后会自动创建：
-  - `legacy-main@piedras.local`
-  - `legacy-archive@piedras.local`
+  - `legacy-main@coco-interview.local`
+  - `legacy-archive@coco-interview.local`
 
 ## iOS 对应配置
 
-- iOS 默认生产后端已经改成 `https://piedras.preview.aliyun-zeabur.cn`
+- iOS 默认生产后端已经改成 `https://api.coco-interview.example.com`
 - Debug 设置页支持手动覆盖后端地址，便于临时切服排障
 
 ## 上线后验证
@@ -105,11 +105,11 @@ DOUBAO_ASR_WS_URL=wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async
 统一入口部署成功后，下面这些请求都应该返回有效结果：
 
 ```bash
-curl https://piedras.preview.aliyun-zeabur.cn/healthz
-curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
-curl https://piedras.preview.aliyun-zeabur.cn/api/asr/status
-curl https://piedras.preview.aliyun-zeabur.cn/api/llm/status
-curl -X POST https://piedras.preview.aliyun-zeabur.cn/api/asr/session \
+curl https://api.coco-interview.example.com/healthz
+curl https://api.coco-interview.example.com/asr-proxy/healthz
+curl https://api.coco-interview.example.com/api/asr/status
+curl https://api.coco-interview.example.com/api/llm/status
+curl -X POST https://api.coco-interview.example.com/api/asr/session \
   -H 'content-type: application/json' \
   -d '{"sampleRate":16000,"channels":1}'
 ```

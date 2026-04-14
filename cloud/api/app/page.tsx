@@ -68,7 +68,7 @@ export default async function HomePage() {
     <main className="home-page-shell">
       <section className="home-hero">
         <div className="home-topbar">
-          <div className="home-badge">Piedras Cloud</div>
+          <div className="home-badge">椰子面试 Cloud</div>
           <a className="home-admin-link" href="/admin">
             进入后台
           </a>

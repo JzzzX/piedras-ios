@@ -16,7 +16,7 @@ import {
 } from './meeting-attachment.ts';
 
 test('saveMeetingAttachmentFile stores attachments under configured storage root', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'piedras-meeting-attachment-'));
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'coco-interview-meeting-attachment-'));
   const originalRoot = process.env.MEETING_ATTACHMENT_STORAGE_ROOT;
 
   process.env.MEETING_ATTACHMENT_STORAGE_ROOT = tempRoot;
@@ -45,7 +45,7 @@ test('saveMeetingAttachmentFile stores attachments under configured storage root
 });
 
 test('saveMeetingAttachmentStream writes attachment payloads from a stream', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'piedras-meeting-attachment-stream-'));
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'coco-interview-meeting-attachment-stream-'));
   const originalRoot = process.env.MEETING_ATTACHMENT_STORAGE_ROOT;
 
   process.env.MEETING_ATTACHMENT_STORAGE_ROOT = tempRoot;
@@ -82,18 +82,18 @@ test('saveMeetingAttachmentStream writes attachment payloads from a stream', asy
 test('getMeetingAttachmentStorageConfig marks production fallback storage as not persistent', () => {
   const storage = getMeetingAttachmentStorageConfig({
     env: {},
-    cwd: '/srv/piedras',
+    cwd: '/srv/coco-interview',
     nodeEnv: 'production',
   });
 
-  assert.equal(storage.rootPath, path.join('/srv/piedras', 'storage', 'meeting-attachments'));
+  assert.equal(storage.rootPath, path.join('/srv/coco-interview', 'storage', 'meeting-attachments'));
   assert.equal(storage.configured, false);
   assert.equal(storage.persistent, false);
   assert.match(storage.message, /MEETING_ATTACHMENT_STORAGE_ROOT/);
 });
 
 test('partitionMeetingAttachmentsByFile keeps only attachments with stored files', async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'piedras-meeting-attachment-partition-'));
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'coco-interview-meeting-attachment-partition-'));
   const originalRoot = process.env.MEETING_ATTACHMENT_STORAGE_ROOT;
 
   process.env.MEETING_ATTACHMENT_STORAGE_ROOT = tempRoot;

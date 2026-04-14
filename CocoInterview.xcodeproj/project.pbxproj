@@ -1,0 +1,767 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		9F00000C3A00000000000001 /* CocoInterviewRecordingWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 9F0000013A00000000000001 /* CocoInterviewRecordingWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		9F00000E3A00000000000001 /* CocoInterview/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F00000F3A00000000000001 /* CocoInterview/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		8E69CBCC2F695BBD005F246C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8E69CBB12F695BBC005F246C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8E69CBB82F695BBC005F246C;
+			remoteInfo = CocoInterview;
+		};
+		8E69CBD62F695BBD005F246C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8E69CBB12F695BBC005F246C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8E69CBB82F695BBC005F246C;
+			remoteInfo = CocoInterview;
+		};
+		9F0000083A00000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 8E69CBB12F695BBC005F246C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 9F0000063A00000000000001;
+			remoteInfo = CocoInterviewRecordingWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		9F00000D3A00000000000001 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				9F00000C3A00000000000001 /* CocoInterviewRecordingWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		8E69CBB92F695BBC005F246C /* CocoInterview.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CocoInterview.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8E69CBCB2F695BBD005F246C /* CocoInterviewTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CocoInterviewTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		8E69CBD52F695BBD005F246C /* CocoInterviewUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CocoInterviewUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9F0000013A00000000000001 /* CocoInterviewRecordingWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = CocoInterviewRecordingWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		9F00000F3A00000000000001 /* CocoInterview/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CocoInterview/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		8E69CBBB2F695BBC005F246C /* CocoInterview */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CocoInterview;
+			sourceTree = "<group>";
+		};
+		8E69CBCE2F695BBD005F246C /* CocoInterviewTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CocoInterviewTests;
+			sourceTree = "<group>";
+		};
+		8E69CBD82F695BBD005F246C /* CocoInterviewUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CocoInterviewUITests;
+			sourceTree = "<group>";
+		};
+		9F0000023A00000000000001 /* CocoInterviewRecordingWidget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = CocoInterviewRecordingWidget;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8E69CBB62F695BBC005F246C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E69CBC82F695BBD005F246C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E69CBD22F695BBD005F246C /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9F0000033A00000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		8E69CBB02F695BBC005F246C = {
+			isa = PBXGroup;
+			children = (
+				8E69CBBB2F695BBC005F246C /* CocoInterview */,
+				9F0000023A00000000000001 /* CocoInterviewRecordingWidget */,
+				9F00000F3A00000000000001 /* CocoInterview/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift */,
+				8E69CBCE2F695BBD005F246C /* CocoInterviewTests */,
+				8E69CBD82F695BBD005F246C /* CocoInterviewUITests */,
+				8E69CBBA2F695BBC005F246C /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		8E69CBBA2F695BBC005F246C /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				8E69CBB92F695BBC005F246C /* CocoInterview.app */,
+				8E69CBCB2F695BBD005F246C /* CocoInterviewTests.xctest */,
+				8E69CBD52F695BBD005F246C /* CocoInterviewUITests.xctest */,
+				9F0000013A00000000000001 /* CocoInterviewRecordingWidget.appex */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		8E69CBB82F695BBC005F246C /* CocoInterview */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8E69CBDF2F695BBD005F246C /* Build configuration list for PBXNativeTarget "CocoInterview" */;
+			buildPhases = (
+				8E69CBB52F695BBC005F246C /* Sources */,
+				8E69CBB62F695BBC005F246C /* Frameworks */,
+				8E69CBB72F695BBC005F246C /* Resources */,
+				9F00000D3A00000000000001 /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9F0000073A00000000000001 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8E69CBBB2F695BBC005F246C /* CocoInterview */,
+			);
+			name = CocoInterview;
+			packageProductDependencies = (
+			);
+			productName = CocoInterview;
+			productReference = 8E69CBB92F695BBC005F246C /* CocoInterview.app */;
+			productType = "com.apple.product-type.application";
+		};
+		8E69CBCA2F695BBD005F246C /* CocoInterviewTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8E69CBE22F695BBD005F246C /* Build configuration list for PBXNativeTarget "CocoInterviewTests" */;
+			buildPhases = (
+				8E69CBC72F695BBD005F246C /* Sources */,
+				8E69CBC82F695BBD005F246C /* Frameworks */,
+				8E69CBC92F695BBD005F246C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8E69CBCD2F695BBD005F246C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8E69CBCE2F695BBD005F246C /* CocoInterviewTests */,
+			);
+			name = CocoInterviewTests;
+			packageProductDependencies = (
+			);
+			productName = CocoInterviewTests;
+			productReference = 8E69CBCB2F695BBD005F246C /* CocoInterviewTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		8E69CBD42F695BBD005F246C /* CocoInterviewUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8E69CBE52F695BBD005F246C /* Build configuration list for PBXNativeTarget "CocoInterviewUITests" */;
+			buildPhases = (
+				8E69CBD12F695BBD005F246C /* Sources */,
+				8E69CBD22F695BBD005F246C /* Frameworks */,
+				8E69CBD32F695BBD005F246C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8E69CBD72F695BBD005F246C /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				8E69CBD82F695BBD005F246C /* CocoInterviewUITests */,
+			);
+			name = CocoInterviewUITests;
+			packageProductDependencies = (
+			);
+			productName = CocoInterviewUITests;
+			productReference = 8E69CBD52F695BBD005F246C /* CocoInterviewUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		9F0000063A00000000000001 /* CocoInterviewRecordingWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9F00000B3A00000000000001 /* Build configuration list for PBXNativeTarget "CocoInterviewRecordingWidget" */;
+			buildPhases = (
+				9F0000053A00000000000001 /* Sources */,
+				9F0000033A00000000000001 /* Frameworks */,
+				9F0000043A00000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				9F0000023A00000000000001 /* CocoInterviewRecordingWidget */,
+			);
+			name = CocoInterviewRecordingWidget;
+			packageProductDependencies = (
+			);
+			productName = CocoInterviewRecordingWidget;
+			productReference = 9F0000013A00000000000001 /* CocoInterviewRecordingWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		8E69CBB12F695BBC005F246C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2630;
+				LastUpgradeCheck = 2630;
+				TargetAttributes = {
+					8E69CBB82F695BBC005F246C = {
+						CreatedOnToolsVersion = 26.3;
+					};
+					8E69CBCA2F695BBD005F246C = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 8E69CBB82F695BBC005F246C;
+					};
+					8E69CBD42F695BBD005F246C = {
+						CreatedOnToolsVersion = 26.3;
+						TestTargetID = 8E69CBB82F695BBC005F246C;
+					};
+					9F0000063A00000000000001 = {
+						CreatedOnToolsVersion = 26.3;
+					};
+				};
+			};
+			buildConfigurationList = 8E69CBB42F695BBC005F246C /* Build configuration list for PBXProject "椰子面试" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 8E69CBB02F695BBC005F246C;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8E69CBBA2F695BBC005F246C /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8E69CBB82F695BBC005F246C /* CocoInterview */,
+				9F0000063A00000000000001 /* CocoInterviewRecordingWidget */,
+				8E69CBCA2F695BBD005F246C /* CocoInterviewTests */,
+				8E69CBD42F695BBD005F246C /* CocoInterviewUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8E69CBB72F695BBC005F246C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E69CBC92F695BBD005F246C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E69CBD32F695BBD005F246C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9F0000043A00000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8E69CBB52F695BBC005F246C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E69CBC72F695BBD005F246C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8E69CBD12F695BBD005F246C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9F0000053A00000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9F00000E3A00000000000001 /* CocoInterview/Shared/LiveActivity/RecordingLiveActivityDurationPresenter.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		8E69CBCD2F695BBD005F246C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8E69CBB82F695BBC005F246C /* CocoInterview */;
+			targetProxy = 8E69CBCC2F695BBD005F246C /* PBXContainerItemProxy */;
+		};
+		8E69CBD72F695BBD005F246C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8E69CBB82F695BBC005F246C /* CocoInterview */;
+			targetProxy = 8E69CBD62F695BBD005F246C /* PBXContainerItemProxy */;
+		};
+		9F0000073A00000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 9F0000063A00000000000001 /* CocoInterviewRecordingWidget */;
+			targetProxy = 9F0000083A00000000000001 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		8E69CBDD2F695BBD005F246C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = GK5DU23437;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		8E69CBDE2F695BBD005F246C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = GK5DU23437;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		8E69CBE02F695BBD005F246C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 22;
+				DEVELOPMENT_TEAM = RXL575CNF8;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "CocoInterview-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "椰子面试";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "椰子面试需要使用相机拍照添加到转写标注中。";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "椰子面试需要访问你局域网内的 Mac 后端，以启用实时转写和 AI。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "椰子面试需要访问麦克风来录制会议并生成实时转写。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "椰子面试需要访问相册以添加图片到转写标注中。";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_COCO_INTERVIEW_BACKEND_BASE_URL = "$(COCO_INTERVIEW_BACKEND_BASE_URL)";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				COCO_INTERVIEW_BACKEND_BASE_URL = "https://api.coco-interview.example.com";
+				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerview;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		8E69CBE12F695BBD005F246C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 22;
+				DEVELOPMENT_TEAM = RXL575CNF8;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "CocoInterview-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "椰子面试";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "椰子面试需要使用相机拍照添加到转写标注中。";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "椰子面试需要访问你局域网内的 Mac 后端，以启用实时转写和 AI。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "椰子面试需要访问麦克风来录制会议并生成实时转写。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "椰子面试需要访问相册以添加图片到转写标注中。";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
+				INFOPLIST_KEY_COCO_INTERVIEW_BACKEND_BASE_URL = "$(COCO_INTERVIEW_BACKEND_BASE_URL)";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				COCO_INTERVIEW_BACKEND_BASE_URL = "https://api.coco-interview.example.com";
+				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerview;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		8E69CBE32F695BBD005F246C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GK5DU23437;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerviewTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CocoInterview.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CocoInterview";
+			};
+			name = Debug;
+		};
+		8E69CBE42F695BBD005F246C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GK5DU23437;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerviewTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CocoInterview.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CocoInterview";
+			};
+			name = Release;
+		};
+		8E69CBE62F695BBD005F246C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GK5DU23437;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerviewUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CocoInterview;
+			};
+			name = Debug;
+		};
+		8E69CBE72F695BBD005F246C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = GK5DU23437;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerviewUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CocoInterview;
+			};
+			name = Release;
+		};
+		9F0000093A00000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 22;
+				DEVELOPMENT_TEAM = RXL575CNF8;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "CocoInterviewRecordingWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "椰子面试";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerview.recordingwidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		9F00000A3A00000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 22;
+				DEVELOPMENT_TEAM = RXL575CNF8;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "CocoInterviewRecordingWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "椰子面试";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerview.recordingwidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		8E69CBB42F695BBC005F246C /* Build configuration list for PBXProject "CocoInterview" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8E69CBDD2F695BBD005F246C /* Debug */,
+				8E69CBDE2F695BBD005F246C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8E69CBDF2F695BBD005F246C /* Build configuration list for PBXNativeTarget "CocoInterview" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8E69CBE02F695BBD005F246C /* Debug */,
+				8E69CBE12F695BBD005F246C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8E69CBE22F695BBD005F246C /* Build configuration list for PBXNativeTarget "CocoInterviewTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8E69CBE32F695BBD005F246C /* Debug */,
+				8E69CBE42F695BBD005F246C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8E69CBE52F695BBD005F246C /* Build configuration list for PBXNativeTarget "CocoInterviewUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8E69CBE62F695BBD005F246C /* Debug */,
+				8E69CBE72F695BBD005F246C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9F00000B3A00000000000001 /* Build configuration list for PBXNativeTarget "CocoInterviewRecordingWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9F0000093A00000000000001 /* Debug */,
+				9F00000A3A00000000000001 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 8E69CBB12F695BBC005F246C /* Project object */;
+}

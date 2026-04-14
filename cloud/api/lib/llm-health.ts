@@ -47,14 +47,14 @@ export function resolveLlmRuntimeHealthConfig(): LlmRuntimeHealthConfig {
 
 function getLlmProbeCache(): Map<string, LlmProbeCacheEntry> {
   const globalScope = globalThis as typeof globalThis & {
-    __piedrasLlmProbeCache?: Map<string, LlmProbeCacheEntry>;
+    __cocoInterviewLlmProbeCache?: Map<string, LlmProbeCacheEntry>;
   };
 
-  if (!globalScope.__piedrasLlmProbeCache) {
-    globalScope.__piedrasLlmProbeCache = new Map();
+  if (!globalScope.__cocoInterviewLlmProbeCache) {
+    globalScope.__cocoInterviewLlmProbeCache = new Map();
   }
 
-  return globalScope.__piedrasLlmProbeCache;
+  return globalScope.__cocoInterviewLlmProbeCache;
 }
 
 async function getCachedLlmProbeStatus(

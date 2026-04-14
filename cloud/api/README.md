@@ -1,6 +1,6 @@
-# Piedras Cloud API
+# 椰子面试 Cloud API
 
-这是 `piedras-ios` 单主仓中的云端 API 子应用。
+这是 `coco-interview-ios` 单主仓中的云端 API 子应用。
 
 ## 作用
 

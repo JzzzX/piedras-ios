@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient, Workspace } from '@prisma/client';
 
-const DEFAULT_WORKSPACE_NAME = 'Piedras';
-const DEFAULT_WORKSPACE_DESCRIPTION = 'Piedras 账号默认私有空间';
+const DEFAULT_WORKSPACE_NAME = '椰子面试';
+const DEFAULT_WORKSPACE_DESCRIPTION = '椰子面试账号默认私有空间';
 const DEFAULT_WORKSPACE_ICON = 'folder';
 const DEFAULT_WORKSPACE_COLOR = '#0f766e';
 

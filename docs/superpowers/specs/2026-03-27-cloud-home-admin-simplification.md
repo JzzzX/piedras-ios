@@ -1,10 +1,10 @@
-# Piedras Cloud 首页与后台精简设计
+# 椰子面试 Cloud 首页与后台精简设计
 
 日期：2026-03-27
 
 ## 目标
 
-把 `https://piedras.preview.aliyun-zeabur.cn/` 从“状态页 + 全量后台管理混在一起”的旧页面，改成和当前产品阶段匹配的简洁入口。
+把 `https://api.coco-interview.example.com/` 从“状态页 + 全量后台管理混在一起”的旧页面，改成和当前产品阶段匹配的简洁入口。
 
 本轮目标：
 
@@ -30,7 +30,7 @@
 
 保留内容：
 
-- 产品标识：`Piedras Cloud`
+- 产品标识：`椰子面试 Cloud`
 - 一句说明：这里是 iOS 产品依赖的云端入口与状态页
 - 三个状态卡片：
   - `Database`

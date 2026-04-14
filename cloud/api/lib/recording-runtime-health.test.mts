@@ -9,7 +9,7 @@ test('buildAudioFinalizationRuntimeStatus reports ffmpeg failures even when stor
     env: {
       MEETING_AUDIO_STORAGE_ROOT: '/data/meetings',
     },
-    cwd: '/srv/piedras',
+    cwd: '/srv/coco-interview',
     nodeEnv: 'production',
   });
 
@@ -34,7 +34,7 @@ test('buildAudioFinalizationRuntimeStatus becomes ready when storage and ffmpeg 
     env: {
       MEETING_AUDIO_STORAGE_ROOT: '/data/meetings',
     },
-    cwd: '/srv/piedras',
+    cwd: '/srv/coco-interview',
     nodeEnv: 'production',
   });
 

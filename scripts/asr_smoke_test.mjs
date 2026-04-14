@@ -6,7 +6,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 
 const targetSampleRate = 16000;
 const defaultChunkDurationMS = 100;
-const defaultBackendBaseURL = process.env.PIEDRAS_BACKEND_URL ?? 'https://piedras.preview.aliyun-zeabur.cn';
+const defaultBackendBaseURL = process.env.COCO_INTERVIEW_BACKEND_URL ?? 'https://api.coco-interview.example.com';
 const defaultBearerToken = process.env.PIEDRAS_BEARER_TOKEN ?? process.env.PIEDRAS_AUTH_TOKEN ?? '';
 
 const [, , inputFilePath, backendBaseURL = defaultBackendBaseURL, bearerToken = defaultBearerToken] = process.argv;

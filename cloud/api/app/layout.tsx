@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Piedras Cloud",
-  description: "Piedras iOS 单主仓云端 API 与 ASR 状态调试页。",
+  title: "椰子面试 Cloud",
+  description: "椰子面试 iOS 单主仓云端 API 与 ASR 状态调试页。",
 };
 
 export default function RootLayout({

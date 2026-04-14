@@ -52,12 +52,12 @@ test('ensureWorkspaceCollectionsHydrated backfills legacy ungrouped meetings int
   const fakeDb = {
     collection: {
       findFirst: async ({ where }: any) => {
-        if (where.description === 'Piedras default notes collection') {
+        if (where.description === '椰子面试默认笔记文件夹') {
           return {
             id: 'collection-notes',
             workspaceId: 'workspace-1',
             name: 'Default Folder',
-            description: 'Piedras default notes collection',
+            description: '椰子面试默认笔记文件夹',
             icon: 'tray.full',
             color: '#0f766e',
             handoffSummary: '',
@@ -68,12 +68,12 @@ test('ensureWorkspaceCollectionsHydrated backfills legacy ungrouped meetings int
           };
         }
 
-        if (where.description === 'Piedras recently deleted notes collection') {
+        if (where.description === '椰子面试最近删除文件夹') {
           return {
             id: 'collection-recently-deleted',
             workspaceId: 'workspace-1',
             name: 'Recently Deleted',
-            description: 'Piedras recently deleted notes collection',
+            description: '椰子面试最近删除文件夹',
             icon: 'trash',
             color: '#9f1239',
             handoffSummary: '',
@@ -93,7 +93,7 @@ test('ensureWorkspaceCollectionsHydrated backfills legacy ungrouped meetings int
             id: 'collection-notes',
             workspaceId: 'workspace-1',
             name: 'Default Folder',
-            description: 'Piedras default notes collection',
+            description: '椰子面试默认笔记文件夹',
             icon: 'tray.full',
             color: '#0f766e',
             handoffSummary: '',
@@ -119,7 +119,7 @@ test('ensureWorkspaceCollectionsHydrated backfills legacy ungrouped meetings int
             id: 'collection-recently-deleted',
             workspaceId: 'workspace-1',
             name: 'Recently Deleted',
-            description: 'Piedras recently deleted notes collection',
+            description: '椰子面试最近删除文件夹',
             icon: 'trash',
             color: '#9f1239',
             handoffSummary: '',
@@ -157,7 +157,7 @@ test('ensureDefaultCollectionForWorkspace reuses and normalizes a legacy Notes d
         id: 'collection-notes',
         workspaceId: 'workspace-1',
         name: 'Notes',
-        description: 'Piedras default notes collection',
+        description: '椰子面试默认笔记文件夹',
         icon: 'tray.full',
         color: '#0f766e',
         handoffSummary: '',
@@ -271,7 +271,7 @@ test('serializeCollection marks the default collection explicitly', () => {
       id: 'collection-notes',
       workspaceId: 'workspace-1',
       name: 'Default Folder',
-      description: 'Piedras default notes collection',
+      description: '椰子面试默认笔记文件夹',
       icon: 'tray.full',
       color: '#0f766e',
       handoffSummary: '',
@@ -298,7 +298,7 @@ test('serializeCollection marks the recently deleted collection explicitly', () 
       id: 'collection-recently-deleted',
       workspaceId: 'workspace-1',
       name: 'Recently Deleted',
-      description: 'Piedras recently deleted notes collection',
+      description: '椰子面试最近删除文件夹',
       icon: 'trash',
       color: '#9f1239',
       handoffSummary: '',
@@ -324,12 +324,12 @@ test('deleteCollectionForWorkspace reassigns dependent records before deleting a
   const fakeDb = {
     collection: {
       findFirst: async ({ where }: any) => {
-        if (where.workspaceId === 'workspace-1' && where.description === 'Piedras default notes collection') {
+        if (where.workspaceId === 'workspace-1' && where.description === '椰子面试默认笔记文件夹') {
           return {
             id: 'collection-notes',
             workspaceId: 'workspace-1',
             name: 'Default Folder',
-            description: 'Piedras default notes collection',
+            description: '椰子面试默认笔记文件夹',
             icon: 'tray.full',
             color: '#0f766e',
             handoffSummary: '',
@@ -339,12 +339,12 @@ test('deleteCollectionForWorkspace reassigns dependent records before deleting a
             sortOrder: 0,
           };
         }
-        if (where.workspaceId === 'workspace-1' && where.description === 'Piedras recently deleted notes collection') {
+        if (where.workspaceId === 'workspace-1' && where.description === '椰子面试最近删除文件夹') {
           return {
             id: 'collection-recently-deleted',
             workspaceId: 'workspace-1',
             name: 'Recently Deleted',
-            description: 'Piedras recently deleted notes collection',
+            description: '椰子面试最近删除文件夹',
             icon: 'trash',
             color: '#9f1239',
             handoffSummary: '',
@@ -408,12 +408,12 @@ test('deleteCollectionForWorkspace rejects system collections', async () => {
   const fakeDb = {
     collection: {
       findFirst: async ({ where }: any) => {
-        if (where.description === 'Piedras default notes collection') {
+        if (where.description === '椰子面试默认笔记文件夹') {
           return {
             id: 'collection-notes',
             workspaceId: 'workspace-1',
             name: 'Default Folder',
-            description: 'Piedras default notes collection',
+            description: '椰子面试默认笔记文件夹',
             icon: 'tray.full',
             color: '#0f766e',
             handoffSummary: '',
@@ -423,12 +423,12 @@ test('deleteCollectionForWorkspace rejects system collections', async () => {
             sortOrder: 0,
           };
         }
-        if (where.description === 'Piedras recently deleted notes collection') {
+        if (where.description === '椰子面试最近删除文件夹') {
           return {
             id: 'collection-recently-deleted',
             workspaceId: 'workspace-1',
             name: 'Recently Deleted',
-            description: 'Piedras recently deleted notes collection',
+            description: '椰子面试最近删除文件夹',
             icon: 'trash',
             color: '#9f1239',
             handoffSummary: '',

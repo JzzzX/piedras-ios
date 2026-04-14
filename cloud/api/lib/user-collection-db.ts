@@ -1,11 +1,11 @@
 import type { Collection, Prisma, PrismaClient } from '@prisma/client';
 
 const DEFAULT_COLLECTION_NAME = 'Default Folder';
-export const DEFAULT_COLLECTION_DESCRIPTION = 'Piedras default notes collection';
+export const DEFAULT_COLLECTION_DESCRIPTION = '椰子面试默认笔记文件夹';
 const DEFAULT_COLLECTION_ICON = 'tray.full';
 const DEFAULT_COLLECTION_COLOR = '#0f766e';
 const RECENTLY_DELETED_COLLECTION_NAME = 'Recently Deleted';
-export const RECENTLY_DELETED_COLLECTION_DESCRIPTION = 'Piedras recently deleted notes collection';
+export const RECENTLY_DELETED_COLLECTION_DESCRIPTION = '椰子面试最近删除文件夹';
 const RECENTLY_DELETED_COLLECTION_ICON = 'trash';
 const RECENTLY_DELETED_COLLECTION_COLOR = '#9f1239';
 const RECENTLY_DELETED_COLLECTION_SORT_ORDER = 999;

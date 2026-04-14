@@ -1,0 +1,57 @@
+//
+//  CocoInterviewUITests.swift
+//  CocoInterviewUITests
+//
+//  Created by Guinsoo on 2026/3/17.
+//
+
+import XCTest
+
+final class CocoInterviewUITests: XCTestCase {
+
+    override func setUpWithError() throws {
+        // Put setup code here. This method is called before the invocation of each test method in the class.
+
+        // In UI tests it is usually best to stop immediately when a failure occurs.
+        continueAfterFailure = false
+
+        // In UI tests it’s important to set the initial state - such as interface orientation - required for your tests before they run. The setUp method is a good place to do this.
+        XCUIDevice.shared.orientation = .portrait
+    }
+
+    override func tearDownWithError() throws {
+        // Put teardown code here. This method is called after the invocation of each test method in the class.
+    }
+
+    @MainActor
+    func testExample() throws {
+        // UI tests must launch the application that they test.
+        let app = XCUIApplication()
+        app.launch()
+
+        // Use XCTAssert and related functions to verify your tests produce the correct results.
+    }
+
+    @MainActor
+    func testLaunchPerformance() throws {
+        // This measures how long it takes to launch your application.
+        measure(metrics: [XCTApplicationLaunchMetric()]) {
+            XCUIApplication().launch()
+        }
+    }
+
+    @MainActor
+    func testAuthScreenUsesSingleStepEmailPasswordEntry() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["UITEST_ISOLATED_DEFAULTS"]
+        app.launch()
+
+        XCTAssertTrue(app.secureTextFields["至少 8 位"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["进入"].exists)
+        XCTAssertTrue(app.staticTexts["未注册账号会自动创建并登录"].exists)
+        XCTAssertFalse(app.buttons["登录"].exists)
+        XCTAssertFalse(app.buttons["注册"].exists)
+        XCTAssertFalse(app.buttons["验证码登录"].exists)
+        XCTAssertFalse(app.buttons["发送验证码"].exists)
+    }
+}

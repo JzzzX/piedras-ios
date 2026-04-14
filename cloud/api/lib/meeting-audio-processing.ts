@@ -35,7 +35,7 @@ interface RuntimeQueueState {
 const RECOVERY_INTERVAL_MS = 30_000;
 
 const globalForMeetingAudioProcessing = globalThis as unknown as {
-  __piedrasMeetingAudioProcessingQueue?: RuntimeQueueState;
+  __cocoInterviewMeetingAudioProcessingQueue?: RuntimeQueueState;
 };
 
 export function createMeetingAudioProcessingRuntimeState(): RuntimeQueueState {
@@ -50,12 +50,12 @@ export function createMeetingAudioProcessingRuntimeState(): RuntimeQueueState {
 }
 
 function getRuntimeQueueState(): RuntimeQueueState {
-  if (!globalForMeetingAudioProcessing.__piedrasMeetingAudioProcessingQueue) {
-    globalForMeetingAudioProcessing.__piedrasMeetingAudioProcessingQueue =
+  if (!globalForMeetingAudioProcessing.__cocoInterviewMeetingAudioProcessingQueue) {
+    globalForMeetingAudioProcessing.__cocoInterviewMeetingAudioProcessingQueue =
       createMeetingAudioProcessingRuntimeState();
   }
 
-  return globalForMeetingAudioProcessing.__piedrasMeetingAudioProcessingQueue;
+  return globalForMeetingAudioProcessing.__cocoInterviewMeetingAudioProcessingQueue;
 }
 
 function normalizeProcessingState(value: string | null | undefined): MeetingAudioProcessingState {

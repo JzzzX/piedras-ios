@@ -26,11 +26,11 @@ test('normalizeInviteCode strips spaces and hyphens before comparing', () => {
 });
 
 test('hashPassword produces a verifiable hash for the original password', async () => {
-  const passwordHash = await hashPassword('piedras-demo-123');
+  const passwordHash = await hashPassword('coco-interview-demo-123');
 
-  assert.notEqual(passwordHash, 'piedras-demo-123');
-  assert.equal(await verifyPassword('piedras-demo-123', passwordHash), true);
-  assert.equal(await verifyPassword('piedras-demo-456', passwordHash), false);
+  assert.notEqual(passwordHash, 'coco-interview-demo-123');
+  assert.equal(await verifyPassword('coco-interview-demo-123', passwordHash), true);
+  assert.equal(await verifyPassword('coco-interview-demo-456', passwordHash), false);
 });
 
 test('generateSessionToken creates url-safe random tokens', () => {

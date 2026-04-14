@@ -29,6 +29,7 @@ cloud/**/.env*
 
 # Worktrees
 .worktrees/
+.playwright-cli/
 
 # Local verification artifacts
 tmp-*/

@@ -85,7 +85,7 @@ export function AdminConsole({
       <section className="admin-panel admin-panel-hero">
         <div className="admin-panel-header">
           <div>
-            <div className="admin-eyebrow">Piedras Cloud</div>
+            <div className="admin-eyebrow">椰子面试 Cloud</div>
             <h1 className="admin-title">最小账号后台</h1>
             <p className="admin-subtitle">这里只保留管理员登录、账号列表、服务摘要和密码重置。</p>
           </div>

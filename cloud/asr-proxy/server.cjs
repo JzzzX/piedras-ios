@@ -351,10 +351,10 @@ function makeConnectHeaders() {
 function makeStartPayload(sessionPayload) {
   return {
     user: {
-      uid: `piedras-${crypto.randomUUID()}`,
-      did: 'piedras-ios',
+      uid: `coco-interview-${crypto.randomUUID()}`,
+      did: 'coco-interview-ios',
       platform: 'iOS',
-      sdk_version: 'piedras-proxy/1.0',
+      sdk_version: 'coco-interview-proxy/1.0',
       app_version: '1.0',
     },
     audio: {

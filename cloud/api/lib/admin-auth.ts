@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 
-export const ADMIN_SESSION_COOKIE_NAME = 'piedras_admin_session';
+export const ADMIN_SESSION_COOKIE_NAME = 'coco_interview_admin_session';
 export const ADMIN_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 type VerificationFailureReason = 'expired' | 'malformed' | 'missing' | 'signature_mismatch';

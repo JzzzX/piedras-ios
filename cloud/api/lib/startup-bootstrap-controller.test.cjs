@@ -53,7 +53,7 @@ test('startup bootstrap controller marks ready after a successful retry', async 
           ready: true,
           missingItems: [],
         },
-        legacyUsers: [{ email: 'legacy-main@piedras.local' }],
+        legacyUsers: [{ email: 'legacy-main@coco-interview.local' }],
       };
     },
     retryDelayMS: 1_000,
@@ -74,7 +74,7 @@ test('startup bootstrap controller marks ready after a successful retry', async 
   assert.equal(snapshot.lastError, null);
   assert.equal(snapshot.schemaReady, true);
   assert.deepEqual(snapshot.missingItems, []);
-  assert.deepEqual(snapshot.legacyUsers, ['legacy-main@piedras.local']);
+  assert.deepEqual(snapshot.legacyUsers, ['legacy-main@coco-interview.local']);
   assert.equal(snapshot.retryScheduled, false);
   assert.equal(snapshot.attempts, 2);
 });

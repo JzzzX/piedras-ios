@@ -57,7 +57,7 @@ test('buildRecognitionSnapshot preserves utterance order and definite flags', ()
 test('buildAsrSessionContext keeps the newest business context entries first', () => {
   const context = JSON.parse(
     buildAsrSessionContext({
-      workspaceName: 'Piedras 产品组',
+      workspaceName: '椰子面试产品组',
       meetingTitle: '周一产品评审',
       recentTranscriptTexts: [
         '旧记录 1',
@@ -70,7 +70,7 @@ test('buildAsrSessionContext keeps the newest business context entries first', (
   );
 
   assert.deepEqual(context, {
-    workspace_name: 'Piedras 产品组',
+    workspace_name: '椰子面试产品组',
     meeting_title: '周一产品评审',
     note_summary: '重点关注 ASR 动态纠错和版本排期',
     recent_transcripts: [

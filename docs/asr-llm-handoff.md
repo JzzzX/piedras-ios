@@ -1,8 +1,8 @@
-# Piedras ASR / LLM 技术交接说明
+# 椰子面试 ASR / LLM 技术交接说明
 
 ## 适用范围
 
-本文面向接手 `piedras` 当前服务端 AI 能力的同事，重点覆盖：
+本文面向接手 `CocoInterview` 当前服务端 AI 能力的同事，重点覆盖：
 
 - 实时 ASR 链路
 - 离线补转写链路
@@ -28,16 +28,16 @@
 当前线上域名为：
 
 ```text
-https://piedras.preview.aliyun-zeabur.cn
+https://api.coco-interview.example.com
 ```
 
 `2026-04-01` 实测结果：
 
 ```bash
-curl https://piedras.preview.aliyun-zeabur.cn/healthz
-curl https://piedras.preview.aliyun-zeabur.cn/api/asr/status
-curl https://piedras.preview.aliyun-zeabur.cn/api/llm/status
-curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
+curl https://api.coco-interview.example.com/healthz
+curl https://api.coco-interview.example.com/api/asr/status
+curl https://api.coco-interview.example.com/api/llm/status
+curl https://api.coco-interview.example.com/asr-proxy/healthz
 ```
 
 返回均正常，其中：
@@ -51,23 +51,23 @@ curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
 
 当前 Zeabur 账号下至少存在两个相关项目：
 
-- `piedras`
-- `piedras-asr`
+- `CocoInterview`
+- `coco-interview-asr`
 
 其中与线上域名真正对应的是：
 
-- Project: `piedras`
-- Service: `piedras-ios`
+- Project: `CocoInterview`
+- Service: `coco-interview-ios`
 - Root Directory: `cloud/api`
-- Domain: `piedras.preview.aliyun-zeabur.cn`
+- Domain: `api.coco-interview.example.com`
 
 另外还有一个独立项目：
 
-- Project: `piedras-asr`
-- Service: `piedras-asr`
+- Project: `coco-interview-asr`
+- Service: `coco-interview-asr`
 - Root Directory: `cloud/asr-proxy`
 
-但截至本次核查，这个独立 `piedras-asr` 服务表现更像历史遗留资源，而不是当前正式流量入口：
+但截至本次核查，这个独立 `coco-interview-asr` 服务表现更像历史遗留资源，而不是当前正式流量入口：
 
 - 没有查到域名
 - 没有查到部署记录
@@ -75,7 +75,7 @@ curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
 
 ### 3. 文档推荐形态与真实运行形态不完全一致
 
-仓库内 [cloud-deployment.md](/Users/a123456/Desktop/piedras/docs/cloud-deployment.md) 推荐的是“单入口 Zeabur 承载 `cloud/api + ASR proxy`”。
+仓库内 [cloud-deployment.md](docs/cloud-deployment.md) 推荐的是“单入口 Zeabur 承载 `cloud/api + ASR proxy`”。
 
 当前线上实际情况更接近：
 
@@ -91,7 +91,7 @@ curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
 
 本次通过 Zeabur deployment 看到：
 
-- 当前线上 `piedras-ios` 最新部署 commit 为 `f197063b54fe02c6e487c6473dbd1c8ee7a11d0d`
+- 当前线上 `coco-interview-ios` 最新部署 commit 为 `f197063b54fe02c6e487c6473dbd1c8ee7a11d0d`
 - commit message 为 `fix(audio): 兼容 m4a 输入`
 - 创建时间为 `2026-03-31T12:42:18Z`
 
@@ -122,9 +122,9 @@ curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
 
 关键代码：
 
-- [asr.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/asr.ts)
-- [route.ts](/Users/a123456/Desktop/piedras/cloud/api/app/api/asr/session/route.ts)
-- [server.cjs](/Users/a123456/Desktop/piedras/cloud/api/server.cjs)
+- [asr.ts](../cloud/api/lib/asr.ts)
+- [route.ts](../cloud/api/app/api/asr/session/route.ts)
+- [server.cjs](../cloud/api/server.cjs)
 
 ### 实时 ASR 的几个关键依赖
 
@@ -144,7 +144,7 @@ curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
 - `POST /api/asr/session` 在签发 session 之前，会先探测公网 `ASR_PROXY_PUBLIC_BASE_URL + ASR_PROXY_HEALTH_PATH`
 - 如果这个回探失败，session 不会签发，即使豆包凭据本身没问题
 
-对应代码见 [asr.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/asr.ts#L158) 和 [route.ts](/Users/a123456/Desktop/piedras/cloud/api/app/api/asr/session/route.ts#L175)。
+对应代码见 [asr.ts](../cloud/api/lib/asr.ts#L158) 和 [route.ts](../cloud/api/app/api/asr/session/route.ts#L175)。
 
 ### 这条链路为什么“看起来容易不稳定”
 
@@ -170,8 +170,8 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 
 关键代码：
 
-- [ASRService.swift](/Users/a123456/Desktop/piedras/piedras/Services/Network/ASRService.swift#L28)
-- [MeetingStore.swift](/Users/a123456/Desktop/piedras/piedras/Stores/MeetingStore.swift#L2703)
+- [ASRService.swift](../CocoInterview/Services/Network/ASRService.swift#L28)
+- [MeetingStore.swift](../CocoInterview/Stores/MeetingStore.swift#L2703)
 
 所以排障时要区分两类问题：
 
@@ -190,15 +190,15 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 
 关键代码：
 
-- [meeting-transcript-finalizer.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/meeting-transcript-finalizer.ts)
-- [audio route.ts](/Users/a123456/Desktop/piedras/cloud/api/app/api/meetings/[id]/audio/route.ts)
+- [meeting-transcript-finalizer.ts](../cloud/api/lib/meeting-transcript-finalizer.ts)
+- [audio route.ts](../cloud/api/app/api/meetings/[id]/audio/route.ts)
 
 ### 离线补转写的关键依赖
 
 - 运行环境里必须有 `ffmpeg`
 - 需要 `VOLCENGINE_FILE_ASR_*` 或复用 `DOUBAO_ASR_*`
 
-当前 `cloud/api/Dockerfile` 已显式安装 `ffmpeg`，见 [Dockerfile](/Users/a123456/Desktop/piedras/cloud/api/Dockerfile)。
+当前 `cloud/api/Dockerfile` 已显式安装 `ffmpeg`，见 [Dockerfile](../cloud/api/Dockerfile)。
 
 ### 已知注意点
 
@@ -222,9 +222,9 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 
 关键代码：
 
-- [llm-config.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/llm-config.ts)
-- [llm-provider.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/llm-provider.ts)
-- [llm-health.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/llm-health.ts)
+- [llm-config.ts](../cloud/api/lib/llm-config.ts)
+- [llm-provider.ts](../cloud/api/lib/llm-provider.ts)
+- [llm-health.ts](../cloud/api/lib/llm-health.ts)
 
 ### 当前线上环境变量的实际含义
 
@@ -259,7 +259,7 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 - 长音频转码链路是否稳定
 - 高峰时段 AiHubMix 上游是否抖动
 
-对应代码见 [llm-health.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/llm-health.ts#L106) 和 [llm-provider.ts](/Users/a123456/Desktop/piedras/cloud/api/lib/llm-provider.ts#L715)。
+对应代码见 [llm-health.ts](../cloud/api/lib/llm-health.ts#L106) 和 [llm-provider.ts](../cloud/api/lib/llm-provider.ts#L715)。
 
 ## 音频 AI 笔记实验已下线
 
@@ -343,16 +343,16 @@ iOS 端并不是“实时 ASR 一失败，录音就报废”。
 推荐命令：
 
 ```bash
-curl https://piedras.preview.aliyun-zeabur.cn/healthz
-curl https://piedras.preview.aliyun-zeabur.cn/api/asr/status
-curl https://piedras.preview.aliyun-zeabur.cn/api/llm/status
-curl https://piedras.preview.aliyun-zeabur.cn/asr-proxy/healthz
+curl https://api.coco-interview.example.com/healthz
+curl https://api.coco-interview.example.com/api/asr/status
+curl https://api.coco-interview.example.com/api/llm/status
+curl https://api.coco-interview.example.com/asr-proxy/healthz
 ```
 
 如果要验证实时 ASR：
 
 ```bash
-node scripts/asr_smoke_test.mjs tmp-asr-sample.wav https://piedras.preview.aliyun-zeabur.cn <bearer-token>
+node scripts/asr_smoke_test.mjs tmp-asr-sample.wav https://api.coco-interview.example.com <bearer-token>
 ```
 
 ## Zeabur 接手清单
@@ -361,8 +361,8 @@ node scripts/asr_smoke_test.mjs tmp-asr-sample.wav https://piedras.preview.aliyu
 
 ### 服务与流量
 
-- `piedras.preview.aliyun-zeabur.cn` 现在究竟绑定哪个 service
-- `piedras-asr` 是否已经完全废弃
+- `api.coco-interview.example.com` 现在究竟绑定哪个 service
+- `coco-interview-asr` 是否已经完全废弃
 - 是否还存在团队成员误以为线上是双服务架构
 
 ### 部署版本
@@ -395,7 +395,7 @@ node scripts/asr_smoke_test.mjs tmp-asr-sample.wav https://piedras.preview.aliyu
 2. 再次确认 Zeabur 上真正在线的 service、domain、deployment
 3. 固化一份当前线上环境变量清单，只记录 key，不记录 secret 值
 4. 用一个小音频跑通实时 ASR smoke test
-5. 决定是否正式下线 `piedras-asr` 这个独立项目，避免后续认知混乱
+5. 决定是否正式下线 `coco-interview-asr` 这个独立项目，避免后续认知混乱
 
 ## 最后提醒
 
