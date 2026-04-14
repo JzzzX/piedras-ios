@@ -10,8 +10,12 @@ private final class StubAuthClient: AuthNetworking {
     var emailOTPRegisterResult: Result<RemoteAuthResponse, Error> = .failure(APIClientError.invalidResponse)
     var refreshResult: Result<RemoteAuthResponse, Error> = .failure(APIClientError.invalidResponse)
     var sessionResult: Result<RemoteAuthSessionState, Error> = .failure(APIClientError.invalidResponse)
+    var oauthAuthorizationURLResult: Result<URL, Error> = .failure(APIClientError.invalidResponse)
+    var oauthCallbackResult: Result<RemoteAuthResponse, Error> = .failure(APIClientError.invalidResponse)
     var fetchAuthSessionCallCount = 0
     var logoutCallCount = 0
+    var requestedOAuthProvider: OAuthProvider?
+    var completedOAuthPayload: Data?
     var requestedPasswordResetEmail: String?
     var requestedVerificationEmail: String?
     var requestedOTPEmail: String?
@@ -45,6 +49,16 @@ private final class StubAuthClient: AuthNetworking {
 
     func registerWithEmailOTP(email: String, token: String) async throws -> RemoteAuthResponse {
         try emailOTPRegisterResult.get()
+    }
+
+    func fetchOAuthAuthorizationURL(provider: OAuthProvider) async throws -> URL {
+        requestedOAuthProvider = provider
+        return try oauthAuthorizationURLResult.get()
+    }
+
+    func completeOAuthCallbackPayload(_ payload: Data) async throws -> RemoteAuthResponse {
+        completedOAuthPayload = payload
+        return try oauthCallbackResult.get()
     }
 
     func setPassword(password: String) async throws {
@@ -103,6 +117,62 @@ private final class InMemoryAuthSessionSnapshotStoreTestsDouble: AuthSessionSnap
 }
 
 struct AuthStoreTests {
+    @MainActor
+    @Test
+    func beginOAuthLoadsWechatAuthorizationURLAndStoresSheetSession() async {
+        let apiClient = StubAuthClient()
+        let tokenStore = InMemoryAuthTokenStoreTestsDouble()
+        let store = AuthStore(apiClient: apiClient, tokenStore: tokenStore)
+        apiClient.oauthAuthorizationURLResult = .success(
+            URL(string: "https://open.weixin.qq.com/connect/oauth2/authorize?state=test-state")!
+        )
+
+        let didStart = await store.beginOAuth(provider: .wechat)
+
+        #expect(didStart == true)
+        #expect(apiClient.requestedOAuthProvider == .wechat)
+        #expect(store.activeOAuthSession?.provider == .wechat)
+        #expect(
+            store.activeOAuthSession?.authorizationURL.absoluteString
+                == "https://open.weixin.qq.com/connect/oauth2/authorize?state=test-state"
+        )
+        #expect(store.phase == .unauthenticated)
+    }
+
+    @MainActor
+    @Test
+    func completeOAuthCallbackAuthenticatesStoreAndPersistsTokens() async {
+        let apiClient = StubAuthClient()
+        let tokenStore = InMemoryAuthTokenStoreTestsDouble()
+        let store = AuthStore(apiClient: apiClient, tokenStore: tokenStore)
+        store.activeOAuthSession = AuthWebSession(
+            provider: .wechat,
+            authorizationURL: URL(string: "https://open.weixin.qq.com/connect/oauth2/authorize?state=test-state")!
+        )
+        apiClient.oauthCallbackResult = .success(
+            RemoteAuthResponse(
+                user: .init(id: "user-wechat", email: "wechat@coco.local", displayName: "微信用户"),
+                workspace: .init(id: "workspace-wechat", name: "椰子面试"),
+                session: .init(
+                    token: "wechat-access-token",
+                    refreshToken: "wechat-refresh-token",
+                    expiresAt: Date(timeIntervalSince1970: 2_000)
+                )
+            )
+        )
+
+        let didAuthenticate = await store.completeOAuthCallbackPayload(Data("callback".utf8))
+
+        #expect(didAuthenticate == true)
+        #expect(apiClient.completedOAuthPayload == Data("callback".utf8))
+        #expect(store.phase == .authenticated)
+        #expect(store.currentUser?.displayName == "微信用户")
+        #expect(store.currentWorkspace?.id == "workspace-wechat")
+        #expect(store.activeOAuthSession == nil)
+        #expect(tokenStore.sessionToken == "wechat-access-token")
+        #expect(tokenStore.refreshToken == "wechat-refresh-token")
+    }
+
     @MainActor
     @Test
     func hydrateCachedSessionAuthenticatesImmediatelyWhenRefreshTokenExists() async {

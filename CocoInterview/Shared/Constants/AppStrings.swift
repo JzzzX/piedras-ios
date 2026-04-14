@@ -320,7 +320,16 @@ struct AppStringTable {
     var authLoginTab: String { isChinese ? "登录" : "Sign In" }
     var authRegisterTab: String { isChinese ? "注册" : "Register" }
     var authSingleStepAction: String { isChinese ? "进入" : "Continue" }
-    var authSingleStepHint: String { isChinese ? "未注册账号会自动创建并登录" : "If this email is new, we'll create the account and sign you in." }
+    var authSingleStepHint: String { isChinese ? "建议先使用已开通的椰子账号密码登录" : "Use an existing Coco account password to sign in for now." }
+    var authOAuthHeadline: String { isChinese ? "先用微信进入椰子体系" : "Start with WeChat" }
+    var authOAuthSubheadline: String { isChinese ? "优先使用微信登录；如果你的账号已开通邮箱密码，也可以直接用下方表单进入。" : "Use WeChat as the primary sign-in flow. If your account already has email access, the password form below still works." }
+    var authWechatAction: String { isChinese ? "微信登录" : "Continue with WeChat" }
+    var authGoogleAction: String { isChinese ? "Google 登录" : "Continue with Google" }
+    var authFallbackDivider: String { isChinese ? "或使用已有账号密码" : "Or sign in with email password" }
+    var authOAuthSheetTitle: String { isChinese ? "账号授权" : "Account authorization" }
+    var authOAuthLoading: String { isChinese ? "正在完成登录..." : "Finishing sign-in..." }
+    var authOAuthCancelAction: String { isChinese ? "取消授权" : "Cancel" }
+    var authOAuthReadFailed: String { isChinese ? "未能读取授权结果，请返回后重试。" : "Could not read the authorization result. Please go back and try again." }
     var authPasswordLoginTab: String { isChinese ? "密码登录" : "Password" }
     var authCodeLoginTab: String { isChinese ? "验证码登录" : "One-time code" }
     var authLoginAction: String { isChinese ? "登录并进入" : "Sign In" }

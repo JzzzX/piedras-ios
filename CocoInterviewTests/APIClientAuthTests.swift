@@ -43,54 +43,218 @@ private final class APIClientAuthMockURLProtocol: URLProtocol {
 struct APIClientAuthTests {
     @MainActor
     @Test
-    func fetchAuthSessionSendsBearerTokenHeader() async throws {
+    func fetchWechatAuthURLUsesDedicatedEndpointWithoutBearerToken() async throws {
         APIClientAuthMockURLProtocol.reset()
         defer { APIClientAuthMockURLProtocol.reset() }
 
-        let suiteName = "cocointerview.tests.auth.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: defaults,
-            debugDefaultBackendBaseURLString: "https://example.com"
-        )
-        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        let (client, _, tokenStore) = makeClient()
         tokenStore.sessionToken = "session-token"
 
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
-        let client = APIClient(
-            settingsStore: settingsStore,
-            authTokenStore: tokenStore,
-            session: URLSession(configuration: configuration)
-        )
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            try jsonResponse(
+                request,
+                """
+                {
+                  "success": true,
+                  "data": {
+                    "authUrl": "https://open.weixin.qq.com/connect/oauth2/authorize?state=test-state"
+                  }
+                }
+                """
+            )
+        }
+
+        let authURL = try await client.fetchOAuthAuthorizationURL(provider: .wechat)
+
+        #expect(authURL.absoluteString == "https://open.weixin.qq.com/connect/oauth2/authorize?state=test-state")
+        #expect(APIClientAuthMockURLProtocol.requests.count == 1)
+        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/v1/auth/wechat/auth-url")
+        #expect(APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @MainActor
+    @Test
+    func completeOAuthCallbackPayloadDecodesWrappedAuthResponseAndBootstrapsWorkspace() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let (client, _, _) = makeClient()
 
         APIClientAuthMockURLProtocol.requestHandler = { request in
-            let response = try #require(
-                HTTPURLResponse(
-                    url: request.url ?? URL(string: "https://example.com")!,
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "application/json"]
-                )
-            )
-            let payload = """
-            {
-              "user": { "id": "user-1", "email": "test@example.com" },
-              "workspace": { "id": "workspace-1", "name": "椰子面试" },
-              "session": { "expiresAt": "2026-03-27T10:00:00.000Z" }
+            switch request.url?.path {
+            case "/api/v1/interview/workspaces":
+                return try jsonResponse(request, #"[{ "id": "workspace-oauth", "name": "椰子面试 iOS" }]"#)
+            default:
+                throw URLError(.badServerResponse)
             }
+        }
+
+        let payload = Data(
             """
-            return (response, Data(payload.utf8))
+            {
+              "success": true,
+              "data": {
+                "user": {
+                  "id": "user-wechat",
+                  "email": null,
+                  "phone": null,
+                  "userMetadata": {
+                    "nickname": "微信用户"
+                  }
+                },
+                "accessToken": "wechat-access-token",
+                "accessTokenExpiresAt": "2026-04-14T11:00:00.000Z",
+                "refreshToken": "wechat-refresh-token",
+                "refreshTokenExpiresAt": "2026-05-14T10:00:00.000Z",
+                "session": {
+                  "id": "session-1",
+                  "jti": "session-1",
+                  "createdAt": "2026-04-14T10:00:00.000Z",
+                  "expiresAt": "2026-05-14T10:00:00.000Z",
+                  "lastActivityAt": "2026-04-14T10:00:00.000Z"
+                }
+              }
+            }
+            """.utf8
+        )
+
+        let response = try await client.completeOAuthCallbackPayload(payload)
+
+        #expect(response.user.id == "user-wechat")
+        #expect(response.user.displayName == "微信用户")
+        #expect(response.workspace.id == "workspace-oauth")
+        #expect(response.session.token == "wechat-access-token")
+        #expect(response.session.refreshToken == "wechat-refresh-token")
+        #expect(APIClientAuthMockURLProtocol.requests.map(\.url?.path) == [
+            "/api/v1/interview/workspaces",
+        ])
+        #expect(
+            APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
+                == "Bearer wechat-access-token"
+        )
+    }
+
+    @MainActor
+    @Test
+    func loginUsesUnifiedAuthEndpointAndBootstrapsWorkspace() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let (client, _, _) = makeClient()
+
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            let path = request.url?.path
+            switch path {
+            case "/api/v1/auth":
+                return try jsonResponse(
+                    request,
+                    """
+                    {
+                      "success": true,
+                      "data": {
+                        "user": {
+                          "id": "user-1",
+                          "email": "test@example.com",
+                          "phone": null,
+                          "emailVerified": true,
+                          "phoneVerified": false,
+                          "role": "user",
+                          "isActive": true,
+                          "isAnonymous": false,
+                          "createdAt": "2026-04-14T10:00:00.000Z",
+                          "updatedAt": "2026-04-14T10:00:00.000Z"
+                        },
+                        "accessToken": "new-session-token",
+                        "accessTokenExpiresAt": "2026-04-14T11:00:00.000Z",
+                        "refreshToken": "new-refresh-token",
+                        "refreshTokenExpiresAt": "2026-05-14T10:00:00.000Z",
+                        "session": {
+                          "id": "session-1",
+                          "jti": "session-1",
+                          "createdAt": "2026-04-14T10:00:00.000Z",
+                          "expiresAt": "2026-05-14T10:00:00.000Z",
+                          "lastActivityAt": "2026-04-14T10:00:00.000Z"
+                        }
+                      }
+                    }
+                    """
+                )
+            case "/api/v1/interview/workspaces":
+                return try jsonResponse(request, #"[{ "id": "workspace-1", "name": "椰子面试 iOS" }]"#)
+            default:
+                throw URLError(.badServerResponse)
+            }
+        }
+
+        let response = try await client.login(email: "test@example.com", password: "password-123")
+
+        #expect(response.user.email == "test@example.com")
+        #expect(response.workspace.id == "workspace-1")
+        #expect(response.session.token == "new-session-token")
+        #expect(response.session.refreshToken == "new-refresh-token")
+        #expect(APIClientAuthMockURLProtocol.requests.map(\.url?.path) == [
+            "/api/v1/auth",
+            "/api/v1/interview/workspaces",
+        ])
+        #expect(APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @MainActor
+    @Test
+    func fetchAuthSessionUsesUserServiceAndCreatesWorkspaceWhenNeeded() async throws {
+        APIClientAuthMockURLProtocol.reset()
+        defer { APIClientAuthMockURLProtocol.reset() }
+
+        let (client, _, tokenStore) = makeClient()
+        tokenStore.sessionToken = "session-token"
+
+        APIClientAuthMockURLProtocol.requestHandler = { request in
+            let path = request.url?.path
+            switch path {
+            case "/api/v1/user/users/me":
+                return try jsonResponse(
+                    request,
+                    """
+                    {
+                      "success": true,
+                      "data": {
+                        "id": "user-1",
+                        "email": "test@example.com",
+                        "phone": null,
+                        "nickname": "测试用户",
+                        "avatar": null,
+                        "role": "user",
+                        "paymentTier": "free",
+                        "createdAt": "2026-04-14T10:00:00.000Z",
+                        "updatedAt": "2026-04-14T10:00:00.000Z"
+                      }
+                    }
+                    """
+                )
+            case "/api/v1/interview/workspaces":
+                if request.httpMethod == "GET" {
+                    return try jsonResponse(request, "[]")
+                }
+                return try jsonResponse(request, #"{ "id": "workspace-ios", "name": "椰子面试 iOS" }"#, statusCode: 201)
+            default:
+                throw URLError(.badServerResponse)
+            }
         }
 
         let sessionState = try await client.fetchAuthSession()
 
         #expect(sessionState.user.email == "test@example.com")
-        #expect(APIClientAuthMockURLProtocol.requests.count == 1)
+        #expect(sessionState.user.displayName == "测试用户")
+        #expect(sessionState.workspace.id == "workspace-ios")
+        #expect(APIClientAuthMockURLProtocol.requests.map(\.url?.path) == [
+            "/api/v1/user/users/me",
+            "/api/v1/interview/workspaces",
+            "/api/v1/interview/workspaces",
+        ])
         #expect(
-            APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
-                == "Bearer session-token"
+            APIClientAuthMockURLProtocol.requests.allSatisfy {
+                $0.value(forHTTPHeaderField: "Authorization") == "Bearer session-token"
+            }
         )
     }
 
@@ -100,56 +264,61 @@ struct APIClientAuthTests {
         APIClientAuthMockURLProtocol.reset()
         defer { APIClientAuthMockURLProtocol.reset() }
 
-        let suiteName = "cocointerview.tests.auth.refresh.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: defaults,
-            debugDefaultBackendBaseURLString: "https://example.com"
-        )
-        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        let (client, _, tokenStore) = makeClient()
         tokenStore.sessionToken = "expired-session-token"
 
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
-        let client = APIClient(
-            settingsStore: settingsStore,
-            authTokenStore: tokenStore,
-            session: URLSession(configuration: configuration)
-        )
-
         APIClientAuthMockURLProtocol.requestHandler = { request in
-            let response = try #require(
-                HTTPURLResponse(
-                    url: request.url ?? URL(string: "https://example.com")!,
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "application/json"]
+            let path = request.url?.path
+            switch path {
+            case "/api/v1/auth/token/refresh":
+                return try jsonResponse(
+                    request,
+                    """
+                    {
+                      "success": true,
+                      "data": {
+                        "user": {
+                          "id": "user-1",
+                          "email": "test@example.com",
+                          "phone": null,
+                          "emailVerified": true,
+                          "phoneVerified": false,
+                          "role": "user",
+                          "isActive": true,
+                          "isAnonymous": false,
+                          "createdAt": "2026-04-14T10:00:00.000Z",
+                          "updatedAt": "2026-04-14T10:00:00.000Z"
+                        },
+                        "accessToken": "fresh-session-token",
+                        "accessTokenExpiresAt": "2026-04-14T11:00:00.000Z",
+                        "refreshToken": "fresh-refresh-token",
+                        "refreshTokenExpiresAt": "2026-05-14T10:00:00.000Z",
+                        "session": {
+                          "id": "session-1",
+                          "jti": "session-1",
+                          "createdAt": "2026-04-14T10:00:00.000Z",
+                          "expiresAt": "2026-05-14T10:00:00.000Z",
+                          "lastActivityAt": "2026-04-14T10:00:00.000Z"
+                        }
+                      }
+                    }
+                    """
                 )
-            )
-            let payload = """
-            {
-              "user": { "id": "user-1", "email": "test@example.com" },
-              "workspace": { "id": "workspace-1", "name": "椰子面试" },
-              "session": {
-                "token": "new-session-token",
-                "refreshToken": "new-refresh-token",
-                "expiresAt": "2026-03-27T10:00:00.000Z"
-              },
-              "requiresEmailVerification": false,
-              "verificationEmail": null
+            case "/api/v1/interview/workspaces":
+                return try jsonResponse(request, #"[{ "id": "workspace-1", "name": "椰子面试" }]"#)
+            default:
+                throw URLError(.badServerResponse)
             }
-            """
-            return (response, Data(payload.utf8))
         }
 
-        _ = try await client.refreshAuthSession(refreshToken: "refresh-token")
+        let response = try await client.refreshAuthSession(refreshToken: "refresh-token")
 
-        #expect(APIClientAuthMockURLProtocol.requests.count == 1)
-        #expect(
-            APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
-                == nil
-        )
+        #expect(response.workspace.id == "workspace-1")
+        #expect(APIClientAuthMockURLProtocol.requests.map(\.url?.path) == [
+            "/api/v1/auth/token/refresh",
+            "/api/v1/interview/workspaces",
+        ])
+        #expect(APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
     @MainActor
@@ -158,40 +327,26 @@ struct APIClientAuthTests {
         APIClientAuthMockURLProtocol.reset()
         defer { APIClientAuthMockURLProtocol.reset() }
 
-        let suiteName = "cocointerview.tests.auth.otp.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: defaults,
-            debugDefaultBackendBaseURLString: "https://example.com"
-        )
-        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        let (client, _, tokenStore) = makeClient()
         tokenStore.sessionToken = "session-token"
 
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
-        let client = APIClient(
-            settingsStore: settingsStore,
-            authTokenStore: tokenStore,
-            session: URLSession(configuration: configuration)
-        )
-
         APIClientAuthMockURLProtocol.requestHandler = { request in
-            let response = try #require(
-                HTTPURLResponse(
-                    url: request.url ?? URL(string: "https://example.com")!,
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "application/json"]
-                )
+            try jsonResponse(
+                request,
+                """
+                {
+                  "success": true,
+                  "message": "OTP sent",
+                  "data": { "expiresIn": 300 }
+                }
+                """
             )
-            return (response, Data("{}".utf8))
         }
 
         try await client.sendEmailOTP(email: "otp@example.com", intent: .register)
 
         #expect(APIClientAuthMockURLProtocol.requests.count == 1)
-        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/auth/email-otp/send")
+        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/v1/auth/otp/send")
         #expect(APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization") == nil)
     }
 
@@ -201,34 +356,11 @@ struct APIClientAuthTests {
         APIClientAuthMockURLProtocol.reset()
         defer { APIClientAuthMockURLProtocol.reset() }
 
-        let suiteName = "cocointerview.tests.auth.workspace-header.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: defaults,
-            debugDefaultBackendBaseURLString: "https://example.com"
-        )
-        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        let (client, _, tokenStore) = makeClient()
         tokenStore.sessionToken = "session-token"
 
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
-        let client = APIClient(
-            settingsStore: settingsStore,
-            authTokenStore: tokenStore,
-            session: URLSession(configuration: configuration)
-        )
-
         APIClientAuthMockURLProtocol.requestHandler = { request in
-            let response = try #require(
-                HTTPURLResponse(
-                    url: request.url ?? URL(string: "https://example.com")!,
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "application/json"]
-                )
-            )
-            return (response, Data("[]".utf8))
+            try jsonResponse(request, "[]")
         }
 
         _ = try await client.listMeetings(workspaceID: "workspace-project")
@@ -237,6 +369,7 @@ struct APIClientAuthTests {
             APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "X-Workspace-Id")
                 == "workspace-project"
         )
+        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/v1/interview/meetings")
     }
 
     @MainActor
@@ -245,67 +378,63 @@ struct APIClientAuthTests {
         APIClientAuthMockURLProtocol.reset()
         defer { APIClientAuthMockURLProtocol.reset() }
 
-        let suiteName = "cocointerview.tests.auth.retry.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: defaults,
-            debugDefaultBackendBaseURLString: "https://example.com"
-        )
-        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        let (client, _, tokenStore) = makeClient()
         tokenStore.sessionToken = "expired-session-token"
         tokenStore.refreshToken = "refresh-token-1"
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
-        let client = APIClient(
-            settingsStore: settingsStore,
-            authTokenStore: tokenStore,
-            session: URLSession(configuration: configuration)
-        )
 
         APIClientAuthMockURLProtocol.requestHandler = { request in
             let path = request.url?.path
             switch path {
-            case "/api/meetings":
-                let requestCount = APIClientAuthMockURLProtocol.requests.filter { $0.url?.path == "/api/meetings" }.count
-                let statusCode = requestCount == 1 ? 401 : 200
-                let response = try #require(
-                    HTTPURLResponse(
-                        url: request.url ?? URL(string: "https://example.com/api/meetings")!,
-                        statusCode: statusCode,
-                        httpVersion: nil,
-                        headerFields: ["Content-Type": "application/json"]
+            case "/api/v1/interview/meetings":
+                let requestCount = APIClientAuthMockURLProtocol.requests.filter {
+                    $0.url?.path == "/api/v1/interview/meetings"
+                }.count
+                if requestCount == 1 {
+                    return try jsonResponse(
+                        request,
+                        #"{"error":{"message":"登录态已失效，请重新登录"}}"#,
+                        statusCode: 401
                     )
-                )
-                let payload = statusCode == 401
-                    ? #"{"error":"登录态已失效，请重新登录"}"#
-                    : "[]"
-                return (response, Data(payload.utf8))
-
-            case "/api/auth/refresh":
-                let response = try #require(
-                    HTTPURLResponse(
-                        url: request.url ?? URL(string: "https://example.com/api/auth/refresh")!,
-                        statusCode: 200,
-                        httpVersion: nil,
-                        headerFields: ["Content-Type": "application/json"]
-                    )
-                )
-                let payload = """
-                {
-                  "user": { "id": "user-1", "email": "test@example.com" },
-                  "workspace": { "id": "workspace-1", "name": "椰子面试" },
-                  "session": {
-                    "token": "fresh-session-token",
-                    "refreshToken": "refresh-token-2",
-                    "expiresAt": "2026-03-27T10:00:00.000Z"
-                  },
-                  "requiresEmailVerification": false,
-                  "verificationEmail": null
                 }
-                """
-                return (response, Data(payload.utf8))
+                return try jsonResponse(request, "[]")
+
+            case "/api/v1/auth/token/refresh":
+                return try jsonResponse(
+                    request,
+                    """
+                    {
+                      "success": true,
+                      "data": {
+                        "user": {
+                          "id": "user-1",
+                          "email": "test@example.com",
+                          "phone": null,
+                          "emailVerified": true,
+                          "phoneVerified": false,
+                          "role": "user",
+                          "isActive": true,
+                          "isAnonymous": false,
+                          "createdAt": "2026-04-14T10:00:00.000Z",
+                          "updatedAt": "2026-04-14T10:00:00.000Z"
+                        },
+                        "accessToken": "fresh-session-token",
+                        "accessTokenExpiresAt": "2026-04-14T11:00:00.000Z",
+                        "refreshToken": "refresh-token-2",
+                        "refreshTokenExpiresAt": "2026-05-14T10:00:00.000Z",
+                        "session": {
+                          "id": "session-1",
+                          "jti": "session-1",
+                          "createdAt": "2026-04-14T10:00:00.000Z",
+                          "expiresAt": "2026-05-14T10:00:00.000Z",
+                          "lastActivityAt": "2026-04-14T10:00:00.000Z"
+                        }
+                      }
+                    }
+                    """
+                )
+
+            case "/api/v1/interview/workspaces":
+                return try jsonResponse(request, #"[{ "id": "workspace-1", "name": "椰子面试" }]"#)
 
             default:
                 throw URLError(.badServerResponse)
@@ -315,10 +444,11 @@ struct APIClientAuthTests {
         let meetings = try await client.listMeetings(workspaceID: "workspace-project")
 
         #expect(meetings.isEmpty)
-        #expect(APIClientAuthMockURLProtocol.requests.map { $0.url?.path } == [
-            "/api/meetings",
-            "/api/auth/refresh",
-            "/api/meetings",
+        #expect(APIClientAuthMockURLProtocol.requests.map(\.url?.path) == [
+            "/api/v1/interview/meetings",
+            "/api/v1/auth/token/refresh",
+            "/api/v1/interview/workspaces",
+            "/api/v1/interview/meetings",
         ])
         #expect(
             APIClientAuthMockURLProtocol.requests.last?.value(forHTTPHeaderField: "Authorization")
@@ -330,73 +460,12 @@ struct APIClientAuthTests {
 
     @MainActor
     @Test
-    func setPasswordUsesAuthenticatedEndpoint() async throws {
-        APIClientAuthMockURLProtocol.reset()
-        defer { APIClientAuthMockURLProtocol.reset() }
-
-        let suiteName = "cocointerview.tests.auth.password-set.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: defaults,
-            debugDefaultBackendBaseURLString: "https://example.com"
-        )
-        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
-        tokenStore.sessionToken = "session-token"
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
-        let client = APIClient(
-            settingsStore: settingsStore,
-            authTokenStore: tokenStore,
-            session: URLSession(configuration: configuration)
-        )
-
-        APIClientAuthMockURLProtocol.requestHandler = { request in
-            let response = try #require(
-                HTTPURLResponse(
-                    url: request.url ?? URL(string: "https://example.com")!,
-                    statusCode: 200,
-                    httpVersion: nil,
-                    headerFields: ["Content-Type": "application/json"]
-                )
-            )
-            return (response, Data("{}".utf8))
-        }
-
-        try await client.setPassword(password: "password-123")
-
-        #expect(APIClientAuthMockURLProtocol.requests.count == 1)
-        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/auth/password/set")
-        #expect(
-            APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
-                == "Bearer session-token"
-        )
-    }
-
-    @MainActor
-    @Test
     func downloadAuthenticatedDataUsesBearerTokenHeader() async throws {
         APIClientAuthMockURLProtocol.reset()
         defer { APIClientAuthMockURLProtocol.reset() }
 
-        let suiteName = "cocointerview.tests.auth.download.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: defaults,
-            debugDefaultBackendBaseURLString: "https://example.com"
-        )
-        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        let (client, _, tokenStore) = makeClient()
         tokenStore.sessionToken = "session-token"
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
-        let client = APIClient(
-            settingsStore: settingsStore,
-            authTokenStore: tokenStore,
-            session: URLSession(configuration: configuration)
-        )
 
         APIClientAuthMockURLProtocol.requestHandler = { request in
             let response = try #require(
@@ -411,12 +480,12 @@ struct APIClientAuthTests {
         }
 
         let data = try await client.downloadAuthenticatedData(
-            fromAbsoluteURLString: "https://example.com/api/meetings/meeting-1/audio"
+            fromAbsoluteURLString: "https://example.com/api/v1/interview/meetings/meeting-1/audio"
         )
 
         #expect(String(decoding: data, as: UTF8.self) == "audio-data")
         #expect(APIClientAuthMockURLProtocol.requests.count == 1)
-        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/meetings/meeting-1/audio")
+        #expect(APIClientAuthMockURLProtocol.requests.first?.url?.path == "/api/v1/interview/meetings/meeting-1/audio")
         #expect(
             APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
                 == "Bearer session-token"
@@ -429,23 +498,8 @@ struct APIClientAuthTests {
         APIClientAuthMockURLProtocol.reset()
         defer { APIClientAuthMockURLProtocol.reset() }
 
-        let suiteName = "cocointerview.tests.auth.download-relative.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suiteName)!
-        defaults.removePersistentDomain(forName: suiteName)
-        let settingsStore = SettingsStore(
-            defaults: defaults,
-            debugDefaultBackendBaseURLString: "https://example.com"
-        )
-        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+        let (client, _, tokenStore) = makeClient()
         tokenStore.sessionToken = "session-token"
-
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
-        let client = APIClient(
-            settingsStore: settingsStore,
-            authTokenStore: tokenStore,
-            session: URLSession(configuration: configuration)
-        )
 
         APIClientAuthMockURLProtocol.requestHandler = { request in
             let url = try #require(request.url)
@@ -461,18 +515,56 @@ struct APIClientAuthTests {
         }
 
         let data = try await client.downloadAuthenticatedData(
-            fromAbsoluteURLString: "/api/meetings/meeting-1/attachments/attachment-1"
+            fromAbsoluteURLString: "/api/v1/interview/meetings/meeting-1/attachments/attachment-1"
         )
 
         #expect(String(decoding: data, as: UTF8.self) == "attachment")
         #expect(APIClientAuthMockURLProtocol.requests.count == 1)
         #expect(
             APIClientAuthMockURLProtocol.requests.first?.url?.absoluteString
-                == "https://example.com/api/meetings/meeting-1/attachments/attachment-1"
+                == "https://example.com/api/v1/interview/meetings/meeting-1/attachments/attachment-1"
         )
         #expect(
             APIClientAuthMockURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization")
                 == "Bearer session-token"
         )
+    }
+
+    @MainActor
+    private func makeClient() -> (APIClient, SettingsStore, UserDefaultsAuthTokenStore) {
+        let suiteName = "cocointerview.tests.auth.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defaults.removePersistentDomain(forName: suiteName)
+        let settingsStore = SettingsStore(
+            defaults: defaults,
+            debugDefaultBackendBaseURLString: "https://example.com"
+        )
+        let tokenStore = UserDefaultsAuthTokenStore(defaults: defaults)
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [APIClientAuthMockURLProtocol.self]
+        let client = APIClient(
+            settingsStore: settingsStore,
+            authTokenStore: tokenStore,
+            session: URLSession(configuration: configuration)
+        )
+
+        return (client, settingsStore, tokenStore)
+    }
+
+    private func jsonResponse(
+        _ request: URLRequest,
+        _ payload: String,
+        statusCode: Int = 200
+    ) throws -> (HTTPURLResponse, Data) {
+        let response = try #require(
+            HTTPURLResponse(
+                url: request.url ?? URL(string: "https://example.com")!,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )
+        )
+        return (response, Data(payload.utf8))
     }
 }

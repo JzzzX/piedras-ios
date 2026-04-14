@@ -256,7 +256,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 8E69CBB42F695BBC005F246C /* Build configuration list for PBXProject "椰子面试" */;
+			buildConfigurationList = 8E69CBB42F695BBC005F246C /* Build configuration list for PBXProject "CocoInterview" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -486,6 +486,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				COCO_INTERVIEW_BACKEND_BASE_URL = "https://api.coco-interview.example.com";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_TEAM = RXL575CNF8;
@@ -493,6 +494,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "CocoInterview-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "椰子面试";
+				INFOPLIST_KEY_COCO_INTERVIEW_BACKEND_BASE_URL = "$(COCO_INTERVIEW_BACKEND_BASE_URL)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "椰子面试需要使用相机拍照添加到转写标注中。";
@@ -500,7 +502,6 @@
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "椰子面试需要访问麦克风来录制会议并生成实时转写。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "椰子面试需要访问相册以添加图片到转写标注中。";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_COCO_INTERVIEW_BACKEND_BASE_URL = "$(COCO_INTERVIEW_BACKEND_BASE_URL)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -512,7 +513,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				COCO_INTERVIEW_BACKEND_BASE_URL = "https://api.coco-interview.example.com";
 				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerview;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -530,6 +530,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				COCO_INTERVIEW_BACKEND_BASE_URL = "https://api.coco-interview.example.com";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_TEAM = RXL575CNF8;
@@ -537,6 +538,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "CocoInterview-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "椰子面试";
+				INFOPLIST_KEY_COCO_INTERVIEW_BACKEND_BASE_URL = "$(COCO_INTERVIEW_BACKEND_BASE_URL)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "椰子面试需要使用相机拍照添加到转写标注中。";
@@ -544,7 +546,6 @@
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "椰子面试需要访问麦克风来录制会议并生成实时转写。";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "椰子面试需要访问相册以添加图片到转写标注中。";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
-				INFOPLIST_KEY_COCO_INTERVIEW_BACKEND_BASE_URL = "$(COCO_INTERVIEW_BACKEND_BASE_URL)";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -556,7 +557,6 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				COCO_INTERVIEW_BACKEND_BASE_URL = "https://api.coco-interview.example.com";
 				PRODUCT_BUNDLE_IDENTIFIER = io.iftech.cocointerview;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;

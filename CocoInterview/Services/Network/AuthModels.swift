@@ -52,6 +52,19 @@ struct RemoteAuthSessionState: Decodable, Equatable {
     let session: RemoteAuthSession
 }
 
+enum OAuthProvider: String, Codable, Equatable, CaseIterable, Identifiable {
+    case wechat
+    case google
+
+    var id: String { rawValue }
+}
+
+struct AuthWebSession: Identifiable, Equatable {
+    let id = UUID()
+    let provider: OAuthProvider
+    let authorizationURL: URL
+}
+
 enum EmailOTPIntent: String, Codable, Equatable {
     case login
     case register
@@ -72,6 +85,10 @@ protocol AuthNetworking: AnyObject {
     func loginWithEmailOTP(email: String, token: String) async throws -> RemoteAuthResponse
 
     func registerWithEmailOTP(email: String, token: String) async throws -> RemoteAuthResponse
+
+    func fetchOAuthAuthorizationURL(provider: OAuthProvider) async throws -> URL
+
+    func completeOAuthCallbackPayload(_ payload: Data) async throws -> RemoteAuthResponse
 
     func setPassword(password: String) async throws
 

@@ -5,7 +5,7 @@ enum AppEnvironment {
         static let backendBaseURL = "COCO_INTERVIEW_BACKEND_BASE_URL"
     }
 
-    private nonisolated static let defaultProductionBackendBaseURLString = "https://api.coco-interview.example.com"
+    private nonisolated static let defaultProductionBackendBaseURLString = "https://cocotranslate.com"
 
     nonisolated static let cloudName = "椰子面试 Cloud"
 

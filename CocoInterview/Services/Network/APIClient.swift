@@ -1,9 +1,39 @@
 import Foundation
 
+private struct APIErrorDetailPayload: Decodable {
+    let code: String?
+    let message: String?
+    let details: String?
+}
+
 private struct APIErrorPayload: Decodable {
     let error: String?
+    let errorDetail: APIErrorDetailPayload?
+    let message: String?
     let requestId: String?
     let route: String?
+
+    enum CodingKeys: String, CodingKey {
+        case error
+        case message
+        case requestId
+        case route
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+        requestId = try container.decodeIfPresent(String.self, forKey: .requestId)
+        route = try container.decodeIfPresent(String.self, forKey: .route)
+
+        if let error = try? container.decodeIfPresent(String.self, forKey: .error) {
+            self.error = error
+            errorDetail = nil
+        } else {
+            error = nil
+            errorDetail = try container.decodeIfPresent(APIErrorDetailPayload.self, forKey: .error)
+        }
+    }
 }
 
 private struct MeetingTitleRequestPayload: Encodable {
@@ -13,41 +43,83 @@ private struct MeetingTitleRequestPayload: Encodable {
     let promptOptions: PromptOptions?
 }
 
-private struct AuthLoginRequestPayload: Encodable {
+private struct AuthUnifiedRequestPayload: Encodable {
     let email: String
-    let password: String
+    let password: String?
+    let otp: String?
+    let userMetadata: [String: String]?
 }
 
-private struct AuthRegisterRequestPayload: Encodable {
-    let email: String
-    let password: String
+private struct AuthUserMetadataPayload: Decodable {
+    let nickname: String?
     let displayName: String?
 }
 
-private struct AuthPasswordResetRequestPayload: Encodable {
-    let email: String
+private struct AuthUserPayload: Decodable {
+    let id: String
+    let email: String?
+    let phone: String?
+    let userMetadata: AuthUserMetadataPayload?
+}
+
+private struct AuthSessionPayload: Decodable {
+    let id: String?
+    let jti: String?
+    let createdAt: Date?
+    let expiresAt: Date?
+    let lastActivityAt: Date?
+}
+
+private struct AuthResponsePayload: Decodable {
+    let user: AuthUserPayload?
+    let accessToken: String?
+    let accessTokenExpiresAt: Date?
+    let refreshToken: String?
+    let refreshTokenExpiresAt: Date?
+    let session: AuthSessionPayload?
+    let requiresOtp: Bool?
+    let message: String?
+    let expiresIn: Int?
+}
+
+private struct UserProfilePayload: Decodable {
+    let id: String
+    let email: String?
+    let phone: String?
+    let nickname: String?
+    let avatar: String?
+    let role: String?
+    let paymentTier: String?
+    let createdAt: Date?
+    let updatedAt: Date?
+}
+
+private struct WrappedSuccessPayload<DataPayload: Decodable>: Decodable {
+    let success: Bool
+    let data: DataPayload?
+    let message: String?
 }
 
 private struct AuthEmailOTPRequestPayload: Encodable {
     let email: String
-    let intent: String
+    let type: String
 }
 
-private struct AuthEmailOTPVerifyRequestPayload: Encodable {
-    let email: String
-    let token: String
+private struct AuthOTPResponsePayload: Decodable {
+    let expiresIn: Int?
 }
 
-private struct AuthSetPasswordRequestPayload: Encodable {
-    let password: String
-}
-
-private struct AuthResendVerificationRequestPayload: Encodable {
-    let email: String
+private struct OAuthAuthorizationURLPayload: Decodable {
+    let authUrl: String
 }
 
 private struct AuthRefreshRequestPayload: Encodable {
     let refreshToken: String
+}
+
+private struct ServiceHealthPayload: Decodable {
+    let status: String
+    let timestamp: Date?
 }
 
 private struct RefreshedAuthState {
@@ -105,31 +177,59 @@ final class APIClient: AuthNetworking {
     }
 
     func fetchBackendHealth() async throws -> RemoteBackendHealth {
-        try await sendJSONRequest(path: "/healthz", method: "GET", responseType: RemoteBackendHealth.self)
-    }
-
-    func fetchBackendWarmup() async throws -> RemoteBackendHealth {
-        try await sendJSONRequest(
-            path: "/healthz",
+        let interview = try await sendJSONRequest(
+            path: "/api/v1/interview/health",
             method: "GET",
-            queryItems: [URLQueryItem(name: "mode", value: "basic")],
-            responseType: RemoteBackendHealth.self
+            responseType: ServiceHealthPayload.self
+        )
+        let ai = try await sendJSONRequest(
+            path: "/api/v1/ai/health",
+            method: "GET",
+            responseType: ServiceHealthPayload.self
+        )
+        let checkedAt = ai.timestamp ?? interview.timestamp
+        return RemoteBackendHealth(
+            ok: interview.status == "ok" && ai.status == "ok",
+            database: nil,
+            asr: makeASRStatus(from: ai),
+            llm: makeLLMStatus(from: ai),
+            audioFinalization: nil,
+            noteAttachments: nil,
+            startupBootstrap: nil,
+            checkedAt: checkedAt
         )
     }
 
+    func fetchBackendWarmup() async throws -> RemoteBackendHealth {
+        try await fetchBackendHealth()
+    }
+
     func fetchASRStatus() async throws -> RemoteASRStatus {
-        try await sendJSONRequest(path: "/api/asr/status", method: "GET", responseType: RemoteASRStatus.self)
+        let health = try await sendJSONRequest(
+            path: "/api/v1/ai/health",
+            method: "GET",
+            responseType: ServiceHealthPayload.self
+        )
+        return makeASRStatus(from: health)
     }
 
     func fetchLLMStatus() async throws -> RemoteLLMStatus {
-        try await sendJSONRequest(path: "/api/llm/status", method: "GET", responseType: RemoteLLMStatus.self)
+        let health = try await sendJSONRequest(
+            path: "/api/v1/ai/health",
+            method: "GET",
+            responseType: ServiceHealthPayload.self
+        )
+        return makeLLMStatus(from: health)
     }
 
     func login(email: String, password: String) async throws -> RemoteAuthResponse {
-        try await sendJSONRequest(
-            path: "/api/auth/login",
-            method: "POST",
-            body: AuthLoginRequestPayload(email: email, password: password)
+        try await performUnifiedAuth(
+            AuthUnifiedRequestPayload(
+                email: email,
+                password: password,
+                otp: nil,
+                userMetadata: nil
+            )
         )
     }
 
@@ -138,94 +238,145 @@ final class APIClient: AuthNetworking {
         password: String,
         displayName: String?
     ) async throws -> RemoteAuthResponse {
-        try await sendJSONRequest(
-            path: "/api/auth/register",
-            method: "POST",
-            includeAuthorization: false,
-            body: AuthRegisterRequestPayload(
+        try await performUnifiedAuth(
+            AuthUnifiedRequestPayload(
                 email: email,
                 password: password,
-                displayName: displayName
+                otp: nil,
+                userMetadata: displayName?.nilIfBlank.map { ["displayName": $0] }
             )
         )
     }
 
     func sendEmailOTP(email: String, intent: EmailOTPIntent) async throws {
-        let _: EmptyAPIResponse = try await sendJSONRequest(
-            path: "/api/auth/email-otp/send",
+        let _: AuthOTPResponsePayload = try await sendWrappedJSONRequest(
+            path: "/api/v1/auth/otp/send",
             method: "POST",
             includeAuthorization: false,
             body: AuthEmailOTPRequestPayload(
                 email: email,
-                intent: intent.rawValue
+                type: intent == .login ? "login" : "register"
             )
         )
     }
 
     func loginWithEmailOTP(email: String, token: String) async throws -> RemoteAuthResponse {
-        try await sendJSONRequest(
-            path: "/api/auth/email-otp/login",
-            method: "POST",
-            includeAuthorization: false,
-            body: AuthEmailOTPVerifyRequestPayload(email: email, token: token)
+        try await performUnifiedAuth(
+            AuthUnifiedRequestPayload(
+                email: email,
+                password: nil,
+                otp: token,
+                userMetadata: nil
+            )
         )
     }
 
     func registerWithEmailOTP(email: String, token: String) async throws -> RemoteAuthResponse {
-        try await sendJSONRequest(
-            path: "/api/auth/email-otp/register",
-            method: "POST",
+        try await performUnifiedAuth(
+            AuthUnifiedRequestPayload(
+                email: email,
+                password: nil,
+                otp: token,
+                userMetadata: nil
+            )
+        )
+    }
+
+    func fetchOAuthAuthorizationURL(provider: OAuthProvider) async throws -> URL {
+        let payload: OAuthAuthorizationURLPayload = try await sendWrappedJSONRequest(
+            path: "/api/v1/auth/\(provider.rawValue)/auth-url",
+            method: "GET",
             includeAuthorization: false,
-            body: AuthEmailOTPVerifyRequestPayload(email: email, token: token)
+            responseType: OAuthAuthorizationURLPayload.self
+        )
+
+        guard let url = URL(string: payload.authUrl) else {
+            throw APIClientError.invalidResponse
+        }
+
+        return url
+    }
+
+    func completeOAuthCallbackPayload(_ payload: Data) async throws -> RemoteAuthResponse {
+        if let envelope = try? decoder.decode(WrappedSuccessPayload<AuthResponsePayload>.self, from: payload) {
+            guard envelope.success else {
+                throw APIClientError.requestFailed(
+                    envelope.message?.nilIfBlank ?? "第三方登录失败，请稍后重试。"
+                )
+            }
+
+            guard let response = envelope.data else {
+                throw APIClientError.invalidResponse
+            }
+
+            return try await mapAuthResponse(
+                response,
+                accessTokenOverride: response.accessToken?.nilIfBlank
+            )
+        }
+
+        throw APIClientError.requestFailed(
+            Self.buildErrorMessage(from: payload, fallback: "第三方登录失败，请稍后重试。")
         )
     }
 
     func setPassword(password: String) async throws {
-        let _: EmptyAPIResponse = try await sendJSONRequest(
-            path: "/api/auth/password/set",
-            method: "POST",
-            body: AuthSetPasswordRequestPayload(password: password)
+        throw APIClientError.requestFailed(
+            "椰子体系当前未开放应用内补设密码，请改用邮箱验证码或联系管理员。"
         )
     }
 
     func refreshAuthSession(refreshToken: String) async throws -> RemoteAuthResponse {
-        try await sendJSONRequest(
-            path: "/api/auth/refresh",
+        let payload: AuthResponsePayload = try await sendWrappedJSONRequest(
+            path: "/api/v1/auth/token/refresh",
             method: "POST",
             includeAuthorization: false,
             body: AuthRefreshRequestPayload(refreshToken: refreshToken)
         )
+        return try await mapAuthResponse(payload, accessTokenOverride: payload.accessToken?.nilIfBlank)
     }
 
     func fetchAuthSession() async throws -> RemoteAuthSessionState {
-        try await sendJSONRequest(
-            path: "/api/auth/session",
+        guard let sessionToken = authTokenStore.sessionToken?.nilIfBlank else {
+            throw APIClientError.requestFailed("登录态已失效，请重新登录。")
+        }
+
+        let profile: UserProfilePayload = try await sendWrappedJSONRequest(
+            path: "/api/v1/user/users/me",
             method: "GET",
-            responseType: RemoteAuthSessionState.self
+            responseType: UserProfilePayload.self
+        )
+
+        let workspace = try await ensureWorkspace(accessTokenOverride: sessionToken)
+        let session = RemoteAuthSession(
+            token: sessionToken,
+            refreshToken: authTokenStore.refreshToken?.nilIfBlank,
+            expiresAt: Self.jwtExpirationDate(from: sessionToken) ?? .now.addingTimeInterval(3600)
+        )
+        return RemoteAuthSessionState(
+            user: mapUserProfile(profile),
+            workspace: workspace,
+            session: session
         )
     }
 
     func logout() async throws {
-        let request = try makeRequest(path: "/api/auth/logout", method: "POST")
+        var request = try makeRequest(path: "/api/v1/auth/logout", method: "POST")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = Data("{}".utf8)
         let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data, fallback: "退出登录失败。")
     }
 
     func requestPasswordReset(email: String) async throws {
-        let _: EmptyAPIResponse = try await sendJSONRequest(
-            path: "/api/auth/password-reset",
-            method: "POST",
-            includeAuthorization: false,
-            body: AuthPasswordResetRequestPayload(email: email)
+        throw APIClientError.requestFailed(
+            "椰子体系当前未开放应用内密码重置，请改用邮箱验证码登录。"
         )
     }
 
     func resendVerificationEmail(email: String) async throws {
-        let _: EmptyAPIResponse = try await sendJSONRequest(
-            path: "/api/auth/resend-verification",
-            method: "POST",
-            includeAuthorization: false,
-            body: AuthResendVerificationRequestPayload(email: email)
+        throw APIClientError.requestFailed(
+            "椰子体系当前未开放邮箱验证补发，请改用邮箱验证码登录。"
         )
     }
 
@@ -235,43 +386,63 @@ final class APIClient: AuthNetworking {
         workspaceID: String?,
         meetingID: String? = nil
     ) async throws -> RemoteASRSessionResponse {
-        try await sendJSONRequest(
-            path: "/api/asr/session",
-            method: "POST",
-            body: ASRSessionRequestPayload(
+        guard let sessionToken = authTokenStore.sessionToken?.nilIfBlank else {
+            throw APIClientError.requestFailed("登录态已失效，请重新登录。")
+        }
+
+        guard let wsURL = makeASRWebSocketURL(token: sessionToken, sampleRate: sampleRate) else {
+            throw APIClientError.missingBaseURL
+        }
+
+        return RemoteASRSessionResponse(
+            session: RemoteASRSession(
+                wsUrl: wsURL.absoluteString,
+                token: nil,
+                tokenExpireTime: nil,
+                appKey: nil,
+                vocabularyId: nil,
                 sampleRate: sampleRate,
                 channels: channels,
-                workspaceId: workspaceID,
-                meetingId: meetingID
-            )
+                codec: "pcm",
+                packetDurationMs: 200
+            ),
+            error: nil
         )
     }
 
     func listWorkspaces() async throws -> [RemoteWorkspace] {
-        try await sendJSONRequest(path: "/api/workspaces", method: "GET", responseType: [RemoteWorkspace].self)
+        try await sendJSONRequest(
+            path: "/api/v1/interview/workspaces",
+            method: "GET",
+            responseType: [RemoteWorkspace].self
+        )
     }
 
     func createWorkspace(_ payload: WorkspaceCreatePayload) async throws -> RemoteWorkspace {
-        try await sendJSONRequest(path: "/api/workspaces", method: "POST", body: payload)
+        try await sendJSONRequest(path: "/api/v1/interview/workspaces", method: "POST", body: payload)
     }
 
     func listCollections() async throws -> [RemoteCollection] {
-        try await sendJSONRequest(path: "/api/collections", method: "GET", responseType: [RemoteCollection].self)
+        try await sendJSONRequest(
+            path: "/api/v1/interview/collections",
+            method: "GET",
+            responseType: [RemoteCollection].self
+        )
     }
 
     func createCollection(_ payload: CollectionCreatePayload) async throws -> RemoteCollection {
-        try await sendJSONRequest(path: "/api/collections", method: "POST", body: payload)
+        try await sendJSONRequest(path: "/api/v1/interview/collections", method: "POST", body: payload)
     }
 
     func deleteCollection(id: String) async throws {
-        let request = try makeRequest(path: "/api/collections/\(id)", method: "DELETE")
+        let request = try makeRequest(path: "/api/v1/interview/collections/\(id)", method: "DELETE")
         let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data, fallback: "删除文件夹失败。")
     }
 
     func listMeetings(workspaceID: String) async throws -> [RemoteMeetingListItem] {
         try await sendJSONRequest(
-            path: "/api/meetings",
+            path: "/api/v1/interview/meetings",
             method: "GET",
             queryItems: [URLQueryItem(name: "workspaceId", value: workspaceID)],
             extraHeaders: workspaceHeader(workspaceID),
@@ -281,7 +452,7 @@ final class APIClient: AuthNetworking {
 
     func getMeeting(id: String, workspaceID: String? = nil) async throws -> RemoteMeetingDetail {
         try await sendJSONRequest(
-            path: "/api/meetings/\(id)",
+            path: "/api/v1/interview/meetings/\(id)",
             method: "GET",
             extraHeaders: workspaceHeader(workspaceID),
             responseType: RemoteMeetingDetail.self
@@ -294,7 +465,7 @@ final class APIClient: AuthNetworking {
         workspaceID: String? = nil
     ) async throws -> RemoteMeetingDetail {
         try await sendJSONRequest(
-            path: "/api/meetings/\(meetingID)",
+            path: "/api/v1/interview/meetings/\(meetingID)",
             method: "PUT",
             extraHeaders: workspaceHeader(workspaceID),
             body: ["audioCloudSyncEnabled": enabled]
@@ -306,7 +477,7 @@ final class APIClient: AuthNetworking {
         workspaceID: String? = nil
     ) async throws -> RemoteMeetingDetail {
         try await sendJSONRequest(
-            path: "/api/meetings",
+            path: "/api/v1/interview/meetings",
             method: "POST",
             extraHeaders: workspaceHeader(workspaceID),
             body: payload
@@ -315,7 +486,7 @@ final class APIClient: AuthNetworking {
 
     func deleteMeeting(id: String, workspaceID: String? = nil) async throws {
         let request = try makeRequest(
-            path: "/api/meetings/\(id)",
+            path: "/api/v1/interview/meetings/\(id)",
             method: "DELETE",
             extraHeaders: workspaceHeader(workspaceID)
         )
@@ -432,7 +603,7 @@ final class APIClient: AuthNetworking {
         workspaceID: String? = nil
     ) async throws -> RemoteMeetingProcessingStatus {
         try await sendJSONRequest(
-            path: "/api/meetings/\(meetingID)/processing-status",
+            path: "/api/v1/interview/meetings/\(meetingID)/processing-status",
             method: "GET",
             extraHeaders: workspaceHeader(workspaceID),
             responseType: RemoteMeetingProcessingStatus.self
@@ -441,7 +612,7 @@ final class APIClient: AuthNetworking {
 
     func enhanceNotes(_ payload: EnhanceRequestPayload) async throws -> RemoteEnhanceResponse {
         try await sendRetryableAIJSONRequest(
-            path: "/api/enhance",
+            path: "/api/v1/interview/enhance",
             method: "POST",
             body: payload,
             fallback: "AI 后处理失败，请稍后重试。"
@@ -455,7 +626,7 @@ final class APIClient: AuthNetworking {
         meetingType: String
     ) async throws -> RemoteMeetingTitleResponse {
         try await sendJSONRequest(
-            path: "/api/meetings/title",
+            path: "/api/v1/interview/meetings/title",
             method: "POST",
             body: MeetingTitleRequestPayload(
                 transcript: transcript,
@@ -471,7 +642,7 @@ final class APIClient: AuthNetworking {
     }
 
     func streamChat(_ payload: ChatRequestPayload) async throws -> AsyncThrowingStream<String, Error> {
-        var request = try makeRequest(path: "/api/chat", method: "POST")
+        var request = try makeRequest(path: "/api/v1/interview/chat", method: "POST")
         request.timeoutInterval = Self.aiRequestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try encoder.encode(payload)
@@ -480,7 +651,7 @@ final class APIClient: AuthNetworking {
     }
 
     func streamGlobalChat(_ payload: GlobalChatRequestPayload) async throws -> AsyncThrowingStream<String, Error> {
-        var request = try makeRequest(path: "/api/chat/global", method: "POST")
+        var request = try makeRequest(path: "/api/v1/interview/chat/global", method: "POST")
         request.timeoutInterval = Self.aiRequestTimeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let workspaceID = settingsStore.hiddenWorkspaceID?.nilIfBlank {
@@ -548,6 +719,59 @@ final class APIClient: AuthNetworking {
         let (data, response) = try await performDataRequest(request)
         try validate(response: response, data: data)
         return try decoder.decode(Response.self, from: data)
+    }
+
+    private func sendWrappedJSONRequest<Response: Decodable>(
+        path: String,
+        method: String,
+        queryItems: [URLQueryItem] = [],
+        includeAuthorization: Bool = true,
+        extraHeaders: [String: String] = [:],
+        responseType: Response.Type
+    ) async throws -> Response {
+        let request = try makeRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            includeAuthorization: includeAuthorization,
+            extraHeaders: extraHeaders
+        )
+        let (data, response) = try await performDataRequest(request)
+        try validate(response: response, data: data)
+
+        let envelope = try decoder.decode(WrappedSuccessPayload<Response>.self, from: data)
+        guard envelope.success, let payload = envelope.data else {
+            throw APIClientError.invalidResponse
+        }
+        return payload
+    }
+
+    private func sendWrappedJSONRequest<Response: Decodable, Body: Encodable>(
+        path: String,
+        method: String,
+        queryItems: [URLQueryItem] = [],
+        includeAuthorization: Bool = true,
+        extraHeaders: [String: String] = [:],
+        body: Body
+    ) async throws -> Response {
+        var request = try makeRequest(
+            path: path,
+            method: method,
+            queryItems: queryItems,
+            includeAuthorization: includeAuthorization,
+            extraHeaders: extraHeaders
+        )
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try encoder.encode(body)
+
+        let (data, response) = try await performDataRequest(request)
+        try validate(response: response, data: data)
+
+        let envelope = try decoder.decode(WrappedSuccessPayload<Response>.self, from: data)
+        guard envelope.success, let payload = envelope.data else {
+            throw APIClientError.invalidResponse
+        }
+        return payload
     }
 
     private func sendRetryableAIJSONRequest<Response: Decodable, Body: Encodable>(
@@ -621,6 +845,160 @@ final class APIClient: AuthNetworking {
             return [:]
         }
         return [Self.workspaceIDHeader: workspaceID]
+    }
+
+    private func performUnifiedAuth(_ payload: AuthUnifiedRequestPayload) async throws -> RemoteAuthResponse {
+        let response: AuthResponsePayload = try await sendWrappedJSONRequest(
+            path: "/api/v1/auth",
+            method: "POST",
+            includeAuthorization: false,
+            body: payload
+        )
+        return try await mapAuthResponse(response, accessTokenOverride: response.accessToken?.nilIfBlank)
+    }
+
+    private func mapAuthResponse(
+        _ payload: AuthResponsePayload,
+        accessTokenOverride: String?
+    ) async throws -> RemoteAuthResponse {
+        if payload.requiresOtp == true {
+            let message = payload.message?.nilIfBlank ?? "需要邮箱验证码才能继续。"
+            throw APIClientError.requestFailed(message)
+        }
+
+        guard let user = payload.user,
+              let accessToken = payload.accessToken?.nilIfBlank,
+              let accessTokenExpiresAt = payload.accessTokenExpiresAt else {
+            throw APIClientError.invalidResponse
+        }
+
+        let workspace = try await ensureWorkspace(accessTokenOverride: accessTokenOverride ?? accessToken)
+        return RemoteAuthResponse(
+            user: mapAuthUser(user),
+            workspace: workspace,
+            session: RemoteAuthSession(
+                token: accessToken,
+                refreshToken: payload.refreshToken?.nilIfBlank,
+                expiresAt: accessTokenExpiresAt
+            )
+        )
+    }
+
+    private func mapAuthUser(_ payload: AuthUserPayload) -> RemoteAuthUser {
+        RemoteAuthUser(
+            id: payload.id,
+            email: payload.email?.nilIfBlank ?? payload.phone?.nilIfBlank ?? "unknown@coco.local",
+            displayName: payload.userMetadata?.displayName?.nilIfBlank
+                ?? payload.userMetadata?.nickname?.nilIfBlank
+        )
+    }
+
+    private func mapUserProfile(_ payload: UserProfilePayload) -> RemoteAuthUser {
+        RemoteAuthUser(
+            id: payload.id,
+            email: payload.email?.nilIfBlank ?? payload.phone?.nilIfBlank ?? "unknown@coco.local",
+            displayName: payload.nickname?.nilIfBlank
+        )
+    }
+
+    private func ensureWorkspace(accessTokenOverride: String?) async throws -> RemoteWorkspace {
+        let workspaces: [RemoteWorkspace] = try await sendJSONRequest(
+            path: "/api/v1/interview/workspaces",
+            method: "GET",
+            includeAuthorization: false,
+            extraHeaders: authorizationHeader(for: accessTokenOverride),
+            responseType: [RemoteWorkspace].self
+        )
+
+        if let currentID = settingsStore.hiddenWorkspaceID?.nilIfBlank,
+           let matched = workspaces.first(where: { $0.id == currentID }) {
+            return matched
+        }
+
+        if let existing = workspaces.first(where: { $0.name == "椰子面试 iOS" }) {
+            return existing
+        }
+
+        if let first = workspaces.first {
+            return first
+        }
+
+        return try await sendJSONRequest(
+            path: "/api/v1/interview/workspaces",
+            method: "POST",
+            includeAuthorization: false,
+            extraHeaders: authorizationHeader(for: accessTokenOverride),
+            body: WorkspaceCreatePayload(
+                name: "椰子面试 iOS",
+                description: "椰子面试 iOS 隐藏工作区",
+                icon: "iphone",
+                color: "#0f766e",
+                workflowMode: "general",
+                modeLabel: "iOS"
+            )
+        )
+    }
+
+    private func authorizationHeader(for accessToken: String?) -> [String: String] {
+        guard let accessToken = accessToken?.nilIfBlank else {
+            return [:]
+        }
+        return ["Authorization": "Bearer \(accessToken)"]
+    }
+
+    private func makeASRStatus(from health: ServiceHealthPayload) -> RemoteASRStatus {
+        RemoteASRStatus(
+            mode: "coco-ai",
+            provider: "coco-ai",
+            configured: true,
+            reachable: health.status == "ok",
+            ready: health.status == "ok",
+            missing: [],
+            message: health.status == "ok" ? "ASR 服务可用" : "ASR 服务不可用",
+            checkedAt: health.timestamp,
+            lastError: health.status == "ok" ? nil : "ASR service unavailable"
+        )
+    }
+
+    private func makeLLMStatus(from health: ServiceHealthPayload) -> RemoteLLMStatus {
+        RemoteLLMStatus(
+            configured: true,
+            reachable: health.status == "ok",
+            ready: health.status == "ok",
+            provider: "coco-ai",
+            model: nil,
+            preset: nil,
+            message: health.status == "ok" ? "AI 服务可用" : "AI 服务不可用",
+            checkedAt: health.timestamp,
+            lastError: health.status == "ok" ? nil : "AI service unavailable"
+        )
+    }
+
+    private func makeASRWebSocketURL(token: String, sampleRate: Int) -> URL? {
+        guard let baseURL else {
+            return nil
+        }
+
+        guard let endpoint = URL(string: "/api/v1/asr/ws", relativeTo: baseURL) else {
+            return nil
+        }
+
+        guard var components = URLComponents(
+            url: endpoint,
+            resolvingAgainstBaseURL: true
+        ) else {
+            return nil
+        }
+
+        components.scheme = components.scheme == "https" ? "wss" : "ws"
+        components.queryItems = [
+            URLQueryItem(name: "token", value: token),
+            URLQueryItem(name: "provider", value: "qwen"),
+            URLQueryItem(name: "language", value: "zh"),
+            URLQueryItem(name: "format", value: "pcm"),
+            URLQueryItem(name: "sampleRate", value: String(sampleRate)),
+        ]
+        return components.url
     }
 
     private func performDataRequest(
@@ -697,7 +1075,7 @@ final class APIClient: AuthNetworking {
             return false
         }
 
-        guard !path.hasPrefix("/api/auth/") else {
+        guard !path.hasPrefix("/api/v1/auth") else {
             return false
         }
 
@@ -872,7 +1250,9 @@ final class APIClient: AuthNetworking {
         let payload = data.flatMap { try? makeJSONDecoder().decode(APIErrorPayload.self, from: $0) }
         let requestID = payload?.requestId?.nilIfBlank ?? response?.value(forHTTPHeaderField: requestIDHeader)
 
-        if let error = payload?.error?.nilIfBlank {
+        if let error = payload?.error?.nilIfBlank
+            ?? payload?.errorDetail?.message?.nilIfBlank
+            ?? payload?.message?.nilIfBlank {
             return appendRequestID(requestID, to: error)
         }
 
@@ -918,6 +1298,30 @@ final class APIClient: AuthNetworking {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: "。.!"))
         return "\(normalizedFallback)（HTTP \(response.statusCode)）"
+    }
+
+    private static func jwtExpirationDate(from token: String) -> Date? {
+        let segments = token.split(separator: ".")
+        guard segments.count >= 2 else {
+            return nil
+        }
+
+        var payload = String(segments[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+
+        let remainder = payload.count % 4
+        if remainder != 0 {
+            payload += String(repeating: "=", count: 4 - remainder)
+        }
+
+        guard let data = Data(base64Encoded: payload),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let exp = json["exp"] as? TimeInterval else {
+            return nil
+        }
+
+        return Date(timeIntervalSince1970: exp)
     }
 
     private static func makeRequestID() -> String {

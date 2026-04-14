@@ -29,6 +29,7 @@ final class AuthStore {
     var pendingVerificationEmail: String?
     var pendingOneTimeCodeEmail: String?
     var pendingOneTimeCodeIntent: EmailOTPIntent?
+    var activeOAuthSession: AuthWebSession?
     var logoutBlockedMessage: String?
     var logoutBlockMessageProvider: (() -> String?)?
     var didAuthenticate: ((RemoteAuthUser, RemoteWorkspace) async -> Void)?
@@ -82,6 +83,60 @@ final class AuthStore {
         }
     }
 
+    @discardableResult
+    func beginOAuth(provider: OAuthProvider) async -> Bool {
+        phase = .submitting
+        lastErrorMessage = nil
+        lastInfoMessage = nil
+        logoutBlockedMessage = nil
+
+        do {
+            let authorizationURL = try await apiClient.fetchOAuthAuthorizationURL(provider: provider)
+            activeOAuthSession = AuthWebSession(
+                provider: provider,
+                authorizationURL: authorizationURL
+            )
+            phase = .unauthenticated
+            return true
+        } catch {
+            activeOAuthSession = nil
+            lastErrorMessage = error.localizedDescription
+            phase = .unauthenticated
+            return false
+        }
+    }
+
+    func cancelOAuth() {
+        activeOAuthSession = nil
+        if phase == .submitting {
+            phase = .unauthenticated
+        }
+    }
+
+    @discardableResult
+    func completeOAuthCallbackPayload(_ payload: Data) async -> Bool {
+        phase = .submitting
+        lastErrorMessage = nil
+        lastInfoMessage = nil
+        logoutBlockedMessage = nil
+
+        do {
+            let response = try await apiClient.completeOAuthCallbackPayload(payload)
+            persistSession(response.session)
+            activeOAuthSession = nil
+            await applyAuthenticatedSession(
+                user: response.user,
+                workspace: response.workspace,
+                session: response.session
+            )
+            return true
+        } catch {
+            lastErrorMessage = error.localizedDescription
+            phase = .unauthenticated
+            return false
+        }
+    }
+
     func bootstrapSession() async {
         resetTransientMessages()
 
@@ -105,6 +160,7 @@ final class AuthStore {
         pendingVerificationEmail = nil
         pendingOneTimeCodeEmail = nil
         pendingOneTimeCodeIntent = nil
+        activeOAuthSession = nil
         pendingPasswordSetupResponse = nil
         logoutBlockedMessage = nil
         phase = .authenticated
@@ -441,6 +497,7 @@ final class AuthStore {
         pendingVerificationEmail = nil
         pendingOneTimeCodeEmail = nil
         pendingOneTimeCodeIntent = nil
+        activeOAuthSession = nil
         pendingPasswordSetupResponse = nil
         phase = .unauthenticated
         hasResolvedInitialSession = true
