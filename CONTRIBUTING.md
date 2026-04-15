@@ -1,38 +1,36 @@
 # Contributing
 
-## 提交规范
+CocoInterview uses Conventional Commits. Keep each commit focused on one logical change.
 
-本仓库所有提交信息采用 Conventional Commits，提交说明使用中文。
-
-推荐格式：
+Recommended format:
 
 ```text
-<type>: <中文说明>
+<type>(scope): <中文说明>
 ```
 
-常用类型：
+Common types:
 
-- `feat`: 新功能
-- `fix`: 问题修复
-- `refactor`: 重构
-- `docs`: 文档更新
-- `test`: 测试相关
-- `chore`: 工程、配置、依赖、脚本调整
-- `perf`: 性能优化
+- `feat`
+- `fix`
+- `refactor`
+- `docs`
+- `test`
+- `chore`
+- `perf`
 
-示例：
+Examples:
 
 ```text
-feat: 搭建 iOS MVP 工程骨架
-fix: 修复录音恢复后时长累加错误
-docs: 补充 iOS 核心 MVP 重构计划
-chore: 配置 Xcode 项目与 SwiftData 容器
+feat(ios): 完成 coco-interview 品牌迁移
+fix(api): 修复录音音频上传失败
+docs: 重写公开版 README
+chore(repo): 清理无关文档与示例目录
 ```
 
-## Git 工作约定
+Guidelines:
 
-- 每个提交只包含一个清晰、完整的逻辑变更。
-- 提交前确保工程可编译，必要测试通过。
-- 不提交本地缓存、派生构建产物和个人配置文件。
-- 优先在本地完成小步提交，保持历史可回滚、可审阅。
-
+- Run the smallest relevant verification before committing.
+- Do not commit build products, temporary screenshots, local caches, or personal Xcode settings.
+- Keep changes aligned with the existing repo structure unless the rename/refactor is intentional and complete.
+- For iOS work, prefer `xcodebuild` verification on the `CocoInterview` scheme.
+- For `cloud/api`, make sure `npm run build` still succeeds.

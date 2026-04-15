@@ -185,7 +185,7 @@ struct GlobalChatView: View {
 
     private func chatBubble(message: ChatMessage, isUser: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(isUser ? "YOU>" : "PIEDRAS>")
+            Text(isUser ? "YOU>" : "COCO>")
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(isUser ? AppTheme.primaryActionForeground.opacity(0.78) : AppTheme.brandInkMuted)
 

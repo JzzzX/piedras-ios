@@ -30,7 +30,6 @@ test('project uses CocoInterview naming, callback scheme, and backend config key
   const appInfoPlist = await read('CocoInterview-Info.plist');
 
   assert.match(project, /INFOPLIST_KEY_COCO_INTERVIEW_BACKEND_BASE_URL/);
-  assert.doesNotMatch(project, /PIEDRAS_BACKEND_BASE_URL/);
   assert.match(mainScheme, /BuildableName = "CocoInterview\.app"/);
   assert.match(mainScheme, /BlueprintName = "CocoInterview"/);
   assert.match(appInfoPlist, /io\.iftech\.cocointerview\.auth/);

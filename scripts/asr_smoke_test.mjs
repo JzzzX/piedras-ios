@@ -7,13 +7,13 @@ import { setTimeout as sleep } from 'node:timers/promises';
 const targetSampleRate = 16000;
 const defaultChunkDurationMS = 100;
 const defaultBackendBaseURL = process.env.COCO_INTERVIEW_BACKEND_URL ?? 'https://api.coco-interview.example.com';
-const defaultBearerToken = process.env.PIEDRAS_BEARER_TOKEN ?? process.env.PIEDRAS_AUTH_TOKEN ?? '';
+const defaultBearerToken = process.env.COCO_INTERVIEW_BEARER_TOKEN ?? process.env.COCO_INTERVIEW_AUTH_TOKEN ?? '';
 
 const [, , inputFilePath, backendBaseURL = defaultBackendBaseURL, bearerToken = defaultBearerToken] = process.argv;
 
 if (!inputFilePath || !bearerToken) {
   console.error('Usage: node scripts/asr_smoke_test.mjs <wav-file> [backend-base-url] [bearer-token]');
-  console.error('Or set PIEDRAS_BEARER_TOKEN in the environment.');
+  console.error('Or set COCO_INTERVIEW_BEARER_TOKEN in the environment.');
   process.exit(1);
 }
 

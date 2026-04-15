@@ -1,8 +1,8 @@
 # 椰子面试 ASR Proxy
 
-独立部署的豆包实时 ASR WebSocket 代理。
+Standalone WebSocket proxy for live ASR streaming.
 
-## 必需环境变量
+## Required Environment Variables
 
 ```bash
 ASR_PROXY_SESSION_SECRET=
@@ -11,4 +11,4 @@ DOUBAO_ASR_ACCESS_TOKEN=
 DOUBAO_ASR_RESOURCE_ID=volc.seedasr.sauc.duration
 ```
 
-平台如注入 `PORT`，代理会优先监听该端口。
+If the platform injects `PORT`, the proxy listens on that port automatically.

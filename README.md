@@ -1,61 +1,91 @@
 # 椰子面试 iOS
 
-椰子面试是一个面向面试场景的原生 iOS 录音与转写产品，当前聚焦录音、实时转写、笔记整理、AI 总结与问答闭环。
+椰子面试 is a personal iOS product for recording conversations, turning them into transcripts, and shaping them into usable notes with AI.
 
-这个仓库是组织内单主仓，承载：
+椰子面试是一个面向真实对话记录场景的个人 iOS 产品，重点放在录音、转写、笔记整理，以及基于上下文的 AI 辅助。
 
-- `CocoInterview/`：SwiftUI iOS 客户端
-- `cloud/api/`：Next.js + Prisma 云端 API
-- `cloud/asr-proxy/`：独立部署时可复用的 ASR WebSocket 代理
-- `docs/`：部署、交接与历史设计文档
-- `scripts/`：冒烟验证与发布校验脚本
+![椰子面试 Home](.github/assets/screenshots/01-home-feed.png)
 
-## 开发命令
+## Product
 
-构建 iOS App：
+### 中文
+
+- 原生 iOS 录音与转写体验，围绕“打开即记”设计。
+- 录音结束后可以继续整理笔记、查看转写、补充资料、生成 AI 笔记。
+- 支持跨记录提问，把历史内容当作可检索的个人知识上下文。
+- 当前仓库同时包含 iOS 客户端、云端 API，以及独立 ASR 代理。
+
+### English
+
+- Native iOS capture flow built for quick recording and note-taking.
+- Review transcripts, organize notes, attach context, and generate AI-enhanced notes after recording.
+- Ask questions across past sessions and reuse them as searchable personal context.
+- This repo includes the iOS app, the cloud API, and a standalone ASR proxy.
+
+## Screenshots
+
+| Home | Detail |
+| --- | --- |
+| ![Home Feed](.github/assets/screenshots/01-home-feed.png) | ![Meeting Detail](.github/assets/screenshots/02-meeting-detail-ai-notes.png) |
+
+| Transcript | Global Chat |
+| --- | --- |
+| ![Transcript Sheet](.github/assets/screenshots/03-transcript-sheet.png) | ![Global Chat](.github/assets/screenshots/04-global-chat.png) |
+
+## Repository Layout
+
+- `CocoInterview/`: SwiftUI iOS app
+- `CocoInterviewRecordingWidget/`: recording widget / Live Activity target
+- `CocoInterviewTests/`: XCTest unit tests
+- `CocoInterviewUITests/`: UI flow tests
+- `cloud/api/`: Next.js + Prisma API
+- `cloud/asr-proxy/`: standalone ASR WebSocket proxy
+- `scripts/`: release and smoke-test helpers
+
+## Development
+
+Build the iOS app:
 
 ```sh
 xcodebuild -project CocoInterview.xcodeproj -scheme CocoInterview -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 ```
 
-运行 iOS 测试：
+Run iOS tests:
 
 ```sh
 xcodebuild test -project CocoInterview.xcodeproj -scheme CocoInterview -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-启动云端 API：
+Start the cloud API:
 
 ```sh
-cd cloud/api && npm install && npm run dev
+cd cloud/api
+npm install
+npx prisma generate
+npm run dev
 ```
 
-构建云端 API：
+Build the cloud API:
 
 ```sh
-cd cloud/api && npm run build
+cd cloud/api
+npm run build
 ```
 
-验证 ASR 链路：
+Smoke-test the ASR chain:
 
 ```sh
 say -o tmp-asr-sample.aiff "你好，我在测试椰子面试的实时转写能力。"
 afconvert -f WAVE -d LEI16 tmp-asr-sample.aiff tmp-asr-sample.wav
-node scripts/asr_smoke_test.mjs tmp-asr-sample.wav
 node scripts/asr_smoke_test.mjs tmp-asr-sample.wav http://127.0.0.1:3000
 ```
 
-## 配置约定
+## Configuration
 
-- iOS 默认后端配置键为 `COCO_INTERVIEW_BACKEND_BASE_URL`
-- 冒烟脚本环境变量为 `COCO_INTERVIEW_BACKEND_URL`
-- 当前仓库中的默认生产地址使用占位域名 `https://api.coco-interview.example.com`
-- 在组织正式部署前，必须通过构建配置或环境变量替换为真实域名
+- The iOS app reads the backend base URL from `COCO_INTERVIEW_BACKEND_BASE_URL`.
+- The ASR smoke test reads the backend base URL from `COCO_INTERVIEW_BACKEND_URL`.
+- This public repo does not ship with a production backend URL baked in. Provide one explicitly through build settings or environment variables.
 
-## 文档
+## Status
 
-- 核心 MVP 设计见 [docs/coco-interview-ios-mvp-plan.md](docs/coco-interview-ios-mvp-plan.md)
-- 部署说明见 [docs/cloud-deployment.md](docs/cloud-deployment.md)
-- ASR / LLM 交接说明见 [docs/asr-llm-handoff.md](docs/asr-llm-handoff.md)
-- `cloud/api` 说明见 [cloud/api/README.md](cloud/api/README.md)
-- 提交规范见 [CONTRIBUTING.md](CONTRIBUTING.md)
+椰子面试 is an actively maintained personal project. The product surface is intentionally opinionated and still evolving, but the repo is kept in a buildable, inspectable state so it can serve both as a working app and as a public engineering artifact.

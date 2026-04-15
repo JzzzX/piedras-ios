@@ -14,7 +14,7 @@ export interface StartupBootstrapSnapshot {
   retryAt: string | null;
 }
 
-export const STARTUP_BOOTSTRAP_GLOBAL_KEY = '__PIEDRAS_STARTUP_BOOTSTRAP_STATE__';
+export const STARTUP_BOOTSTRAP_GLOBAL_KEY = '__COCO_INTERVIEW_STARTUP_BOOTSTRAP_STATE__';
 
 export function buildStartupBootstrapSnapshot(
   input: Partial<StartupBootstrapSnapshot> = {}
