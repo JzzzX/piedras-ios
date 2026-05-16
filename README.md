@@ -1,4 +1,4 @@
-# Piedras / 椰子面试
+# Piedras 
 
 `Piedras` is an iOS-first AI note-taking project for conversations, meetings, and long-form audio.
 
@@ -10,7 +10,7 @@
 
 ### 项目简介
 
-`Piedras / 椰子面试` 是一个以 iOS 为核心入口的 AI 会议记录与长音频理解项目，面向中文语境下真实的记录场景：会议、访谈、播客、直播、讨论和临时灵感。
+`Piedras` 是一个以 iOS 为核心入口的 AI 会议记录与长音频理解项目，面向中文语境下真实的记录场景：会议、访谈、播客、直播、讨论和临时灵感。
 
 我希望它解决的不是“录下来”这个动作本身，而是录完之后真正麻烦的部分：
 
