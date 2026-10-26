@@ -9,11 +9,11 @@ const execFileAsync = promisify(execFile);
 
 const LEGACY_BOOTSTRAP_USERS = [
   {
-    email: 'legacy-main@coco-interview.local',
+    email: 'legacy-main@piedras.local',
     displayName: '历史主数据',
   },
   {
-    email: 'legacy-archive@coco-interview.local',
+    email: 'legacy-archive@piedras.local',
     displayName: '历史归档数据',
   },
 ];

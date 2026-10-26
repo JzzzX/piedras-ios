@@ -1,0 +1,31 @@
+<h2>修订：导航栏去掉时间戳</h2>
+<p class="subtitle">时间只在底部控制栏显示，顶部仅保留红点脉冲</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">修订前（两个时间戳）</div>
+    <div class="mockup-body" style="background:#EAE3D2;padding:10px 16px;font-family:system-ui;color:#111;display:flex;justify-content:space-between;align-items:center;">
+      <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:14px;font-weight:bold;">←</div>
+      <div style="display:flex;align-items:center;gap:6px;font-family:monospace;font-size:14px;">
+        <span style="width:7px;height:7px;border-radius:50%;background:#D9423E;display:inline-block;"></span>
+        <span style="font-weight:bold;">04:20</span>
+      </div>
+      <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:12px;">⋯</div>
+    </div>
+  </div>
+
+  <div class="mockup" data-choice="revised" onclick="toggleSelect(this)">
+    <div class="mockup-header">修订后（仅红点）</div>
+    <div class="mockup-body" style="background:#EAE3D2;padding:10px 16px;font-family:system-ui;color:#111;display:flex;justify-content:space-between;align-items:center;">
+      <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:14px;font-weight:bold;">←</div>
+      <div style="display:flex;align-items:center;">
+        <span style="width:8px;height:8px;border-radius:50%;background:#D9423E;display:inline-block;"></span>
+      </div>
+      <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:12px;">⋯</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <p>顶部只留一个 8px 红色脉冲圆点 — 极简、不突兀，但持续传递"正在录音"的信号。时间信息统一在底部控制栏展示。</p>
+</div>

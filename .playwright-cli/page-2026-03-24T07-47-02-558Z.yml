@@ -1,0 +1,55 @@
+- generic [ref=e5]:
+  - banner [ref=e8]:
+    - heading "App Store Connect" [level=1] [ref=e10]:
+      - link "App Store Connect" [ref=e11] [cursor=pointer]:
+        - /url: https://appstoreconnect.apple.com
+    - navigation:
+      - generic [ref=e13] [cursor=pointer]:
+        - button "Help Menu" [ref=e15]: 
+        - text: 
+  - generic [ref=e20]:
+    - generic:      
+    - menu [ref=e23]:
+      - generic [ref=e24]:
+        - menuitem "App" [ref=e25]:
+          - link "App" [ref=e26] [cursor=pointer]:
+            - /url: https://appstoreconnect.apple.com/apps
+            - img [ref=e28]
+            - generic [ref=e29]: App
+        - menuitem "App 分析" [ref=e30]:
+          - link "App 分析" [ref=e31] [cursor=pointer]:
+            - /url: https://appstoreconnect.apple.com/analytics
+            - img [ref=e33]
+            - generic [ref=e34]: App 分析
+        - menuitem "销售和趋势" [ref=e35]:
+          - link "销售和趋势" [ref=e36] [cursor=pointer]:
+            - /url: https://appstoreconnect.apple.com/trends
+            - img [ref=e38]
+            - generic [ref=e39]: 销售和趋势
+        - menuitem "付款和财务报告" [ref=e40]:
+          - link "付款和财务报告" [ref=e41] [cursor=pointer]:
+            - /url: https://appstoreconnect.apple.com/itc/payments_and_financial_reports
+            - img [ref=e43]
+            - generic [ref=e44]: 付款和财务报告
+      - generic [ref=e45]:
+        - menuitem "商务" [ref=e46]:
+          - link "商务" [ref=e47] [cursor=pointer]:
+            - /url: https://appstoreconnect.apple.com/business
+            - img [ref=e49]
+            - generic [ref=e50]: 商务
+        - menuitem "用户和访问" [ref=e51]:
+          - link "用户和访问" [ref=e52] [cursor=pointer]:
+            - /url: https://appstoreconnect.apple.com/access/users
+            - img [ref=e54]
+            - generic [ref=e55]: 用户和访问
+  - generic [ref=e58]:
+    - link "Apple.com" [ref=e59] [cursor=pointer]:
+      - /url: http://www.apple.com
+    - list [ref=e60]:
+      - listitem [ref=e61]: Copyright © 2026 Apple Inc. 保留所有权利。
+      - listitem [ref=e62]:
+        - link "服务条款" [ref=e63] [cursor=pointer]:
+          - /url: /olympus/v1/terms/ASC
+      - listitem [ref=e64]:
+        - link "隐私政策" [ref=e65] [cursor=pointer]:
+          - /url: http://www.apple.com/cn/legal/privacy/

@@ -7,14 +7,14 @@ type RuntimeHealthCache = Map<string, CacheEntry<unknown>>;
 
 function getRuntimeHealthCache(): RuntimeHealthCache {
   const globalScope = globalThis as typeof globalThis & {
-    __cocoInterviewRuntimeHealthCache?: RuntimeHealthCache;
+    __piedrasRuntimeHealthCache?: RuntimeHealthCache;
   };
 
-  if (!globalScope.__cocoInterviewRuntimeHealthCache) {
-    globalScope.__cocoInterviewRuntimeHealthCache = new Map();
+  if (!globalScope.__piedrasRuntimeHealthCache) {
+    globalScope.__piedrasRuntimeHealthCache = new Map();
   }
 
-  return globalScope.__cocoInterviewRuntimeHealthCache;
+  return globalScope.__piedrasRuntimeHealthCache;
 }
 
 export async function getCachedRuntimeHealth<T>(

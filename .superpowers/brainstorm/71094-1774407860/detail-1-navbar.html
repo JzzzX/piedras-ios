@@ -1,0 +1,38 @@
+<h2>设计细节 1/4：录音模式导航栏</h2>
+<p class="subtitle">MeetingDetail 进入录音模式后，导航栏如何简化</p>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">当前（非录音状态）</div>
+    <div class="mockup-body" style="background:#EAE3D2;padding:10px 16px;font-family:system-ui;color:#111;display:flex;justify-content:space-between;align-items:center;">
+      <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:14px;font-weight:bold;">←</div>
+      <div style="display:flex;gap:8px;">
+        <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:12px;">📄</div>
+        <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:12px;">⬆</div>
+        <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:12px;">⋯</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">录音模式（沉浸化）</div>
+    <div class="mockup-body" style="background:#EAE3D2;padding:10px 16px;font-family:system-ui;color:#111;display:flex;justify-content:space-between;align-items:center;">
+      <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:14px;font-weight:bold;">←</div>
+      <div style="display:flex;align-items:center;gap:6px;font-family:monospace;font-size:14px;">
+        <span style="width:7px;height:7px;border-radius:50%;background:#D9423E;display:inline-block;"></span>
+        <span style="font-weight:bold;">04:20</span>
+      </div>
+      <div style="border:1px solid #8A7E6B;padding:6px 10px;background:#F4F0E6;font-size:12px;">⋯</div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:16px;">
+  <h3>变化要点</h3>
+  <ul>
+    <li><strong>隐藏</strong>：转写按钮（移入底栏）、分享按钮（录音中不需要）</li>
+    <li><strong>新增</strong>：中央录音指示器（红点 + 时间，动态脉冲动画）</li>
+    <li><strong>保留</strong>：返回按钮、更多按钮</li>
+    <li><strong>动画</strong>：红点有每 1.5 秒的脉冲效果（opacity 0.6→1.0→0.6），传递"活着"的感觉</li>
+  </ul>
+</div>

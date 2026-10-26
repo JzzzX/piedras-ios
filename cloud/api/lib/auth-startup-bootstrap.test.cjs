@@ -92,13 +92,13 @@ test('buildLegacyBootstrapPlans assigns the two largest legacy workspaces to fix
 
   assert.deepEqual(plans, [
     {
-      email: 'legacy-main@coco-interview.local',
+      email: 'legacy-main@piedras.local',
       displayName: '历史主数据',
       workspaceId: 'workspace-main',
       workspaceName: 'Main',
     },
     {
-      email: 'legacy-archive@coco-interview.local',
+      email: 'legacy-archive@piedras.local',
       displayName: '历史归档数据',
       workspaceId: 'workspace-archive',
       workspaceName: 'Archive',

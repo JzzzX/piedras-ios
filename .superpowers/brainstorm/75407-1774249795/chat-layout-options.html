@@ -1,0 +1,97 @@
+<h2>Chat Sheet Layout Direction</h2>
+<p class="subtitle">Pick the structure that feels most natural for saved chat history inside the existing large sheet.</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">A. History On Top, Current Chat Below</div>
+        <div class="mockup-body" style="padding:16px; background:#f7f1e3;">
+          <div style="font:600 12px monospace; color:#6f6759; margin-bottom:10px;">RECENT CHATS</div>
+          <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+            <div style="border:1px solid #6f6759; background:#fffdf7; padding:10px;">
+              <div style="font:700 12px monospace;">TODAY 14:20</div>
+              <div style="font-size:12px; margin-top:4px;">What changed across the last 3 meetings?</div>
+            </div>
+            <div style="border:1px solid #6f6759; background:#fffdf7; padding:10px;">
+              <div style="font:700 12px monospace;">YESTERDAY</div>
+              <div style="font-size:12px; margin-top:4px;">Summarize open decisions from onboarding call.</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid #6f6759; padding-top:12px;">
+            <div style="font:600 12px monospace; color:#6f6759; margin-bottom:8px;">CURRENT CHAT</div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <div style="align-self:flex-end; max-width:72%; background:#1f1d1a; color:#fff; padding:10px; border:1px solid #6f6759;">Can you compare action items?</div>
+              <div style="max-width:82%; background:#fff; color:#1f1d1a; padding:10px; border:1px solid #6f6759;">Across those meetings, the unresolved items are...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Recommended</h3>
+      <p>Open the sheet and immediately see history plus the active thread. Feels closest to your current idea.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">B. Compact History Strip</div>
+        <div class="mockup-body" style="padding:16px; background:#f7f1e3;">
+          <div style="font:600 12px monospace; color:#6f6759; margin-bottom:10px;">RECENT CHATS</div>
+          <div style="display:flex; gap:8px; overflow:hidden; margin-bottom:14px;">
+            <div style="min-width:120px; border:1px solid #6f6759; background:#fffdf7; padding:10px;">
+              <div style="font:700 11px monospace;">TODAY</div>
+              <div style="font-size:11px; margin-top:4px;">Action items...</div>
+            </div>
+            <div style="min-width:120px; border:1px solid #6f6759; background:#fffdf7; padding:10px;">
+              <div style="font:700 11px monospace;">YESTERDAY</div>
+              <div style="font-size:11px; margin-top:4px;">Key risks...</div>
+            </div>
+            <div style="min-width:120px; border:1px solid #6f6759; background:#fffdf7; padding:10px;">
+              <div style="font:700 11px monospace;">EARLIER</div>
+              <div style="font-size:11px; margin-top:4px;">Decision recap...</div>
+            </div>
+          </div>
+          <div style="border-top:1px solid #6f6759; padding-top:12px;">
+            <div style="font:600 12px monospace; color:#6f6759; margin-bottom:8px;">CURRENT CHAT</div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+              <div style="align-self:flex-end; max-width:72%; background:#1f1d1a; color:#fff; padding:10px; border:1px solid #6f6759;">What changed this week?</div>
+              <div style="max-width:82%; background:#fff; color:#1f1d1a; padding:10px; border:1px solid #6f6759;">This week, the main changes were...</div>
+              <div style="max-width:82%; background:#fff; color:#1f1d1a; padding:10px; border:1px solid #6f6759;">Anything else you want me to group by owner?</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Minimal intrusion</h3>
+      <p>Keeps the active chat dominant. History is faster to scan, but previews are much weaker.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div class="mockup">
+        <div class="mockup-header">C. Session Picker First</div>
+        <div class="mockup-body" style="padding:16px; background:#f7f1e3;">
+          <div style="font:600 12px monospace; color:#6f6759; margin-bottom:10px;">CHOOSE A SESSION</div>
+          <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+            <div style="border:1px solid #6f6759; background:#1f1d1a; color:#fff; padding:10px;">Today 14:20 · Compare open decisions</div>
+            <div style="border:1px solid #6f6759; background:#fffdf7; padding:10px;">Yesterday · Summarize client concerns</div>
+            <div style="border:1px solid #6f6759; background:#fffdf7; padding:10px;">Earlier this week · Pull action items</div>
+          </div>
+          <div style="border-top:1px solid #6f6759; padding-top:12px;">
+            <div style="font:600 12px monospace; color:#6f6759; margin-bottom:8px;">ACTIVE SESSION</div>
+            <div style="font-size:12px; color:#6f6759; border:1px dashed #6f6759; padding:18px; background:#fffdf7;">Only show the full message thread after choosing one session or starting a new one.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>Structured archive</h3>
+      <p>Best for lots of history, but it adds one extra step before chatting and feels less immediate.</p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,33 @@
+- generic [active] [ref=e1]:
+  - banner "App Store Connect" [ref=e3]:
+    - generic [ref=e4]:
+      - heading "App Store Connect" [level=1] [ref=e20]:
+        - link "App Store Connect" [ref=e21] [cursor=pointer]:
+          - /url: /
+      - navigation "全球" [ref=e7]:
+        - generic:
+          - list
+      - button "兴菲 季 Mediocre, LLC Account name menu" [ref=e23] [cursor=pointer]:
+        - generic:
+          - generic: 兴菲 季
+          - generic: Mediocre, LLC
+          - img [ref=e24]
+  - contentinfo [ref=e10]:
+    - generic [ref=e11]:
+      - list [ref=e26]:
+        - listitem [ref=e27]:
+          - link "App Store Connect" [ref=e28] [cursor=pointer]:
+            - /url: /apps
+      - list [ref=e12]:
+        - listitem [ref=e13]: Copyright © 2026 Apple Inc. 保留所有权利。 |
+        - listitem [ref=e14]:
+          - link "服务条款" [ref=e15] [cursor=pointer]:
+            - /url: /WebObjects/iTunesConnect.woa/wa/termsOfService
+          - text: "|"
+        - listitem [ref=e16]:
+          - link "隐私政策" [ref=e17] [cursor=pointer]:
+            - /url: https://www.apple.com/legal/privacy
+          - text: "|"
+        - listitem [ref=e18]:
+          - link "联系我们" [ref=e19] [cursor=pointer]:
+            - /url: /contact-us

@@ -1,0 +1,18 @@
+[     379ms] [ERROR] EventsClient connection error: TypeError: Failed to fetch
+    at https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:243:386
+    at https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:232:386
+    at Mpe.fetchApi (https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:138:529128)
+    at async Mpe.request (https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:138:529653)
+    at async v.requestWrapper (https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:138:286456)
+    at async Object.f [as L5] (https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:23:6083)
+    at async v.start (https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:138:286347)
+    at async Mpe.subscribeV2Raw (https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:138:534747)
+    at async Mpe.subscribeV2 (https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:138:534840)
+    at async tze.Tee (https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:201:180844) @ https://appstoreconnect.apple.com/access/dbb9c1de20e242c19d985c8b184aa637/main.301a63f0e308e63e1db7.js:242
+[     487ms] [WARNING] document.domain mutation is ignored because the surrounding agent cluster is origin-keyed. @ https://appstoreconnect.apple.com/access/static/js/container.e2c689be59a4f957.js:1
+[     488ms] [WARNING] [maison] No route found https://appstoreconnect.apple.com/teams/7452419a-acd1-4d98-ad15-a7a4722f4784/apps/6761040163/ci/workflows/77FA094D-34DB-4215-9E96-AD81B4A59062 @ https://appstoreconnect.apple.com/access/static/js/container.e2c689be59a4f957.js:1
+[     493ms] [WARNING] Metrics config: No config provided via delegate or fetched via init(), using default/cached config values. @ https://appstoreconnect.apple.com/access/static/js/694.81535de161180022.js:0
+[    2331ms] [WARNING] An array is needed to render meta tags @ https://appstoreconnect.apple.com/access/static/js/container.e2c689be59a4f957.js:1
+[    3964ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://appstoreconnect.apple.com/ci/api/teams/7452419a-acd1-4d98-ad15-a7a4722f4784/asc-extension-products/6761040163:0
+[    5081ms] [ERROR] Failed to load resource: the server responded with a status of 429 () @ https://appstoreconnect.apple.com/ci/status/system-status:0
+[   65373ms] [ERROR] Failed to load resource: the server responded with a status of 429 () @ https://appstoreconnect.apple.com/ci/status/system-status:0

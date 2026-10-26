@@ -133,7 +133,7 @@ export async function finalizeMeetingTranscriptFromAudio(params: {
       },
       body: JSON.stringify({
         user: {
-          uid: params.userId ?? 'coco-interview-cloud-api',
+          uid: params.userId ?? 'piedras-cloud-api',
         },
         audio: {
           format: 'mp3',
@@ -208,7 +208,7 @@ function ensureVolcengineFileAsrConfigured() {
 }
 
 async function transcodeAudioForDiarization(inputPath: string) {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'coco-interview-diarization-'));
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), 'piedras-diarization-'));
   const outputPath = path.join(tempDir, 'meeting-upload.mp3');
 
   try {

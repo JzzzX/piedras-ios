@@ -38,7 +38,7 @@ test('resolveSupabaseUserContext reuses an existing user matched by authUserId',
     },
     async ({ userId }) => {
       ensureWorkspaceCalls.push(userId);
-      return { id: 'workspace-1', name: '椰子面试' };
+      return { id: 'workspace-1', name: 'Piedras' };
     }
   );
 
