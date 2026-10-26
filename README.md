@@ -4,7 +4,7 @@
 
 **当前定位：本地演示与设计参考。ASR 和历史云端服务已断开，不能把截图中的转写、摘要或账号状态理解为真实在线服务仍可用。**
 
-代码基线恢复自 **2026-04-09 · `043f169`**，即“椰子面试”改造前的最后一个版本；保留这一节点之前的文件夹、笔记、附件、账号与同步实现。Web 原型独立存放在 [ASR-test-webdemo](https://github.com/JzzzX/ASR-test-webdemo)。
+当前代码基线为 **2026-04-09 · `043f169`**，包含文件夹、笔记、附件、账号与同步相关实现。Web 原型独立存放在 [ASR-test-webdemo](https://github.com/JzzzX/ASR-test-webdemo)。
 
 ## 界面预览
 
@@ -88,7 +88,7 @@ cloud/asr-proxy/         历史 ASR WebSocket 代理
 
 - 恢复基线：[`043f169`](https://github.com/JzzzX/piedras-ios/commit/043f169)，2026-04-09。
 - 恢复提交：[`a9fac85`](https://github.com/JzzzX/piedras-ios/commit/a9fac85)。通过新增提交恢复，未重写 Git 历史。
-- 改造后的旧版本：[backup/before-restore-2026-10-26](https://github.com/JzzzX/piedras-ios/tree/backup/before-restore-2026-10-26)。
+- 历史版本备份：[backup/before-restore-2026-10-26](https://github.com/JzzzX/piedras-ios/tree/backup/before-restore-2026-10-26)。
 - 2026-10-26：iOS Simulator App 构建通过，`cloud/api` 生产构建通过；本地打开并检查上述六个页面。
 - 已知历史问题：常规测试目标中的 `SegmentCommentContextTests` 仍引用已移除的 `makeAudioEnhancePayload`，导致测试目标编译失败；发布配置测试也因 `Info.plist` 缺少 `ITSAppUsesNonExemptEncryption` 项而失败。未在本次文档更新中修改这些历史行为。
 - 六张截图通过临时 UI 截图流程采集。为运行该流程，仅在本地暂时跳过上述失效测试；截图完成后已还原测试源文件。这不等于完整测试套件通过。
